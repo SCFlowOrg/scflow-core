@@ -1,0 +1,40 @@
+{
+  "name": "@scfloworg/format-js",
+  "version": "0.1.0",
+  "type": "module",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "description": "The 'js' persistent format: an in-memory PersistenceInterface implementation backed by plain JS objects (Maps of Maps). See README.md.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@scfloworg/core": "^0.1.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@scfloworg/conformance": "^0.1.0",
+    "@scfloworg/repl-conformance": "^0.1.0",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@scfloworg/scflow-core",
+  "description": "Business package of the supply chain flow model: MCL schemas and pure domain logic.",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-schemas.mjs && tsc -b",
+    "test": "node scripts/build-schemas.mjs && vitest run"
+  },
+  "dependencies": {
+    "@scfloworg/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@scfloworg/core-plugin-core": "^0.1.0",
+    "@types/node": "^22.10.0",
+    "js-yaml": "^5.4.2",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
+  }
+}

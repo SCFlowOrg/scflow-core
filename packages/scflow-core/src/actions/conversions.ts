@@ -1,0 +1,199 @@
+import type { ModelActionDefinition } from "@scfloworg/core";
+import { deleteConversions, loadSnapshot } from "./delete-impact.js";
+import { domainOfItem } from "./items.js";
+import {
+  localizedTextParam,
+  nullableLocalizedTextParam,
+  optionalBoolean,
+  optionalStringList,
+  refParam,
+  tagsParam,
+} from "./params.js";
+import { labelOf, resolveRef, type Instance } from "./refs.js";
+import { toLocalized } from "./text.js";
+
+/** A text parameter: a string, or a map of language to string. */
+type Text = string | Record<string, string>;
+
+/** Parameters of `scflow/create_conversion`. */
+export interface CreateConversionParams {
+  actor: string;
+  from_item: string;
+  to_item: string;
+  name?: Text;
+  description?: Text;
+  tags?: string[];
+}
+
+/** Parameters of `scflow/update_conversion`. */
+export interface UpdateConversionParams {
+  conversion: string;
+  name?: Text | null;
+  description?: Text | null;
+  tags?: string[];
+}
+
+/** Parameters of `scflow/delete_conversion`. */
+export interface DeleteConversionParams {
+  conversion: string;
+  cascade?: boolean;
+}
+
+/** The result of `scflow/create_conversion` and `scflow/update_conversion`. */
+export interface ConversionSummary {
+  id: string;
+  /** Absent when the conversion has no name. */
+  display_name?: Record<string, string>;
+  actor: string;
+  from_item: string;
+  to_item: string;
+}
+
+/** Creates a conversion; see `scflow/create_conversion` in `docs/actions.md`. */
+export const createConversionAction: ModelActionDefinition<CreateConversionParams, ConversionSummary> = {
+  id: "scflow/create_conversion",
+  title: "Create a conversion",
+  description:
+    "Creates a conversion, which turns one item into another item at an actor, and returns it. The two items must be in the " +
+    "same flow domain, and they cannot change afterwards. The name, the description and the tags are optional.",
+  parameters: {
+    type: "object",
+    properties: {
+      actor: refParam("Id or name of the actor where the conversion takes place."),
+      from_item: refParam("Id or name of the item that is converted."),
+      to_item: refParam("Id or name of the item that results; it has the domain of from_item."),
+      name: localizedTextParam("Display name of the conversion, a string or a map of language to string."),
+      description: localizedTextParam("Markdown description of the conversion."),
+      tags: tagsParam("Tags of the conversion."),
+    },
+    required: ["actor", "from_item", "to_item"],
+    additionalProperties: false,
+  },
+  async execute(access, locator, params) {
+    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
+    const from = await resolveRef(access, locator, "item", params.from_item, "from_item");
+    const to = await resolveRef(access, locator, "item", params.to_item, "to_item");
+
+    const fromDomain = await domainOfItem(access, locator, from);
+    const toDomain = await domainOfItem(access, locator, to);
+    if (fromDomain !== toDomain) {
+      throw new Error(
+        `parameter "to_item": "${labelOf(to)}" is in the ${toDomain} domain, but "${labelOf(from)}" is in the ${fromDomain} domain`,
+      );
+    }
+
+    const input: Record<string, unknown> = { actor: actor.id, from_item: from.id, to_item: to.id };
+    if (params.name !== undefined) {
+      input.display_name = toLocalized(params.name, "name");
+    }
+    if (params.description !== undefined) {
+      input.description = toLocalized(params.description, "description");
+    }
+    const tags = optionalStringList(params.tags, "tags");
+    if (tags !== undefined) {
+      input.tags = tags;
+    }
+    const { after } = await access.runCommand(locator, { kind: "create", schema: "conversion", input });
+    return summarizeConversion(after[0] as unknown as Instance);
+  },
+};
+
+/** Updates the name, the description and the tags of a conversion; see `scflow/update_conversion` in `docs/actions.md`. */
+export const updateConversionAction: ModelActionDefinition<UpdateConversionParams, ConversionSummary> = {
+  id: "scflow/update_conversion",
+  title: "Update a conversion",
+  description:
+    "Changes the name, the description or the tags of a conversion and returns it. Only the given properties change; null clears " +
+    "a name or a description, and tags replaces the whole list. " +
+    "The actor and the two items of a conversion never change: to change them, delete the conversion and create another.",
+  parameters: {
+    type: "object",
+    properties: {
+      conversion: refParam("Id or name of the conversion to update."),
+      name: nullableLocalizedTextParam(
+        "New display name; each given language replaces the same language, the others are kept. null removes the name.",
+      ),
+      description: nullableLocalizedTextParam(
+        "New Markdown description; same language rule as name. null removes the description.",
+      ),
+      tags: tagsParam("New tags; they replace the current ones."),
+    },
+    required: ["conversion"],
+    additionalProperties: false,
+  },
+  async execute(access, locator, params) {
+    const conversion = await resolveRef(access, locator, "conversion", params.conversion, "conversion");
+    const patch: Record<string, unknown> = {};
+
+    if (params.name !== undefined) {
+      patch.display_name = params.name === null ? null : { set: toLocalized(params.name, "name") };
+    }
+    if (params.description !== undefined) {
+      patch.description = params.description === null ? null : { set: toLocalized(params.description, "description") };
+    }
+    const tags = optionalStringList(params.tags, "tags");
+    if (tags !== undefined) {
+      patch.tags = tags;
+    }
+    if (Object.keys(patch).length === 0) {
+      throw new Error(
+        'scflow/update_conversion: give at least one property to change besides "conversion" (name, description, tags)',
+      );
+    }
+
+    const { after } = await access.runCommand(locator, {
+      kind: "update",
+      schema: "conversion",
+      filters: { id: conversion.id },
+      input: patch,
+    });
+    return summarizeConversion(after[0] as unknown as Instance);
+  },
+};
+
+/** Deletes a conversion; see `scflow/delete_conversion` in `docs/actions.md`. */
+export const deleteConversionAction: ModelActionDefinition<DeleteConversionParams, { id: string }> = {
+  id: "scflow/delete_conversion",
+  title: "Delete a conversion",
+  description:
+    "Deletes a conversion with its notes, and returns its id. The actor and the items are kept. " +
+    "The cascade parameter is accepted for consistency with the other delete actions and changes nothing.",
+  parameters: {
+    type: "object",
+    properties: {
+      conversion: refParam("Id or name of the conversion to delete."),
+      cascade: {
+        type: "boolean",
+        default: false,
+        description: "Has no effect: the notes of a conversion are always deleted with it.",
+      },
+    },
+    required: ["conversion"],
+    additionalProperties: false,
+  },
+  async execute(access, locator, params) {
+    const conversion = await resolveRef(access, locator, "conversion", params.conversion, "conversion");
+    optionalBoolean(params.cascade, "cascade");
+    const snapshot = await loadSnapshot(access, locator);
+
+    await deleteConversions(access, locator, snapshot, [conversion.id]);
+    return { id: conversion.id };
+  },
+};
+
+/** The actions of the lot conversions, in catalog order. */
+export const CONVERSION_ACTIONS = [createConversionAction, updateConversionAction, deleteConversionAction] as const;
+
+function summarizeConversion(conversion: Instance): ConversionSummary {
+  const summary: ConversionSummary = {
+    id: conversion.id,
+    actor: conversion.actor as string,
+    from_item: conversion.from_item as string,
+    to_item: conversion.to_item as string,
+  };
+  const name = conversion.display_name as Record<string, string> | undefined | null;
+  if (name && Object.keys(name).length > 0) {
+    summary.display_name = name;
+  }
+  return summary;
+}
