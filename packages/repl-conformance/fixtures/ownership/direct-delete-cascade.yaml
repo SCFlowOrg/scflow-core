@@ -1,0 +1,54 @@
+name: deleting the owner instance directly cascades to its ownees even when the owner property is generated
+
+# Unlike list.yaml (which clears the *declared* ownee.owner property's
+# generated inverse array to trigger cascade), this exercises the other
+# direction: deleting the owner outright. thing.box is `owner`, so
+# owner_box.things is the *generated* inverse array
+# (document_part-definition-relations.md's ownership table;
+# modelUpgrade.ts's applyInverseRelations). performDelete's cascade walk has
+# to find these ownees without a materialized `things` value to scan for.
+
+seed:
+  schemas:
+    # owner_box first — thing.box's type targets it, and a relation's
+    # declaring schema must be created after its target exists (see
+    # setupVirtualRelations in @scfloworg/conformance: bucket before item,
+    # for the same reason).
+    - name: owner_box
+      is_root:
+      shared_by_name:
+      properties:
+        - name: name
+          type: identifier
+    - name: thing
+      shared_by_name:
+      properties:
+        - name: name
+          type: identifier
+        - name: box
+          type: owner_box
+          owner:
+          inverse_name: things
+          inverse_is_array:
+
+commands:
+  - run: |
+      create: owner_box
+      input: [{name: b1}]
+  - run: |
+      create: thing
+      input: [{name: t1, box: b1}, {name: t2, box: b1}]
+  - as: deleted
+    run: |
+      delete: owner_box
+      filters:
+        name: b1
+  - as: remaining
+    run: |
+      query: thing
+
+expect:
+  - path: deleted.cascade-deleted
+    length: 2
+  - path: remaining.after
+    length: 0

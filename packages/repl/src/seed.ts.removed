@@ -1,0 +1,70 @@
+import { promises as fs } from "node:fs";
+import * as YAML from "js-yaml";
+import { createUpgradeLocator, runCommand, upgradeDataset } from "@scfloworg/core";
+import type { TransientValue } from "@scfloworg/core";
+
+/**
+ * A dataset needs its schemas in place before the REPL can do anything
+ * useful against it (see README.md's "Schema authoring is out of scope
+ * here"). A seed file is the way in: plain YAML, two optional top-level
+ * lists of description objects — exactly the shape a `create: scalar_type`/
+ * `create: schema` command's `input` already takes, e.g. the worked examples
+ * in document_part-feature-command_examples.md. Applied through a single
+ * upgrade locator (`schema`/`scalar_type` are no longer added directly —
+ * see document_part-definition-typescript_api_model_upgrade.md), since a
+ * freshly-initialized dataset has no data yet and every seeded change is
+ * trivially compatible.
+ *
+ * ```yaml
+ * scalar_types:
+ *   - name: task_status
+ *     extends: string
+ *     enum: [open, in_progress, done]
+ * schemas:
+ *   - name: task
+ *     is_root: null
+ *     properties:
+ *       - name: title
+ *         type: string
+ * ```
+ *
+ * Order within each list matters — entries are applied in file order, and a
+ * schema referencing another schema (a relation property's `type`) or a
+ * custom scalar type must come after the thing it references.
+ */
+export interface SeedFile {
+  scalar_types: TransientValue[];
+  schemas: TransientValue[];
+}
+
+export async function loadSeedFile(file: string): Promise<SeedFile> {
+  const text = await fs.readFile(file, "utf8");
+  const parsed = YAML.load(text);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`seed file "${file}" must be a YAML mapping with "scalar_types" and/or "schemas"`);
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (obj.scalar_types !== undefined && !Array.isArray(obj.scalar_types)) {
+    throw new Error(`seed file "${file}": "scalar_types" must be a list`);
+  }
+  if (obj.schemas !== undefined && !Array.isArray(obj.schemas)) {
+    throw new Error(`seed file "${file}": "schemas" must be a list`);
+  }
+  return {
+    scalar_types: (obj.scalar_types as TransientValue[] | undefined) ?? [],
+    schemas: (obj.schemas as TransientValue[] | undefined) ?? [],
+  };
+}
+
+/** Applies `seed` to `locator` — scalar types first, then schemas, each in file order. */
+export async function applySeed(locator: string, seed: SeedFile): Promise<void> {
+  if (seed.scalar_types.length === 0 && seed.schemas.length === 0) return; // nothing to do — skip the no-op upgrade round-trip
+  const upgradeLocator = await createUpgradeLocator(locator);
+  for (const scalarType of seed.scalar_types) {
+    await runCommand(upgradeLocator, { create: "scalar_type", input: [scalarType] });
+  }
+  for (const schema of seed.schemas) {
+    await runCommand(upgradeLocator, { create: "schema", input: [schema] });
+  }
+  await upgradeDataset(locator, upgradeLocator);
+}

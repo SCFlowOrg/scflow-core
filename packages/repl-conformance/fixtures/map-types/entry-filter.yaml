@@ -1,0 +1,51 @@
+name: a filter on display_name.fr matches the instances that have an entry for that language
+
+seed:
+  schemas:
+    - name: actor_type
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: display_name
+          type: localized_string
+
+commands:
+  - run: |
+      create: actor_type
+      input:
+        - {name: plant, display_name: {en: Plant, fr: Usine}}
+        - {name: tree, display_name: {en: Tree, fr: Arbre}}
+        - {name: rock, display_name: {en: Rock}}
+
+  - as: equal
+    run: |
+      query: actor_type
+      filters:
+        display_name.fr: Usine
+
+  # An instance with no entry for the key satisfies no predicate on the path, ne included.
+  - as: different
+    run: |
+      query: actor_type
+      filters:
+        display_name.fr: {ne: Usine}
+
+  - as: negated
+    run: |
+      query: actor_type
+      filters:
+        not:
+          display_name.fr: Usine
+
+expect:
+  - path: equal.after
+    length: 1
+  - path: equal.after.0.name
+    equals: plant
+  - path: different.after
+    length: 1
+  - path: different.after.0.name
+    equals: tree
+  - path: negated.after
+    length: 2

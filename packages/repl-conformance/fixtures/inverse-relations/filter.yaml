@@ -1,0 +1,45 @@
+name: a query filters on a generated (virtual) relation property the same way it does on a declared one
+
+# thing.box is the declared relation (owner + inverse_is_array +
+# inverse_name: things); owner_box.things is the generated (virtual)
+# inverse. This checks that filtering matches against its resolved value,
+# not just that reading it back on an already-matched instance works (see
+# one-to-one.yaml/one-to-many.yaml for the read/write side).
+
+seed:
+  schemas:
+    # owner_box first — thing.box's type targets it, and a relation's
+    # declaring schema must be created after its target exists.
+    - name: owner_box
+      is_root:
+      shared_by_name:
+      properties:
+        - name: name
+          type: identifier
+    - name: thing
+      shared_by_name:
+      properties:
+        - name: name
+          type: identifier
+        - name: box
+          type: owner_box
+          owner:
+          inverse_name: things
+          inverse_is_array:
+
+commands:
+  - run: |
+      create: owner_box
+      input: [{name: b1}, {name: b2}]
+  - run: |
+      create: thing
+      input: [{name: t1, box: b1}, {name: t2, box: b2}, {name: t3, box: b1}]
+  - as: found
+    run: |
+      query: thing
+      filters:
+        box: b1
+
+expect:
+  - path: found.after
+    length: 2

@@ -1,0 +1,34 @@
+name: filters on a block-style (indented, multi-line) filters the same way as flow-style
+
+seed:
+  schemas:
+    - name: task
+      is_root: null
+      properties:
+        - name: title
+          type: string
+
+commands:
+  - as: created
+    run: |
+      kind: create
+      schema: task
+      input: [{title: "t1"}, {title: "t2"}, {title: "t3"}, {title: "t4"}]
+
+  # Block style, indented over two lines — what typing at the prompt
+  # actually produces, as opposed to a flow-style `filters: {title: t3}`
+  # written on one line. Nothing previously exercised this shape; it's the
+  # shape that hit the "filter" typo in unknown-command-property.yaml, here
+  # spelled correctly.
+  - as: found
+    run: |
+      kind: query
+      schema: task
+      filters:
+        title: t3
+
+expect:
+  - path: found.after
+    length: 1
+  - path: found.after.0.title
+    equals: t3

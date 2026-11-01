@@ -1,0 +1,52 @@
+name: updating against a base schema also matches (and updates) instances of an extending schema
+
+seed:
+  schemas:
+    - name: base_item
+      is_root: null
+      properties:
+        - name: label
+          type: string
+    - name: special_item
+      is_root: null
+      extends: base_item
+      properties: []
+
+commands:
+  - run: |
+      kind: create
+      schema: base_item
+      input: [{label: "b1"}]
+
+  - run: |
+      kind: create
+      schema: special_item
+      input: [{label: "s1"}]
+
+  # A base schema reference matches instances of schemas extending it too —
+  # see document_part-definition-schema.md's `extends` and
+  # document_part-definition-command.md's Processing step 4. The filter
+  # only matches the special_item instance, so this should update it even
+  # though the command's schema is base_item.
+  - as: updated
+    run: |
+      kind: update
+      schema: base_item
+      filters:
+        label: s1
+      input: [{label: "s1-updated"}]
+
+  - as: confirmed
+    run: |
+      kind: query
+      schema: special_item
+      filters:
+        label: s1-updated
+
+expect:
+  - path: updated.after
+    length: 1
+  - path: updated.after.0.label
+    equals: s1-updated
+  - path: confirmed.after
+    length: 1

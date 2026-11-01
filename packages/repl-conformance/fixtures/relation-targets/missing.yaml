@@ -1,0 +1,50 @@
+name: setting a relation to a key that doesn't resolve to any instance is rejected
+
+seed:
+  schemas:
+    - name: team
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+    - name: person
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+        - name: team
+          type: team
+
+commands:
+  # No team named "no-such-team" exists at all.
+  - run: |
+      kind: create
+      schema: person
+      input: [{name: "p1", team: "no-such-team"}]
+    expectError: unknown_relation_target
+
+  - run: |
+      kind: create
+      schema: team
+      input: [{name: "t1"}]
+
+  - as: createdPerson
+    run: |
+      kind: create
+      schema: person
+      input: [{name: "p2", team: "t1"}]
+
+  # Same check on update, not just create.
+  - run: |
+      kind: update
+      schema: person
+      filters:
+        name: p2
+      input: [{team: "still-no-such-team"}]
+    expectError: unknown_relation_target
+
+expect:
+  - path: createdPerson.after.0.team
+    equals: t1

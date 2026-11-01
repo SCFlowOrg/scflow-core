@@ -1,0 +1,55 @@
+name: querying a base schema also matches instances of every schema extending it, transitively
+
+seed:
+  schemas:
+    - name: base_item
+      is_root: null
+      properties:
+        - name: label
+          type: string
+    - name: mid_item
+      is_root: null
+      extends: base_item
+      properties: []
+    - name: leaf_item
+      is_root: null
+      extends: mid_item
+      properties: []
+
+commands:
+  - run: |
+      kind: create
+      schema: base_item
+      input: [{label: "b1"}]
+
+  - run: |
+      kind: create
+      schema: mid_item
+      input: [{label: "m1"}]
+
+  - run: |
+      kind: create
+      schema: leaf_item
+      input: [{label: "l1"}]
+
+  # A schema reference matches instances of that schema and, transitively,
+  # instances of every schema extending it — see
+  # document_part-definition-schema.md's `extends`. base_item <- mid_item <-
+  # leaf_item, so querying base_item should return all three.
+  - as: fromBase
+    run: |
+      kind: query
+      schema: base_item
+
+  # Querying an intermediate schema should include its own descendant
+  # (leaf_item) but not its ancestor (base_item).
+  - as: fromMid
+    run: |
+      kind: query
+      schema: mid_item
+
+expect:
+  - path: fromBase.after
+    length: 3
+  - path: fromMid.after
+    length: 2

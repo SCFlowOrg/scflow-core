@@ -1,0 +1,64 @@
+name: setting a relation to an instance of a schema that isn't the declared type (or an extension of it) is rejected
+
+seed:
+  schemas:
+    - name: dog
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+    - name: team
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+    - name: person
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+        - name: team
+          type: team
+
+commands:
+  - run: |
+      kind: create
+      schema: dog
+      input: [{name: "rex"}]
+
+  - run: |
+      kind: create
+      schema: team
+      input: [{name: "t1"}]
+
+  # rex is a dog, not a team, and dog doesn't extend team — the "team"
+  # relation on person is declared `type: team`, so this must be rejected.
+  - run: |
+      kind: create
+      schema: person
+      input: [{name: "p1", team: "rex"}]
+    expectError: unknown_relation_target
+
+  # A correctly-typed target still works — control for the check above.
+  - as: created
+    run: |
+      kind: create
+      schema: person
+      input: [{name: "p2", team: "t1"}]
+
+  # Same check on update, not just create — computePropertyValue is shared
+  # by both.
+  - run: |
+      kind: update
+      schema: person
+      filters:
+        name: p2
+      input: [{team: "rex"}]
+    expectError: unknown_relation_target
+
+expect:
+  - path: created.after.0.team
+    equals: t1

@@ -1,0 +1,27 @@
+name: rejects an unrecognized top-level command property instead of silently matching everything
+
+seed:
+  schemas:
+    - name: task
+      is_root: null
+      properties:
+        - name: title
+          type: string
+
+commands:
+  - run: |
+      kind: create
+      schema: task
+      input: [{title: "Keep me"}, {title: "Also keep me"}]
+
+  # The exact typo ("filter" for "filters") that surfaced this gap
+  # interactively: with no validation this used to be silently ignored, so
+  # command.filters stayed undefined and the query matched every task
+  # instead of just the one named. resolveCommandForm (@scfloworg/core's
+  # command.ts) now rejects it before the query ever runs.
+  - run: |
+      kind: query
+      schema: task
+      filter:
+        title: Keep me
+    expectError: unknown_command_property

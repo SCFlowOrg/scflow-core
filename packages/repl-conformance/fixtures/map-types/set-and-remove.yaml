@@ -1,0 +1,64 @@
+name: set and remove edit the entries of a localized_string one language at a time
+
+seed:
+  schemas:
+    - name: actor_type
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: display_name
+          type: localized_string
+          min_length: 1
+
+commands:
+  - run: |
+      create: actor_type
+      input: [{name: plant, display_name: {en: Plant, fr: Plante}}]
+
+  # `set` adds or replaces the given entries and keeps the others.
+  - as: set
+    run: |
+      update: actor_type
+      filters: {name: plant}
+      input: [{display_name: {set: {fr: Usine, de: Werk}}}]
+
+  # `remove` drops the entries of the given keys; a key with no entry is ignored.
+  - as: removed
+    run: |
+      update: actor_type
+      filters: {name: plant}
+      input: [{display_name: {remove: [en, es]}}]
+
+  - as: found
+    run: |
+      query: actor_type
+      filters: {name: plant}
+
+  - run: |
+      update: actor_type
+      filters: {name: plant}
+      input: [{display_name: {set: fr}}]
+    expectError: invalid_map_operation
+
+  - run: |
+      update: actor_type
+      filters: {name: plant}
+      input: [{display_name: {remove: [fr, de]}}]
+    expectError: constraint_violation
+
+expect:
+  - path: set.before.0.display_name.fr
+    equals: Plante
+  - path: set.after.0.display_name.en
+    equals: Plant
+  - path: set.after.0.display_name.fr
+    equals: Usine
+  - path: set.after.0.display_name.de
+    equals: Werk
+  - path: removed.after.0.display_name.fr
+    equals: Usine
+  - path: found.after
+    length: 1
+  - path: found.after.0.display_name.de
+    equals: Werk

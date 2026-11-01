@@ -1,0 +1,35 @@
+name: a map entry whose key is not a language code or whose value is not a string is refused
+
+seed:
+  schemas:
+    - name: actor_type
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: display_name
+          type: localized_string
+
+commands:
+  - run: |
+      create: actor_type
+      input: [{name: plant, display_name: {english: Plant}}]
+    expectError: constraint_violation
+
+  - run: |
+      create: actor_type
+      input: [{name: plant, display_name: {en: 5}}]
+    expectError: constraint_violation
+
+  - run: |
+      create: actor_type
+      input: [{name: plant, display_name: Plant}]
+    expectError: constraint_violation
+
+  - as: stored
+    run: |
+      query: actor_type
+
+expect:
+  - path: stored.after
+    length: 0

@@ -1,0 +1,75 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { initDataset, registerPersistentFormat, runCommand } from "@scfloworg/core";
+import { createJsPersistenceInterface } from "@scfloworg/format-js";
+import { applySeed, loadSeedFile } from "../src/seed.js";
+
+registerPersistentFormat(createJsPersistenceInterface("seedtest"));
+let counter = 0;
+function newLocator(): string {
+  counter += 1;
+  return `seedtest:seed-${Date.now()}-${counter}`;
+}
+
+describe("seed", () => {
+  it("loads scalar_types and schemas from a YAML file, applies them in order", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "repl-seed-"));
+    const file = join(dir, "seed.yaml");
+    await writeFile(
+      file,
+      [
+        "scalar_types:",
+        "  - name: task_status",
+        "    extends: string",
+        "    enum: [open, done]",
+        "schemas:",
+        "  - name: task",
+        "    is_root: null",
+        "    properties:",
+        "      - name: title",
+        "        type: string",
+        "      - name: status",
+        "        type: task_status",
+        "        default_value: open",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const seed = await loadSeedFile(file);
+    expect(seed.scalar_types).toHaveLength(1);
+    expect(seed.schemas).toHaveLength(1);
+
+    const locator = newLocator();
+    await initDataset(locator, "seeded");
+    await applySeed(locator, seed);
+
+    const result = await runCommand(locator, { kind: "create", schema: "task", input: [{ title: "from seed" }] });
+    expect(result.after[0]).toMatchObject({ title: "from seed", status: "open" });
+  });
+
+  it("defaults to empty lists when scalar_types/schemas are omitted", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "repl-seed-"));
+    const file = join(dir, "empty.yaml");
+    await writeFile(file, "schemas: []\n", "utf8");
+    const seed = await loadSeedFile(file);
+    expect(seed.scalar_types).toEqual([]);
+    expect(seed.schemas).toEqual([]);
+  });
+
+  it("rejects a seed file that isn't a mapping", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "repl-seed-"));
+    const file = join(dir, "bad.yaml");
+    await writeFile(file, "- just\n- a\n- list\n", "utf8");
+    await expect(loadSeedFile(file)).rejects.toThrow(/must be a YAML mapping/);
+  });
+
+  it("rejects schemas that isn't a list", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "repl-seed-"));
+    const file = join(dir, "bad2.yaml");
+    await writeFile(file, "schemas: not-a-list\n", "utf8");
+    await expect(loadSeedFile(file)).rejects.toThrow(/"schemas" must be a list/);
+  });
+});

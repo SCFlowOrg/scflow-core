@@ -1,0 +1,40 @@
+name: emptying a ownee's owner list cascades deletes to the ownee
+
+seed:
+  schemas:
+    - name: owner
+      is_root:
+      shared_by_name:
+      properties:
+        - name: name
+          type: string
+    - name: ownee
+      properties:
+        - name: title
+          type: string
+        - name: owner
+          type: owner
+          owner:
+          inverse_name: ownees
+          inverse_is_array:
+
+commands:
+  - run: |
+      create: owner
+      input: [{name: "o1"}]
+  # Owner set directly at creation — document_part-concept-ownership.md: "When
+  # an instance is created it must have an owner." (creating without one, then
+  # assigning it via a later update, isn't valid — an update only ever *moves*
+  # or *clears* an existing owner, see the mandatory-removal-style check this
+  # fixture exercises below).
+  - run: |
+      create: ownee
+      input: [{title: "t1", owner: o1}, {title: "t2", owner: o1}, {title: "t3", owner: o1}, {title: "t4", owner: o1}]
+  - as: removed
+    run: |
+      update: owner
+      input: [{ownees: []}]
+expect:
+  - path: removed.cascade-deleted
+    length: 4
+

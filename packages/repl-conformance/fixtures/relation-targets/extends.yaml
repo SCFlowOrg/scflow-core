@@ -1,0 +1,58 @@
+name: setting a relation typed to a base schema accepts an instance of a schema extending it
+
+seed:
+  schemas:
+    - name: team
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+    - name: special_team
+      is_root: null
+      extends: team
+      properties: []
+    - name: person
+      is_root: null
+      shared_by_name: true
+      properties:
+        - name: name
+          type: identifier
+        - name: team
+          type: team
+
+commands:
+  - run: |
+      kind: create
+      schema: special_team
+      input: [{name: "st1"}]
+
+  # st1 is a special_team, which extends team — the "team" relation on
+  # person is declared `type: team`, so an instance of an extending schema
+  # must be accepted too (see document_part-definition-schema.md's `extends`).
+  - as: created
+    run: |
+      kind: create
+      schema: person
+      input: [{name: "p1", team: "st1"}]
+
+  - run: |
+      kind: create
+      schema: team
+      input: [{name: "t1"}]
+
+  # Same on update, and against the exact base schema too, not just the
+  # extending one.
+  - as: updated
+    run: |
+      kind: update
+      schema: person
+      filters:
+        name: p1
+      input: [{team: "t1"}]
+
+expect:
+  - path: created.after.0.team
+    equals: st1
+  - path: updated.after.0.team
+    equals: t1

@@ -1,0 +1,95 @@
+name: a one-to-many inverse relation is readable and settable, like a regular property
+
+# The node/edge example from document_part-definition-relations.md itself:
+# edge.predecessor is the declared relation; node.outgoing_edges is the
+# virtual inverse, declared with inverse_is_array — the one-to-many case.
+seed:
+  schemas:
+    - name: node
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+    - name: edge
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: predecessor
+          type: node
+          mandatory:
+          inverse_name: outgoing_edges
+          inverse_is_array:
+        - name: successor
+          type: node
+          mandatory:
+          inverse_name: ingoing_edges
+          inverse_is_array:
+
+commands:
+  - run: |
+      create: node
+      input: [{name: n1}, {name: n2}, {name: n3}]
+  - run: |
+      create: edge
+      input: [{name: e1, predecessor: n1, successor: n2}]
+
+  # Baseline: node.outgoing_edges is never stored (command.ts's
+  # resolveVirtualProperties computes it on demand via a live join over
+  # edge's own predecessor property), so a plain dot-path read already sees
+  # it right after creation.
+  - as: n1AfterForwardSet
+    run: |
+      kind: query
+      schema: node
+      filters:
+        name: n1
+
+  # Setting the *virtual* array ("outgoing_edges", never declared on node's
+  # own schema) directly — per document_part-definition-relations.md's own
+  # words about this exact example: "adding an edge to the outgoing_edges of
+  # a node will automatically assign this node as the predecessor of the
+  # edge and remove it from its previous predecessor node's
+  # outgoing_edges." command.ts's update case resolves it to its declaring
+  # side (findInverseProperty) and delegates via applyVirtualPropertyChange/
+  # runUpdateOne, which recursively runs an ordinary update against edge's
+  # own `predecessor` property, same root mechanism as the one-to-one
+  # fixture.
+  - as: reassigned
+    run: |
+      kind: update
+      schema: node
+      filters:
+        name: n3
+      input: [{outgoing_edges: [e1]}]
+
+  - as: e1After
+    run: |
+      kind: query
+      schema: edge
+      filters:
+        name: e1
+
+  - as: n1After
+    run: |
+      kind: query
+      schema: node
+      filters:
+        name: n1
+
+  - as: n3After
+    run: |
+      kind: query
+      schema: node
+      filters:
+        name: n3
+
+expect:
+  - path: n1AfterForwardSet.after.0.outgoing_edges
+    equals: [e1]
+  - path: e1After.after.0.predecessor
+    equals: n3
+  - path: n1After.after.0.outgoing_edges
+    equals: []
+  - path: n3After.after.0.outgoing_edges
+    equals: [e1]

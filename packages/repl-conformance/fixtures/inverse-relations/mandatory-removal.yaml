@@ -1,0 +1,64 @@
+name: removing an edge from a mandatory inverse relation (without reassigning it) is rejected, not silently applied
+
+# Same node/edge model as one-to-many.yaml, but this
+# fixture covers document_part-definition-relations.md's other stated case
+# for this exact example: "Removing an edge from the outgoing or ingoing
+# edges of a node will raise an error as the relations on edge are
+# mandatory and that would let the edge with a null relation." — clearing
+# rather than reassigning, as opposed to the one-to-many fixture's move.
+seed:
+  schemas:
+    - name: node
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+    - name: edge
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: predecessor
+          type: node
+          mandatory:
+          inverse_name: outgoing_edges
+          inverse_is_array:
+        - name: successor
+          type: node
+          mandatory:
+          inverse_name: ingoing_edges
+          inverse_is_array:
+
+commands:
+  - run: |
+      create: node
+      input: [{name: n1}, {name: n2}]
+  - run: |
+      create: edge
+      input: [{name: e1, predecessor: n1, successor: n2}]
+
+  # Clearing n1's outgoing_edges (rather than moving e1 to a different node)
+  # would leave e1.predecessor null, which "mandatory" forbids — this must
+  # throw, not silently apply and not silently no-op (its current behavior,
+  # for the same reason one-to-many.yaml's reassignment
+  # currently no-ops: findProperty doesn't resolve a virtual property name,
+  # so the update never reaches validateInstance's mandatory check at all).
+  - run: |
+      kind: update
+      schema: node
+      filters:
+        name: n1
+      input: [{outgoing_edges: []}]
+    expectError: mandatory
+
+  - as: e1After
+    run: |
+      kind: query
+      schema: edge
+      filters:
+        name: e1
+
+expect:
+  # Confirms the rejected update didn't partially apply — e1 still points at n1.
+  - path: e1After.after.0.predecessor
+    equals: n1

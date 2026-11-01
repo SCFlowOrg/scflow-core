@@ -1,0 +1,76 @@
+name: a one-to-one inverse relation is readable and settable, like a regular property
+
+# wizard.wand is the declared relation; wand.bearer is the virtual inverse
+# (no inverse_is_array, so it's singular — the one-to-one case).
+seed:
+  schemas:
+    - name: wand
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+    - name: wizard
+      shared_by_name: null
+      properties:
+        - name: name
+          type: identifier
+        - name: wand
+          type: wand
+          inverse_name: bearer
+
+commands:
+  - run: |
+      create: wand
+      input: [{name: elder-wand}, {name: invisibility-wand}]
+  - run: |
+      create: wizard
+      input: [{name: gandalf, wand: elder-wand}]
+
+  # Baseline: wand.bearer is never stored (command.ts's resolveVirtualProperties
+  # computes it on demand via a live join over wizard's own wand property), so
+  # a plain dot-path read already sees the wizard set at creation time.
+  - as: elderWandAfterForwardSet
+    run: |
+      kind: query
+      schema: wand
+      filters:
+        name: elder-wand
+
+  # Setting the *virtual* side ("bearer", never declared on wand's own
+  # schema) directly, per document_part-definition-relations.md: "The
+  # virtual relation can be used in the modelling language as a regular
+  # relation." command.ts's update case resolves it to its declaring side
+  # (findInverseProperty) and delegates via applyVirtualPropertyChange/
+  # runUpdateOne, which recursively runs an ordinary update against wizard's
+  # own `wand` property — so this reassigns gandalf's wand from elder-wand to
+  # invisibility-wand, and clears elder-wand's bearer as a side effect,
+  # symmetric to how reassigning the declared side already behaves.
+  - as: reassigned
+    run: |
+      kind: update
+      schema: wand
+      filters:
+        name: invisibility-wand
+      input: [{bearer: gandalf}]
+
+  - as: gandalfAfter
+    run: |
+      kind: query
+      schema: wizard
+      filters:
+        name: gandalf
+
+  - as: elderWandAfter
+    run: |
+      kind: query
+      schema: wand
+      filters:
+        name: elder-wand
+
+expect:
+  - path: elderWandAfterForwardSet.after.0.bearer
+    equals: gandalf
+  - path: gandalfAfter.after.0.wand
+    equals: invisibility-wand
+  - path: elderWandAfter.after.0.bearer
+    equals: null
