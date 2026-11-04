@@ -2,7 +2,7 @@ import type { NormalizedScalarType, NormalizedSchema } from "./types.js";
 
 /**
  * Built into the interpreter (the "meta-model"), per
- * document_part-concept-transient_language.md / document_part-feature-scalar_types.md.
+ * packages/core/docs/spec/meta-model.md#transient-language / packages/core/docs/spec/meta-model.md#scalar-types.
  * Never stored in a dataset, always resolvable by name ahead of the dataset's own
  * schemas and scalar types.
  */
@@ -36,9 +36,9 @@ export function baseScalarNull(base: BaseScalarType): string | number | boolean 
 }
 
 /**
- * String refinements "built into the meta-model" per document_part-feature-scalar_types.md,
+ * String refinements "built into the meta-model" per packages/core/docs/spec/meta-model.md#scalar-types,
  * plus `markdown` — used as a property `type` in the worked examples
- * (document_part-feature-command_examples.md's `comment.body`) and named as a string
+ * (packages/core/docs/spec/model-command-language.md#examples's `comment.body`) and named as a string
  * constraint in the same doc ("the string contains markdown formatting"). The spec's
  * builtin list doesn't include it explicitly; adding it as extends-string with
  * `markdown: true` is the natural reading and is called out here so it's easy to revisit.

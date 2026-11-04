@@ -22,7 +22,7 @@ commands:
   - run: |
       create: owner
       input: [{name: "o1"}]
-  # Owner set directly at creation — document_part-concept-ownership.md: "When
+  # Owner set directly at creation — packages/core/docs/spec/meta-model.md#ownership: "When
   # an instance is created it must have an owner." (creating without one, then
   # assigning it via a later update, isn't valid — an update only ever *moves*
   # or *clears* an existing owner, see the mandatory-removal-style check this

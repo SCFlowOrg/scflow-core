@@ -7,7 +7,7 @@ import { derivePropertyRoles, resolveType } from "./schemaProcessing.js";
 import type { Filter, Key, NormalizedSchema, PersistenceInterface, TransientObject, TransientValue } from "./types.js";
 
 /**
- * Filter matching, per document_part-definition-filter.md.
+ * Filter matching, per packages/core/docs/spec/model-command-language.md#filter.
  */
 
 const COMBINATORS = new Set(["and", "or", "not"]);

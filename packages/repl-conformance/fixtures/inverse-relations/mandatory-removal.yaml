@@ -1,7 +1,7 @@
 name: removing an edge from a mandatory inverse relation (without reassigning it) is rejected, not silently applied
 
 # Same node/edge model as one-to-many.yaml, but this
-# fixture covers document_part-definition-relations.md's other stated case
+# fixture covers packages/core/docs/spec/meta-model.md#relations's other stated case
 # for this exact example: "Removing an edge from the outgoing or ingoing
 # edges of a node will raise an error as the relations on edge are
 # mandatory and that would let the edge with a null relation." — clearing

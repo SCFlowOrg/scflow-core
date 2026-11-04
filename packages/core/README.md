@@ -1,8 +1,8 @@
 # @scfloworg/core
 
 The Model Command Language engine: schema processing, command and script
-processing, filters, placeholders and the TypeScript API. It implements the Model
-convention (document `model` of the `core` dataset) and works only against the
+processing, filters, placeholders and the TypeScript API. It implements the
+[Model specification](docs/spec/README.md) and works only against the
 `PersistenceInterface` contract, never against a specific storage format. Any
 format that implements it, `@scfloworg/format-js` today, gets the full command
 language, and can prove it with `@scfloworg/conformance`. The package does no I/O
@@ -24,6 +24,8 @@ const dataset = await queryDataset("js:app"); // the dataset's name, versions an
 
 ## Documentation
 
+- [`docs/spec/`](docs/spec/README.md) is the normative specification of the
+  meta-model and of MCL. The code follows it.
 - [`docs/mcl.md`](docs/mcl.md) introduces the language and indexes the usage
   documents: formats, datasets, model upgrade, sessions, commands, authoring,
   multilingual properties, observability, model actions and limitations.

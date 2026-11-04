@@ -2,7 +2,7 @@ import type { NormalizedProperty, NormalizedSchema } from "./types.js";
 
 /**
  * Small helpers reading the schema-level constraints defined in
- * document_part-definition-schema_constraints.md / document_part-concept-ownership.md.
+ * packages/core/docs/spec/meta-model.md#schema-constraints / packages/core/docs/spec/meta-model.md#ownership.
  * Centralized here so command.ts, filter.ts and api.ts agree on what they mean.
  */
 

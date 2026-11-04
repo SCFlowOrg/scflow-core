@@ -2,7 +2,7 @@ import { modelError } from "./errors.js";
 import type { TransientValue } from "./types.js";
 
 /**
- * ${...} placeholder resolution, per document_part-definition-placeholders.md.
+ * ${...} placeholder resolution, per packages/core/docs/spec/meta-model.md#placeholders.
  *
  * A placeholder's content is either a dot-separated path into `context`
  * (e.g. "this.name", "new_task.after.0.id") or a predefined function call
@@ -83,7 +83,7 @@ function isArrayIndex(segment: string): boolean {
 /**
  * Resolves `segments` against `current`, recursively — the array-aware part
  * of `resolvePath` below, factored out so the `*` map segment
- * (document_part-definition-placeholders.md's "Mapping over an array") can
+ * (packages/core/docs/spec/meta-model.md#placeholders's "Mapping over an array") can
  * recurse into "resolve the *rest* of the path against every element of an
  * array, collecting the results" without needing its own separate walker.
  * `fullPath` is just the original dotted path, carried through for error
@@ -114,7 +114,7 @@ function resolveSegments(current: TransientValue, segments: string[], fullPath: 
       return resolveSegments(current[index], rest, fullPath);
     }
     // `segment` isn't a numeric index or "*" — an omitted index defaults to 0
-    // (document_part-definition-placeholders.md: an array path segment
+    // (packages/core/docs/spec/meta-model.md#placeholders: an array path segment
     // that isn't itself an index resolves against its first element), so
     // `after.name` reads the same as `after.0.name`. `segments` (not `rest`)
     // is passed through unconsumed, so `segment` is re-processed against

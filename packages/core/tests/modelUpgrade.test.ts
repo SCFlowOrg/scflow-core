@@ -35,7 +35,7 @@ describe("applyInverseRelations — extends", () => {
    * inverse belongs to the schema declaring it: generating it again for each
    * extending schema retypes the target's property to whichever was ingested
    * last, and every other one's instances stop being valid targets. See
-   * document_part-feature-schema_processing.md's "Virtual relations".
+   * packages/core/docs/spec/model-command-language.md#schema-processing's "Virtual relations".
    */
   it("leaves the generated inverse typed to the declaring schema when an extending schema is applied", async () => {
     const schemas = new Map<string, NormalizedSchema>();

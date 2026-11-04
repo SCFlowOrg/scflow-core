@@ -6,10 +6,10 @@ import type { ResolversLookup } from "./resolvers.js";
 import type { Command, CommandResult, Filter, PersistenceInterface, Script, ScriptCommand, TransientValue } from "./types.js";
 
 /**
- * Script processing, per document_part-definition-script.md.
+ * Script processing, per packages/core/docs/spec/model-command-language.md#script.
  *
  * The named-results context a script builds up as it runs (`namedResults` in
- * document_part-definition-script.md's "Chaining" section) is factored out
+ * packages/core/docs/spec/model-command-language.md#script's "Chaining" section) is factored out
  * into `createScriptSession` below, so it can outlive a single `runScript`
  * call. `runScript` is a thin loop over one session, for a complete `Script`
  * run start-to-finish in one call. `@scfloworg/repl` uses the same session
@@ -68,9 +68,9 @@ export async function createScriptSession(
           : undefined,
         // A `schema`/`scalar_type` command's input is a description, and a
         // `${...}` in one of its `default_value`s belongs to the instances
-        // that schema will later construct — document_part-feature-schema_processing.md's
+        // that schema will later construct — packages/core/docs/spec/model-command-language.md#schema-processing's
         // "Out of scope: placeholders" leaves it a literal string all the way
-        // into storage, and document_part-definition-placeholders.md resolves
+        // into storage, and packages/core/docs/spec/meta-model.md#placeholders resolves
         // it at construction time, against a `this` that exists only then.
         // Resolving it here would consume it against the script's own context
         // instead, where `this` is absent. Filters carry no such payload and
@@ -88,7 +88,7 @@ export async function createScriptSession(
           : undefined,
         // Carried through as authored. `script_command` extends `command`, so
         // a step is shaped exactly as a standalone command is
-        // (document_part-definition-command.md's "Result shaping") — including
+        // (packages/core/docs/spec/model-command-language.md#command's "Result shaping") — including
         // the result a step names with `as`, which is then what the following
         // steps' placeholders can reach. No substitution: `result` holds
         // property names and a flag, never a value read off an earlier step.

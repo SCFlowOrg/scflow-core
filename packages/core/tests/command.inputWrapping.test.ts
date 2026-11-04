@@ -7,7 +7,7 @@ import type { Resolvers } from "../src/resolvers.js";
 import type { Key, NormalizedSchema, PersistenceInterface, TransientValue } from "../src/types.js";
 
 /**
- * `input` shorthand for a single instance — document_part-feature-command_examples.md's
+ * `input` shorthand for a single instance — packages/core/docs/spec/model-command-language.md#examples's
  * "A single instance shorthand" and the `Command.input` doc comment: a bare object is equivalent to a one-element array on
  * `create`/`update`/`delete`. Same fakeImpl/resolvers harness as
  * resultShaping.test.ts, since this is engine-level (command.ts) and needs no

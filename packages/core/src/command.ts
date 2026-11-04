@@ -24,7 +24,7 @@ import type {
 } from "./types.js";
 
 /**
- * Command processing, per document_part-definition-command.md's "Processing" section.
+ * Command processing, per packages/core/docs/spec/model-command-language.md#command's "Processing" section.
  */
 
 function clone<T extends TransientValue>(value: T): T {
@@ -66,7 +66,7 @@ function projectObject(value: TransientValue, keep: Set<string>): TransientValue
 }
 
 /**
- * Narrows a result per `command.result`, per document_part-definition-command.md's
+ * Narrows a result per `command.result`, per packages/core/docs/spec/model-command-language.md#command's
  * "Result shaping". Runs on the way out of runCommand, after everything the
  * command does has already happened — shaping never changes which instances
  * are acted on, only how much of them comes back.
@@ -97,7 +97,7 @@ function shapeResult(
   // Defaults to `false` for a query (before and after are always identical
   // copies there, so filling both is pure duplication) and to `true`
   // otherwise (create/update/delete's before and after differ and both
-  // carry information) — see document_part-definition-command.md's "Result
+  // carry information) — see packages/core/docs/spec/model-command-language.md#command's "Result
   // shaping".
   const fillBefore = options?.before ?? kind !== "query";
   if (!fillBefore) {
@@ -110,7 +110,7 @@ function shapeResult(
 /**
  * The only properties a resolved command mapping may carry — `command`'s own
  * (`kind`/`schema`/`namespace`/`filters`/`input`) plus `as`, which
- * `script_command` adds (document_part-definition-script.md: "extends
+ * `script_command` adds (packages/core/docs/spec/model-command-language.md#script: "extends
  * command" for a result name). `resolveCommandForm` doesn't distinguish a
  * bare `command` from a `script_command` — both funnel through the same
  * function (see api.ts's `runCommand`/`runScript`, and the REPL's
@@ -120,7 +120,7 @@ function shapeResult(
  */
 const ALLOWED_COMMAND_KEYS = new Set(["kind", "schema", "namespace", "filters", "input", "result", "as"]);
 
-/** The only keys `result` may carry — document_part-definition-command.md's "Result shaping". */
+/** The only keys `result` may carry — packages/core/docs/spec/model-command-language.md#command's "Result shaping". */
 const ALLOWED_RESULT_KEYS = new Set(["properties", "before"]);
 
 /**
@@ -153,7 +153,7 @@ function validateResultOptions(raw: unknown): void {
 
 /**
  * Resolves a command's authored (possibly sugared) form to its canonical
- * `kind`/`schema` shape, per document_part-definition-command.md's
+ * `kind`/`schema` shape, per packages/core/docs/spec/model-command-language.md#command's
  * "Authored form": `query`/`create`/`update`/`delete` are also accepted as
  * top-level keys — the key names `kind`, its value names `schema`. Exactly
  * one of `kind` or one sugar key must be given. Idempotent: a command
@@ -376,7 +376,7 @@ function computePropertyValue(
     return computeMapValue(prop, hasProvided, providedRaw, resolved, schema.name);
   }
 
-  // `this.schema` is the root document_part-definition-placeholders.md names
+  // `this.schema` is the root packages/core/docs/spec/meta-model.md#placeholders names
   // for the schema of the instance under construction — layered over the
   // instance rather than kept beside it, so `${this.schema.name}` reaches the
   // schema even on an instance whose own properties include one called
@@ -481,14 +481,14 @@ function validateScalarValue(propName: string, base: string, value: TransientVal
 /**
  * Validates `instance` against `schema`'s constraints. Returns `true` when
  * this is an `update` (`options.isUpdate`) that leaves an otherwise-owned
- * instance with no owner at all — per document_part-concept-ownership.md,
+ * instance with no owner at all — per packages/core/docs/spec/meta-model.md#ownership,
  * "When an instance is updated if it loses its owner it is automatically
  * deleted," not rejected. The caller (runCommand's `update` case) is the one
  * that actually performs that deletion; this function only detects the
  * condition, since it has no business writing to storage itself. `create`
  * (`!options.isUpdate`) still throws for a missing owner — "When an instance
  * is created it must have an owner" — and *more than one* owner is always a
- * `constraint_violation`, update or not (see document_part-concept-ownership.md's
+ * `constraint_violation`, update or not (see packages/core/docs/spec/meta-model.md#ownership's
  * "on an instance one and only one will be non null at any time").
  */
 function validateInstance(
@@ -665,7 +665,7 @@ async function buildLiveJoinIndex(
 /**
  * Every key of a `declaringSchema`-family instance whose `prop` currently
  * references `targetKey` — the live join a virtual (generated) relation's
- * value is computed from, per document_part-definition-relations.md: "The
+ * value is computed from, per packages/core/docs/spec/meta-model.md#relations: "The
  * generic layer computes its value on demand — a join over the declaring
  * schema's instances, matching on the declaring property". Reads from
  * `cache`'s per-command reverse index (building it on first use for this
@@ -733,7 +733,7 @@ async function resolveInverseRelations(
 
 /**
  * Strips every generated (virtual) relation property from `instance` before
- * it reaches a persistent format — per document_part-definition-relations.md,
+ * it reaches a persistent format — per packages/core/docs/spec/meta-model.md#relations,
  * "a virtual relation is never stored: a persistent format never sees it, in
  * putInstance's instance argument or anywhere else."
  */
@@ -751,7 +751,7 @@ function withoutVirtualRelations(schema: NormalizedSchema, instance: TransientOb
  * Reports (but never writes) a target instance's generated inverse property
  * changing as a side effect of `sourceSchema`'s own `sourceKey` instance's
  * `prop` changing from `oldValue` to `newValue` — per
- * document_part-definition-relations.md, the value is computed on demand,
+ * packages/core/docs/spec/meta-model.md#relations, the value is computed on demand,
  * never stored, so there is nothing here to write to the target; the target
  * instance itself already reflects the current, correct state the next time
  * anything reads it through resolveVirtualProperties.
@@ -1034,8 +1034,8 @@ async function performDelete(
       // The owned children are this instance's own real, declared array/
       // scalar — read directly instead of scanning every other schema's
       // storage for a generated owner field that (per this redesign) is
-      // never written in the first place. See document_part-definition-
-      // relations.md's "cascade-deletion ... must instead walk from the
+      // never written in the first place. See packages/core/docs/spec/meta-model.md#relations's
+      // "cascade-deletion ... must instead walk from the
       // owns side's own declared relation."
       const targetSchema = resolvers.schemas.get(prop.type);
       for (const ownedKey of toKeyArray(oldValue)) {
@@ -1116,7 +1116,7 @@ function isSchemaOrDescendant(schema: NormalizedSchema, ancestorName: string, re
 
 /**
  * Resolves a property name against the *virtual* (inverse) properties a
- * schema exposes, per document_part-definition-relations.md: a relation
+ * schema exposes, per packages/core/docs/spec/meta-model.md#relations: a relation
  * declared with `inverse_name` on some other schema creates a property of
  * that name on this schema's own instances — already readable (computed on
  * demand by resolveVirtualProperties, never stored) and, from here, settable
@@ -1232,10 +1232,10 @@ async function runUpdateOne(
 /**
  * Every schema whose instances a command targeting `schema` should match:
  * `schema` itself, plus every schema extending it, directly or through
- * further extension — per document_part-definition-schema.md's `extends`
+ * further extension — per packages/core/docs/spec/meta-model.md#schema's `extends`
  * ("A command's `schema` matches instances of that schema and,
  * transitively, instances of every schema extending it") and
- * document_part-definition-command.md's Processing step 4. Walks each
+ * packages/core/docs/spec/model-command-language.md#command's Processing step 4. Walks each
  * candidate's own `extends` chain up to the root rather than walking
  * `schema`'s descendants down, since NormalizedSchema only carries the
  * parent link (`extends`), not a materialized list of children.
@@ -1260,8 +1260,8 @@ function collectExtendingSchemas(schema: NormalizedSchema, resolvers: Resolvers)
 /**
  * Validates that every relation property on `instance` whose value is set
  * resolves, by key, to an instance of that relation's declared schema or a
- * schema extending it (transitively) — see document_part-definition-
- * relations.md. Nothing else checks this: computePropertyValue stores a
+ * schema extending it (transitively) — see packages/core/docs/spec/meta-model.md#relations.
+ * Nothing else checks this: computePropertyValue stores a
  * relation's value as an opaque key with no lookup at all, so without this
  * check a relation could point at a nonexistent key or at an instance of a
  * completely unrelated schema and nothing would notice. One exception,
@@ -1347,7 +1347,7 @@ export async function runCommand(
   // untyped ways (see script.ts's own guard on the same shape). One check at
   // this single choke point gives every kind and every caller the same
   // typed error instead — and, since a bare object is an unambiguous
-  // shorthand for a one-element array (document_part-feature-command_examples.md's
+  // shorthand for a one-element array (packages/core/docs/spec/model-command-language.md#examples's
   // "A single instance shorthand"), wraps it rather than rejecting it.
   // Anything else that isn't an array is still malformed: there's no
   // sensible single-instance reading of a string, a number, or `null`.
@@ -1426,7 +1426,7 @@ async function executeCommand(
       const candidateRoles = derivePropertyRoles(candidateSchema);
       // A query against `schema`/`scalar_type` transparently includes the
       // area's built-in instances too, merged live with `rest`'s own — own
-      // wins on a name collision — per document_part-definition-import.md's
+      // wins on a name collision — per packages/core/docs/spec/meta-model.md#import's
       // "Built-in — virtual, not imported". Every other command kind against
       // these two schemas is already rejected above (the `isModelSchema`
       // gating at the top of `executeCommand`), so this only ever runs for a
@@ -1446,8 +1446,8 @@ async function executeCommand(
       }
       for (const raw of byKey.values()) {
         // Every virtual (generated) relation property is resolved before
-        // filtering and before it's returned — per document_part-definition-
-        // relations.md, "every time a virtual relation is read, whether as a
+        // filtering and before it's returned — per packages/core/docs/spec/meta-model.md#relations,
+        // "every time a virtual relation is read, whether as a
         // returned property or as the left-hand side of a filter."
         const instance = await resolveVirtualProperties(impl, rest, resolvers, candidateSchema, clone(raw) as TransientObject, cache);
         if (await matchFilter(instance, command.filters, candidateSchema, filterCtx)) {
@@ -1539,7 +1539,7 @@ async function executeCommand(
         }
         await validateRelationTargets(impl, rest, resolvers, schema, instance);
         validateInstance(schema, instance, resolvers, { isUpdate: false });
-        // Per document_part-definition-relations.md, a virtual relation is
+        // Per packages/core/docs/spec/meta-model.md#relations, a virtual relation is
         // never stored — stripped before this instance ever reaches
         // putInstance's `instance` argument.
         await impl.putInstance(rest, schema.name, key, withoutVirtualRelations(schema, instance), roles);
@@ -1556,7 +1556,7 @@ async function executeCommand(
         // *generated* (inverse) property given a value at creation is only
         // reflected in `instance`'s own in-memory value — the declaring
         // instance's own relation never gains this key. Per
-        // document_part-definition-relations.md a virtual relation is an
+        // packages/core/docs/spec/meta-model.md#relations a virtual relation is an
         // ordinary relation to write through, so creation delegates to the
         // declaring side the same way `update` does below, after this
         // instance's own write so the declaring side finds it already in
@@ -1621,7 +1621,7 @@ async function executeCommand(
           // — see modelUpgrade.ts's applyInverseRelations, which materializes
           // the *other* side's `inverse_name` as a real declared property so
           // it's readable and filterable) is never written directly here.
-          // Per document_part-definition-relations.md — "The virtual relation
+          // Per packages/core/docs/spec/meta-model.md#relations — "The virtual relation
           // can be used in the modelling language as a regular relation" — a
           // write to it is delegated to the declaring side below instead.
           if (!prop || prop.constraints.__generated === true) {
@@ -1653,7 +1653,7 @@ async function executeCommand(
         await validateRelationTargets(impl, rest, resolvers, instSchema, updated);
         const losesOwner = validateInstance(instSchema, updated, resolvers, { isUpdate: true });
         if (losesOwner) {
-          // Per document_part-concept-ownership.md: "When an instance is
+          // Per packages/core/docs/spec/meta-model.md#ownership: "When an instance is
           // updated if it loses its owner it is automatically deleted." Never
           // written as `updated` (still holding a null owner) — deleted
           // outright instead. performDelete re-reads the instance from
@@ -1669,7 +1669,7 @@ async function executeCommand(
           await performDelete(impl, rest, resolvers, instSchema, key, acc, true, cache);
           continue;
         }
-        // Per document_part-definition-relations.md, a virtual relation is
+        // Per packages/core/docs/spec/meta-model.md#relations, a virtual relation is
         // never stored — stripped before this instance ever reaches
         // putInstance's `instance` argument.
         await impl.putInstance(rest, instSchema.name, key, withoutVirtualRelations(instSchema, updated), instRoles);

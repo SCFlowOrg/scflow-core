@@ -1,7 +1,7 @@
 # @scfloworg/scflow-core
 
 Business package of the supply chain flow model: MCL schemas and pure domain logic.
-The model is stated in the `scflow_model` document of the `core` dataset.
+The model is stated in its [specification](docs/spec/README.md).
 
 ## Exports
 

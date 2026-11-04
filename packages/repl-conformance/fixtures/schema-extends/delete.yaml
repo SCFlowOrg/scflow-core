@@ -24,8 +24,8 @@ commands:
       input: [{label: "s1"}]
 
   # A base schema reference matches instances of schemas extending it too —
-  # see document_part-definition-schema.md's `extends` and
-  # document_part-definition-command.md's Processing step 4. The filter
+  # see packages/core/docs/spec/meta-model.md#schema's `extends` and
+  # packages/core/docs/spec/model-command-language.md#command's Processing step 4. The filter
   # only matches the special_item instance, so this should delete it even
   # though the command's schema is base_item.
   - as: deleted

@@ -8,7 +8,7 @@ import type { Resolvers } from "../src/resolvers.js";
 import type { Key, NormalizedSchema, PersistenceInterface, TransientValue } from "../src/types.js";
 
 /**
- * Result shaping — document_part-definition-command.md's "Result shaping".
+ * Result shaping — packages/core/docs/spec/model-command-language.md#command's "Result shaping".
  * `result` narrows what a command returns without changing which instances it
  * acts on, so every test here pairs a shaped run with the assertion that the
  * stored data (or the unshaped buckets) is exactly what an unshaped run

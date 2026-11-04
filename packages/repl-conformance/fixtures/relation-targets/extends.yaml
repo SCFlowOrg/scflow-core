@@ -29,7 +29,7 @@ commands:
 
   # st1 is a special_team, which extends team — the "team" relation on
   # person is declared `type: team`, so an instance of an extending schema
-  # must be accepted too (see document_part-definition-schema.md's `extends`).
+  # must be accepted too (see packages/core/docs/spec/meta-model.md#schema's `extends`).
   - as: created
     run: |
       kind: create

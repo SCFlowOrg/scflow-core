@@ -21,7 +21,7 @@ import {
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 
 /**
- * A format-agnostic vitest suite, derived from document_part-feature-command_examples.md's
+ * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
  * worked examples: the same "tasks-demo" model (person / task_status / task / comment),
  * run end to end through create / query / update / delete / script.
  *
@@ -442,7 +442,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
 
   /**
    * A second, smaller model covering a virtual (inverse) relation reached
-   * through `extends` — document_part-feature-schema_processing.md's
+   * through `extends` — packages/core/docs/spec/model-command-language.md#schema-processing's
    * "Virtual relations".
    *
    * `bucket`/`item`/`special_item`: an ordinary declared inverse on a schema
@@ -542,7 +542,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
   });
 
   /**
-   * document_part-definition-relations.md (revised 2026-08-28): "A directly
+   * packages/core/docs/spec/meta-model.md#relations (revised 2026-08-28): "A directly
    * declared relation is always single-valued ... a many-to-many
    * relationship cannot be declared directly: it must be reified as its own
    * schema, holding a direct relation to each side." T030's "New tests
@@ -1628,9 +1628,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
 
     /**
      * A `${...}` in a schema's `default_value` belongs to the instances that
-     * schema will later build — document_part-feature-schema_processing.md
+     * schema will later build — packages/core/docs/spec/model-command-language.md#schema-processing
      * leaves it a literal string through normalization, and
-     * document_part-definition-placeholders.md resolves it at construction
+     * packages/core/docs/spec/meta-model.md#placeholders resolves it at construction
      * time. A script's own placeholder pass, which runs over an ordinary
      * command's input, has to leave a model command's input alone for that to
      * hold: `this` doesn't exist yet at that point.
@@ -1668,9 +1668,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
     });
 
     /**
-     * `this.schema` is one of the roots document_part-definition-placeholders.md
+     * `this.schema` is one of the roots packages/core/docs/spec/meta-model.md#placeholders
      * names, reaching the schema of the instance under construction. A schema's
-     * own `content` (document_part-definition-schema.md) is therefore usable as
+     * own `content` (packages/core/docs/spec/meta-model.md#schema) is therefore usable as
      * the starting content of every instance that schema builds, and an
      * explicit value given at creation still wins over it.
      */
@@ -1814,8 +1814,8 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
   });
 
   /**
-   * TDD red state for T017 (10-CORE `todo_item` T017, "Avoid physically
-   * copying built-in schemas/scalars into each dataset") — replaces the
+   * TDD red state for "Avoid physically copying built-in schemas/scalars
+   * into each dataset" — replaces the
    * copy-at-init / standing-import design these tests originally proved out.
    * Under the new design: `initDataset` never creates an import or copies
    * anything; every read of a dataset's own schema/scalar_type overlays the
@@ -1824,7 +1824,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
    * version (no schema/scalar_type content); `restoreDataset` uses that
    * synthesized entry to check/upgrade restored data against the *current*
    * built-in model, then discards it — the restored dataset never gets a
-   * standing import either. See document_part-definition-import.md's
+   * standing import either. See packages/core/docs/spec/meta-model.md#import's
    * "Built-in — virtual, not imported" and
    * `docs/datasets.md` of `@scfloworg/core`:
    * Lifecycle, and Schemas and the built-in dataset.

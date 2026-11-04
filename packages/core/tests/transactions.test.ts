@@ -136,7 +136,7 @@ async function seedWorkspacePageSchemas(impl: PersistenceInterface, rest: string
 /**
  * Seeds "cabinet" (owns exactly one "item", via a real, single-valued,
  * stored `prized` property — `is_array` can't be set on a directly-declared
- * relation, per document_part-definition-relations.md's revised "always
+ * relation, per packages/core/docs/spec/meta-model.md#relations's revised "always
  * single-valued" rule, so this is the only shape `owns` can take on an
  * authored property today) and "item" (gets the generated, virtual,
  * `owner: true` `cabinet` inverse via `applyInverseRelations` — the real

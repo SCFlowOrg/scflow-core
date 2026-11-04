@@ -9,7 +9,7 @@ import type { TransientValue } from "@scfloworg/core";
  * here"). A seed file is the way in: plain YAML, two optional top-level
  * lists of description objects — exactly the shape a `create: scalar_type`/
  * `create: schema` command's `input` already takes, e.g. the worked examples
- * in document_part-feature-command_examples.md. Applied through a single
+ * in packages/core/docs/spec/model-command-language.md#examples. Applied through a single
  * upgrade locator (`schema`/`scalar_type` are no longer added directly —
  * see document_part-definition-typescript_api_model_upgrade.md), since a
  * freshly-initialized dataset has no data yet and every seeded change is

@@ -34,7 +34,7 @@ commands:
 
   # A schema reference matches instances of that schema and, transitively,
   # instances of every schema extending it — see
-  # document_part-definition-schema.md's `extends`. base_item <- mid_item <-
+  # packages/core/docs/spec/meta-model.md#schema's `extends`. base_item <- mid_item <-
   # leaf_item, so querying base_item should return all three.
   - as: fromBase
     run: |

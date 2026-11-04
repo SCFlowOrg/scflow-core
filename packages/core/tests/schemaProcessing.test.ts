@@ -6,7 +6,7 @@ import type { NormalizedSchema, NormalizedScalarType } from "../src/types.js";
 
 /**
  * Tests for the is_content/is_folder property constraints (property roles),
- * per document_part-definition-property_constraints.md's "Property roles"
+ * per packages/core/docs/spec/meta-model.md#property-constraints's "Property roles"
  * and the `getInstance` doc comment of `PersistenceInterface` —
  * at most one property per schema may carry each, is_content's property must
  * resolve to "markdown", is_folder's to any string-based scalar type.
@@ -305,7 +305,7 @@ describe("derivePropertyRoles", () => {
 
   /**
    * The `schema` meta-schema marks its own `content` property `is_content`
-   * (document_part-definition-schema.md), so a `schema` instance travels to a
+   * (packages/core/docs/spec/meta-model.md#schema), so a `schema` instance travels to a
    * PersistenceInterface with a content role like any other instance — this is
    * what every `schema` call site passes instead of NO_ROLES.
    */
@@ -331,7 +331,7 @@ describe("processSchemaDescription — content", () => {
 });
 
 /**
- * Overriding an inherited property, per document_part-feature-schema_processing.md's
+ * Overriding an inherited property, per packages/core/docs/spec/model-command-language.md#schema-processing's
  * "Extends resolution": an own entry naming a property the parent already
  * declares refines it — what it states wins, what it leaves out carries
  * through — so `type` is optional there and only there, and restating it as

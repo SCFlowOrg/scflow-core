@@ -13,7 +13,7 @@ import type {
 
 /**
  * Turning an authored (sugared) schema / property / scalar_type description into
- * its normalized form, per document_part-feature-schema_processing.md.
+ * its normalized form, per packages/core/docs/spec/model-command-language.md#schema-processing.
  *
  * Because a schema's `extends` target must already exist (and already be
  * normalized) before it can be named, `properties` and `constraints` are fully
@@ -356,8 +356,8 @@ export function scalarNullValue(resolved: Extract<ResolvedType, { kind: "scalar"
 }
 
 // ---------------------------------------------------------------------------
-// Property roles — is_content/is_folder, per document_part-definition-
-// property_constraints.md's "Property roles" and
+// Property roles — is_content/is_folder, per packages/core/docs/spec/meta-model.md#property-constraints's
+// "Property roles" and
 // the `getInstance` doc comment of `PersistenceInterface`. Neither changes what's valid
 // data; each just marks which (at most one) property a persistent format may
 // treat specially. Validated here, at Schema Processing time, rather than
@@ -530,7 +530,7 @@ export const NO_ROLES: Record<string, string> = Object.freeze({});
 
 /**
  * The `schema` meta-schema's own roles — its `content` property carries
- * `is_content` (document_part-definition-schema.md), so a `schema` instance
+ * `is_content` (packages/core/docs/spec/meta-model.md#schema), so a `schema` instance
  * reaches storage with a content role the same way any other instance does,
  * and every call site reading or writing one passes this rather than
  * `NO_ROLES`. Derived once from `META_SCHEMAS`, which is fixed at build time.

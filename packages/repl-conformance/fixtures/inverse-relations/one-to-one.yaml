@@ -37,7 +37,7 @@ commands:
         name: elder-wand
 
   # Setting the *virtual* side ("bearer", never declared on wand's own
-  # schema) directly, per document_part-definition-relations.md: "The
+  # schema) directly, per packages/core/docs/spec/meta-model.md#relations: "The
   # virtual relation can be used in the modelling language as a regular
   # relation." command.ts's update case resolves it to its declaring side
   # (findInverseProperty) and delegates via applyVirtualPropertyChange/

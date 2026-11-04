@@ -31,7 +31,19 @@ await runCommand("js:app/doc1", { kind: "create", schema: "task", input: { title
 const { after } = await runCommand("js:app/doc1", { kind: "query", schema: "task" });
 ```
 
+## Rules that cost the most
+
+Each rule is stated in the file named in brackets; read it before relying on the rule.
+
+- A schema or a scalar type changes only through an upgrade locator; a schema command against any other locator fails with `not_upgrade_locator` ([model-upgrade.md](model-upgrade.md)).
+- A filter value that is an array is refused on a property that is not an array; write `{ in: [...] }` ([commands.md](commands.md), Filters).
+- An `update` or a `delete` without `filters` acts on every instance of the schema ([commands.md](commands.md)).
+- A script that fails stops and does not roll back the commands it ran; wrap it in a transaction to make it atomic ([commands.md](commands.md), Scripts; [sessions.md](sessions.md)).
+- A key of a `create` or `update` input that is not a property of the schema is dropped, not refused ([limitations.md](limitations.md)).
+
 ## Topics
+
+- [spec/](spec/README.md): the normative specification of the meta-model and of MCL.
 
 - [formats.md](formats.md): locators, persistent formats, the `js` format.
 - [datasets.md](datasets.md): datasets, the `dataset` instance, lifecycle, the built-in dataset.

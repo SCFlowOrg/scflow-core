@@ -4,7 +4,7 @@ name: deleting the owner instance directly cascades to its ownees even when the 
 # generated inverse array to trigger cascade), this exercises the other
 # direction: deleting the owner outright. thing.box is `owner`, so
 # owner_box.things is the *generated* inverse array
-# (document_part-definition-relations.md's ownership table;
+# (packages/core/docs/spec/meta-model.md#relations's ownership table;
 # modelUpgrade.ts's applyInverseRelations). performDelete's cascade walk has
 # to find these ownees without a materialized `things` value to scan for.
 

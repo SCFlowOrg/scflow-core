@@ -89,7 +89,7 @@ async function withLock<T>(impl: PersistenceInterface, rest: string, fn: () => P
 }
 
 // ---------------------------------------------------------------------------
-// Built-in overlay (document_part-definition-import.md's "Built-in — virtual,
+// Built-in overlay (packages/core/docs/spec/meta-model.md#import's "Built-in — virtual,
 // not imported", `PersistenceInterface`'s `builtinRestFor`): a dataset never copies its area's built-in
 // schemas/scalar_types in, and never gets a standing import for them.
 // `initDataset` does nothing built-in-related at all; `loadResolvers`
@@ -128,7 +128,7 @@ async function loadBuiltinOverlay(
  * The shape `dumpDataset` synthesizes for the area's built-in, and
  * `restoreDataset` recognizes by its empty `namespace` — never an instance
  * actually stored via `putInstance` against `rest`'s own `import` schema; see
- * document_part-definition-import.md's `import` schema block for the full
+ * packages/core/docs/spec/meta-model.md#import's `import` schema block for the full
  * shape shared with every other kind of import.
  */
 interface BuiltinImportRecord extends TransientObject {
@@ -174,7 +174,7 @@ function builtinImportRecord(
 }
 
 // ---------------------------------------------------------------------------
-// Dormant instances (document_part-definition-import.md's "Dormant
+// Dormant instances (packages/core/docs/spec/meta-model.md#import's "Dormant
 // instances"): an instance whose schema is neither in its dataset, nor in the
 // meta-model, nor in its area's current built-in. `restoreDataset` stores it
 // as it is and records its schema and key in an internal instance of `rest`,
@@ -201,7 +201,7 @@ async function setDormantRecord(impl: PersistenceInterface, rest: string, record
 
 /**
  * Checks every restored instance of a built-in schema against that schema's
- * *current* definition, per document_part-definition-import.md's "Built-in —
+ * *current* definition, per packages/core/docs/spec/meta-model.md#import's "Built-in —
  * virtual, not imported" — whatever versions the dump recorded. A valid
  * instance is left as it is, one that becomes valid by backfilling defaults
  * is upgraded in place (`reconcileInstanceAgainstSchema` below), and the
@@ -465,7 +465,7 @@ function validateDumpShape(
  * schemas are skipped: they have no store of their own, only ever nesting
  * inside their owner's instance. See scaffoldplan-log.md for the full
  * reasoning; worth revisiting once the dataset's own auto-relation-per-root-
- * schema mechanism (document_part-feature-dataset.md) is implemented.
+ * schema mechanism (packages/core/docs/spec/meta-model.md#dataset) is implemented.
  */
 export async function dumpDataset(locator: string, format: DumpFormat): Promise<string> {
   const { impl, rest } = resolveImpl(locator);
@@ -685,7 +685,7 @@ async function requireUpgradeLocator(upgradeLocator: string): Promise<{ impl: Pe
  * ordinary command's, since a batch of model edits is inherently mixed-kind).
  * `cascade-deleted` holds schemas that weren't themselves edited but
  * transitively `extends` one that was — "considered as deleted", per
- * document_part-definition-model_upgrade.md.
+ * packages/core/docs/spec/meta-model.md#model-upgrade.
  *
  * `source_locator` and `namespace` are the marker's own, so an upgrade
  * locator identifies the dataset it was created for on its own terms: a
@@ -740,7 +740,7 @@ function widensRelation(oldType: string, newType: string, ctx: TypeResolutionCon
 /**
  * Classifies every existing instance of a modified schema as either
  * automatically upgradeable (a backfill on added/removed properties is
- * enough) or not (`modifiedSchema`), per document_part-definition-model_upgrade.md's
+ * enough) or not (`modifiedSchema`), per packages/core/docs/spec/meta-model.md#model-upgrade's
  * "Automatic upgrade": "a change that can never invalidate an already-stored
  * value is compatible; a change that could turn an existing stored value into
  * something violating the new schema is not." What exactly counts is "left to
@@ -949,7 +949,7 @@ function backfillInstance(
  * definitions, and bumps `model_minor_version` (plus `data_minor_version` if
  * any instance was actually touched). Rejects outright — `incompatible_upgrade`
  * — if `checkUpgrade` would report any `modifiedSchema`/`lostSchema` entries,
- * per document_part-definition-model_upgrade.md's "If the change is
+ * per packages/core/docs/spec/meta-model.md#model-upgrade's "If the change is
  * incompatible, it is rejected." See `docs/model-upgrade.md` and the
  * `incompatible_upgrade` doc comment of `ErrorCode`.
  */

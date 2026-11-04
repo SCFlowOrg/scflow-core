@@ -1,5 +1,5 @@
 # SCFLOW schemas and scalar types, as authored by core-plugin.
-# Source of truth: scflow_model, section 3 (THE SCHEMAS). This file follows it.
+# Source of truth: docs/spec/schemas.md. This file follows it.
 # Compiled to src/schemas.generated.ts by scripts/build-schemas.mjs.
 
 scalar_types:

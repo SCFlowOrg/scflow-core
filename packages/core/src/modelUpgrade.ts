@@ -16,7 +16,7 @@ import type {
 
 /**
  * Shared internals for changing a dataset's model (`schema`/`scalar_type`)
- * through an upgrade locator, per document_part-definition-model_upgrade.md
+ * through an upgrade locator, per packages/core/docs/spec/meta-model.md#model-upgrade
  * and `docs/model-upgrade.md`.
  *
  * Split out from command.ts/api.ts so command.ts's engine (the single choke
@@ -51,7 +51,7 @@ export function isModelSchema(name: string): boolean {
 // `runCommand`/`runScript`, since callers only ever address `schema`/
 // `scalar_type`/user schemas by name). This makes "is `rest` an upgrade
 // locator" resolvable purely from the dataset's own storage, per
-// document_part-definition-persistence_interface.md's "a schema, scalar_type
+// packages/core/docs/spec/typescript-reference-implementation.md#persistence-interface's "a schema, scalar_type
 // or import is not special storage-wise" — an upgrade marker isn't either.
 // An in-memory registry (module-scoped Map, like the persistent-format
 // registry in api.ts) was the other option; this one survives independently
@@ -99,7 +99,7 @@ export async function setUpgradeSnapshot(impl: PersistenceInterface, rest: strin
 // ---------------------------------------------------------------------------
 // Applying a virtual inverse relation, moved here unchanged (aside from the
 // new `acc` param) from api.ts's old addSchema/updateSchema — see
-// document_part-feature-schema_processing.md's "Virtual relations".
+// packages/core/docs/spec/model-command-language.md#schema-processing's "Virtual relations".
 // ---------------------------------------------------------------------------
 
 /**
@@ -188,7 +188,7 @@ export async function applyInverseRelations(
         is_array: prop.constraints.inverse_is_array === true,
         mandatory: prop.constraints.inverse_is_mandatory === true,
         // A relation declared `owns` (rather than `owner`) puts the ownership
-        // flag on the *declaring* side — document_part-concept-ownership.md's
+        // flag on the *declaring* side — packages/core/docs/spec/meta-model.md#ownership's
         // "Ownership goes through Relations with the owns or owner
         // constraints" treats the two as equivalent, so the generated inverse
         // needs `owner: true` here for ownerProperties (schema.ts) to
@@ -626,7 +626,7 @@ export async function computeModelDiff(impl: PersistenceInterface, rest: string)
 
   // extends-cascade: every schema (in the ORIGINAL/snapshot model) that
   // transitively `extends` a name in changedOrDeletedSchemaNames is
-  // "considered as deleted" too, per document_part-definition-model_upgrade.md,
+  // "considered as deleted" too, per packages/core/docs/spec/meta-model.md#model-upgrade,
   // unless it was itself already directly changed/deleted above.
   const childrenOf = new Map<string, string[]>();
   for (const s of Object.values(snapshot.schemas)) {
