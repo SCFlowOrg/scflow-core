@@ -243,11 +243,11 @@ A property definition is always written as a plain object with explicit `name`, 
 
 A property description is `embedded`, this means they are not shared between schemas.
 
-The `default_value` of a property is used when the property is not given at entity construction, this is not mandatory, if it is not given the default value will be the `type` default value (see [Scalar Types](#scalar-types)).
+The `default_value` of a property, a relation, a map or an array is used when the property is not given at entity construction, this is not mandatory, if it is not given the default value will be the `type` default value (see [Scalar Types](#scalar-types)).
 
 The default value is a `string` that must eventually convert to a valid value compatible with the `type`, for example if `type` is `number` the string must represent a valid number. 
 
-The `default_value` may contain [Placeholders](#placeholders) of the form `${value}`.
+The `default_value` may contain [Placeholders](#placeholders) of the form `${value}`. A value that is exactly one placeholder keeps its type, so a key stays a key and a map stays a map. An explicit `null` in the input means none, and the default does not apply. A default applies once, at creation, and is copied.
 
 A very important feature on properties is that the value of a property which is not a relation (the type is not a shared schema) cannot be **null**. Null is only used for empty relations (which is possible only if the relation is not mandatory). The one exception is a property of a [facet](#facet), whose unset value is stored by omission.
 
@@ -272,7 +272,7 @@ A place holder in a `string` (usually a default value for a property or a constr
 
 The content is either:
 - a list of dot separated identifiers to access properties of objects. The first one can be:
-	- `this`: for the instance or property under construction
+	- `this`: for the instance or property under construction, or the instance a [rule](#rules) or a [filter](model-command-language.md#filter) evaluates
 	- `this.schema`: for the schema of the instance or property
 	- `this.instance`: for the instance if this is a property
 	- `this.instance.schema`: for the schema of the instance
@@ -285,6 +285,8 @@ When a path segment reaches an array (e.g. a `command_result`'s `after`), the ne
 - otherwise (the identifier isn't an index or `*`) — resolved against entry `0` directly, so `after.name` means the same thing as `after.0.name`
 
 A path that ends exactly at the array, with no further identifier, still resolves to the array itself. The entry-`0` default lets a placeholder skip the index entirely for the common case of "the one entry a command produced," while still allowing an explicit index to reach any other entry; `*` is for the less common case of actually wanting every entry, as an array, rather than just the first.
+
+**Across relations.** A path crosses single-valued relations, with the same reach as a [filter](model-command-language.md#filter) path: `${this.type.default_scope}` reads `default_scope` on the instance `type` points at. A path that meets a null relation gives the ordinary default of the property, not an error. The engine reads the related instances before it constructs the instance.
 
 The creation of an instance always follow the steps:
 
@@ -327,7 +329,7 @@ display_name: { en: Plant, fr: Usine }
 
 The dataset holds every language; CORE has no notion of a current language. A reader, typically an application, chooses the language to show and its fallback, and the other entries stay available to compare and to translate directly. Translating is an ordinary update of an instance by a user, not a configuration of the application and not a bulk operation on the dataset: `{update: actor_type, filters: {name: plant}, input: {display_name: {set: {fr: Usine}}}}` sets one language and leaves the others as they are (see [Command](model-command-language.md#command), "Map operations"). A language is filtered like any entry of a map (see [Filter](model-command-language.md#filter)).
 
-Not covered yet: which entry is the source language, a `default_value` for a localized property, and detecting a translation that a change of the source made stale.
+Not covered yet: which entry is the source language, and detecting a translation that a change of the source made stale.
 
 ## Constraints
 
@@ -398,6 +400,8 @@ The pre-built schema constraints are the following, default type is boolean.
 | `singleton`      | the schema has at most one instance in the dataset; a `create` of a second instance fails with `constraint_violation`. This constraint is incompatible with `embedded`.                                                                       |
 | `is_root`        | The schema instances are not owned, the schema must be shared. See [Ownership](#ownership). <br>This constraint is incompatible with `embedded`. |
 | `constant`       | The schema instances are immutable after creation. All properties are constant.                                                                                         |
+| `checks: [check]` | named conditions on each instance, see [Rules](#rules). |
+| `unique: [unique_group]` | named groups of properties whose values no two instances share, see [Rules](#rules). |
 | `facet_of: schema` | the schema is a [facet](#facet) of the named schema. <br>This constraint is incompatible with `embedded`, `is_root` and `shared_by_name`. |
 | `observable`     | The instances are tracked by the model's observability mechanism — a create, update, or delete is included in the notification delivered when a transaction commits or a dataset is reset. See `@scfloworg/core`'s `docs/observability.md`. <br>This constraint is incompatible with `embedded`. |
 | `ui_access: string` | how a user interface may expose the instances and their properties: `hidden`, `read_only` or `editable`, default `read_only`. It is the default level of the schema's properties, see "UI access" in [Property Constraints](#property-constraints). Advisory for user interfaces: command processing ignores it. Any other value is rejected by schema processing as a `constraint_violation`. Inherited through `extends` and refined by the extending schema. |
@@ -420,6 +424,8 @@ Most property constrains are described with:
 | `is_unique`           | the property is an array of distinct entries, kept in the order given. Implies `is_array`. Only valid on a scalar property of any type, with no `enum` required — setting it on a relation or a map is a `constraint_violation`. See "Unique arrays" below. |
 | `min_length: integer` | minimum length if the property is an array, or minimum number of entries if it is a map                                                                                                                                                                                                                                                                                |
 | `max_length: integer` | maximum length if the property is an array, or maximum number of entries if it is a map                                                                                                                                                                                                                                                                                |
+| `set_once`            | a relation or a scalar set at most once: from no value to a value, by `create` or `update`. Setting the same value again changes nothing, and any other change, or clearing it, is a `constraint_violation`. Not valid with `constant`, on an array or on a map. |
+| `acyclic`             | valid only on a single-valued relation whose target is its own schema or an ancestor of it: following the relation from an instance never leads back to that instance. See [Rules](#rules). |
 | `constant`            | the value is fixed at creation — from an explicit `input` value, a `default_value` (including one resolved from a [Placeholder](#placeholders)), or left unset if there is none. Any later `update` touching it is a `constraint_violation`. Applies to relations as well as scalar properties. |
 | `is_content`           | at most one per schema; the property's type must resolve to [`markdown`](#scalar-types). Marks the property a [persistent format](#persistent-formats) may treat as an instance's primary content instead of a discrete field — e.g. a note's body rather than its frontmatter. A format that doesn't interpret it stores the property as ordinary data. See the `getInstance` doc comment of `PersistenceInterface` in `@scfloworg/core`. |
 | `is_folder`            | at most one per schema; the property's type must resolve to a string-based scalar type. The property's value is a `/`-separated relative path a persistent format may use to place the instance. A format that doesn't interpret it stores the property as ordinary data. See the `getInstance` doc comment of `PersistenceInterface` in `@scfloworg/core`. |
@@ -659,12 +665,76 @@ A breach of these rules is a `constraint_violation` raised by [Schema Processing
 | `restrict` | The delete is refused with a `constraint_violation` and nothing is removed. |
 | `cascade` | The instance is deleted too, and reported in `cascade-deleted`. |
 | `set_null` | The relation is cleared. |
+| `confirm` | A plain delete is refused with a `constraint_violation`, and a delete with `cascade: true` removes the instance, as `cascade` does. |
 
 Without `on_delete`, a `mandatory` relation is `restrict` and any other relation is `set_null`.
 
-A `mandatory` relation cannot be `set_null`, since it cannot be null. `on_delete` is refused on an `owner` relation, whose owner already removes the instance with it. Both breaches are a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing).
+A `mandatory` relation cannot be `set_null`, since it cannot be null. On an `owner` relation, `confirm` is the only value allowed: without it, the owner removes the instance with it silently, and an owned instance never outlives its owner in any case. Both breaches are a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing).
+
+Refusing and cascading both preserve integrity: `confirm` asks for the consent of the caller. Parts such as notes go silently, and the content of an owner can ask for consent. The impact of a delete is what it would remove with `cascade: true`.
 
 An instance that the same delete removes anyway, an owned one for example, does not block it. An instance deleted by `cascade` applies the same rules to what it owns and to what references it. The constraint is declared on the declaring side of the relation, never on a virtual one.
+
+## Rules
+
+*Feature.*
+
+A rule states what must be true of the instances of a schema, beyond what a constraint on one value can say. A module declares it on its schemas. A rule only refuses: it never writes, because writes belong to actions.
+
+| Rule | Declaration |
+| --- | --- |
+| A condition on one instance, across properties and relations | `checks`, with `require` |
+| An instance that must exist | `checks`, with `exists` |
+| No two instances share a combination of values | `unique` |
+| No cycle in a relation | `acyclic`, see [Property Constraints](#property-constraints) |
+| A value set once | `set_once`, see [Property Constraints](#property-constraints) |
+| A delete refused or cascaded | [`on_delete`](#on-delete) |
+
+**`checks`.** A schema constraint holding a list of named rules. Each entry has a `name`, an optional `when`, and either `require` or `exists`.
+
+```yaml
+name: flow
+checks:
+  - name: carried_item_domain
+    when: { item: { exists: true } }
+    require:
+      and:
+        - item.type.domain: { in: "${this.source.type.domains}" }
+        - item.type.domain: { in: "${this.destination.type.domains}" }
+  - name: flow_ends_hold_item
+    when: { item: { exists: true } }
+    each: ["${this.source}", "${this.destination}"]
+    exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
+```
+
+- `when` and `require` are [filters](model-command-language.md#filter) evaluated on one instance. A path on the right of an operator is a [placeholder](#placeholders) starting at `this`. The entry applies to the instances that satisfy `when`, and to every instance when it is absent.
+- `exists` gives a schema and the values an instance of it must have, and it holds when at least one such instance exists. It searches the instances of the dataset, imported ones included.
+- `each`, allowed only with `exists`, lists values, each tested in turn under the name `each`.
+- A path in `when` or `require` crosses single-valued relations only. It can end on an array property. A rule has no quantifier over instances, so that every rule stays translatable.
+
+**`unique`.** A schema constraint holding a list of named groups of properties. No two instances of the schema, in one dataset, have the same values for a group.
+
+```yaml
+name: item_at_actor
+unique:
+  - name: held_item_unique
+    properties: [actor, item]
+```
+
+- A group holds direct properties of the schema: scalars or single-valued relations. Paths, arrays and maps are refused.
+- A group with a null relation does not count, so a schema can have instances outside a group.
+- With `extends`, a constraint on a base schema covers its descendants together.
+- `unique` only refuses. MCL has no upsert: an action that returns an existing instance queries first.
+
+**When rules are checked.** The engine checks the rules at the end of the outermost transaction, in its prepare phase, because a prepared transaction can no longer fail at commit. A composite creation is invalid on the way, so rules are deferred, and a nested action is checked once, at the end. Prepare stays read-only.
+
+A rule holds after every transaction, with no severity levels. It is re-evaluated for an instance when that instance is written, and when a path it reads changes: a rule on `flow` that reads `item.type.domain` is re-evaluated when the type of the item changes. An `exists` rule is also re-evaluated when a matching instance is deleted or changed, and the equalities of `with` give the instances concerned. An `unique` group is checked on the instances of the delta.
+
+A breach refuses the whole transaction with `rule_violation`, which gives the name of the rule, the schema and the key of the instance. An upgrade that breaks a rule is refused with the list of the instances at fault (see [Model Upgrade](#model-upgrade)).
+
+**Ownership of rules.** A module sets rules only on its own schemas and facets, because a rule on a schema of another module would block the actions of that module. An `exists` names a schema of the same module, of a dependency or of `mcl:core`.
+
+**Persistent formats.** A persistent format states which rules it implements natively, and the engine does the rest. The `conformance` package checks that both give the same result.
 
 ## Ownership
 
@@ -820,6 +890,9 @@ properties:
     type: "[action]"
     owns:
     description: the actions this module declares
+  - name: migrations
+    type: "[migration]"
+    description: the steps that carry a dataset to a version of this module, see Model Upgrade
 ```
 
 ```yaml
@@ -869,7 +942,23 @@ properties:
     type: action_body
 ```
 
-The prefix of an action id is the namespace of its module. `exposure` and `body` are specified with the contract of an action.
+The prefix of an action id is the namespace of its module. `exposure` is specified with the contract of an action.
+
+**Forms of an action.** An action takes the first form that fits, because each form is easier to check and to carry to another host than the next one:
+
+| Form | Used for | Written as |
+| --- | --- | --- |
+| Generated | Create, update, delete and read from the schemas | Nothing |
+| Declared rules | Integrity, on the schemas, with a thin action | [Rules](#rules) |
+| Procedure | A composite operation | A [script](model-command-language.md#script) with parameters |
+| Bundle | What the other forms cannot say | Code that emits MCL commands |
+
+**Contract of a body.** The `body` of an action is a procedure or a bundle. A bundle is a pure function whose only effect is to emit MCL commands, because a body that depends on its host could not run in another one. This contract does not depend on a programming language.
+
+- **Inputs:** the parameters and the results of commands.
+- **Effects:** MCL commands, and calls to other actions by id.
+- **Time and ids come from MCL:** `${now()}` and the keys of the engine, so a body reads no clock and no random source.
+- **The recorded trace is the contract:** with the same parameters and command results, a body emits the same commands. A body rewritten in another language passes the same replay.
 
 ## Names
 
@@ -1033,6 +1122,46 @@ A check is made to see whether an automatic upgrade is possible on the instances
 
 - If the change is **compatible**, the upgrade runs automatically: the dataset records the new version of the module, and `data_minor_version` is bumped if any instance was actually touched by the backfill.
 - If the change is **incompatible**, it needs a new major version of the module, and the upgrade runs through the migrations of the module. A module declares its migrations for incompatible changes, because two versions give the difference, not the transformation: a rename looks like a delete and an add. Without a migration that applies, the upgrade is refused.
+
+**Migrations**
+
+A module lists its migrations in its manifest. Common migrations are declared, with no code:
+
+```yaml
+migrations:
+  - to: 2.0.0
+    rename_property: { schema: actor_emissions, from: co2, to: co2_kg }
+```
+
+```yaml
+name: migration
+embedded:
+description: a step that carries the instances of a dataset to a version of a module
+properties:
+  - name: to
+    type: semantic_version
+    description: the version of the module this migration reaches
+  - name: rename_property
+    type: migration_rename_property
+  - name: rename_schema
+    type: migration_rename_schema
+  - name: delete_property
+    type: migration_delete_property
+  - name: body
+    type: action_body
+    description: a bundle, for what the declared forms cannot say
+```
+
+A migration has exactly one form:
+
+| Form | Effect |
+| --- | --- |
+| `rename_property: {schema, from, to}` | The values of a property move to a new name |
+| `rename_schema: {from, to}` | The instances of a schema move to a new name |
+| `delete_property: {schema, property}` | The values of a property are removed |
+| `body` | A bundle, under the [contract of a body](#action), which converts values or splits a schema |
+
+The migrations between the embedded and the installed version run in version order. They run in one transaction, and the rules of the module are checked at its end: an upgrade that breaks a rule is refused with the list of the instances at fault.
 
 **Scalar types are never modified by a command.** A new version of a module can change a scalar type, under the same compatibility check.
 

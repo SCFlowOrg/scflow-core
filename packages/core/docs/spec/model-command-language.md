@@ -21,6 +21,7 @@ A command is one operation on the instances of one schema: a `query` reads them,
 | `namespace` | the empty string (default): the dataset's own instances; a specific import's namespace, or `*` for every namespace: imported instances too, `query` only (see [Import](meta-model.md#import)) |
 | `filters` | a [Filter](#filter) selecting the instances to act on; absent: every instance |
 | `input` | an array of objects for `create` and `update`; a bare object is shorthand for a one-element array |
+| `cascade` | `delete` only: also removes the instances that reach a removed instance through an `on_delete: confirm` relation; false by default |
 | `result` | narrows what comes back, see *Result shaping* |
 
 **Authored form.** `kind` and `schema` may be written as one key: the kind names the key and its value names the schema, so `{update: task, filters: {id: t2}, input: {status: done}}` equals `{kind: update, schema: task, filters: {id: t2}, input: {status: done}}`. Exactly one of `kind` or one such key is given. A property outside the table above is refused before anything runs; a command of a [Script](#script) also carries `as`.
@@ -35,7 +36,7 @@ A command is one operation on the instances of one schema: a `query` reads them,
 
 **Update.** The i-th matched instance takes the patch `input[i mod n]` for n entries, so one entry patches every match and several entries cycle over them. A patch changes only the properties it names. The key property and a `constant` property cannot be patched. A generated (inverse) relation is written through the declaring side. The patched instance is validated as a whole, as on create. An instance left with no owner is deleted, per [Ownership](meta-model.md#ownership), and does not appear in `after`. An `update` with no `input` is refused with `empty_input`.
 
-**Delete.** Each matched instance is removed together with everything it owns; the owned instances come back in `cascade-deleted`. A relation that pointed at a removed instance is cleared on the other side, and the instances so changed come back in `updated-before` and `updated-after`.
+**Delete.** Each matched instance is removed together with everything it owns; the owned instances come back in `cascade-deleted`. A relation that pointed at a removed instance is cleared on the other side, and the instances so changed come back in `updated-before` and `updated-after`. A relation follows its [`on_delete`](meta-model.md#on-delete), and `cascade: true` makes `confirm` relations cascade, transitively. `restrict` still refuses and `set_null` still clears.
 
 **Text operations.** A patch value for a property of base type `string` (`markdown` included) is either a literal, which replaces the value, or a text operation, which edits the current value in place: a mapping with exactly one of these keys.
 
@@ -73,7 +74,7 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | --- | --- |
 | `missing_command_kind` | the command is not a mapping, or names neither `kind` nor a kind key |
 | `ambiguous_command_kind` | several kind keys are given, or `kind` together with a kind key |
-| `unknown_command_property` | a property outside `kind`, `schema`, `namespace`, `filters`, `input`, `result`, `as` |
+| `unknown_command_property` | a property outside `kind`, `schema`, `namespace`, `filters`, `input`, `cascade`, `result`, `as` |
 | `unknown_result_option` | `result` is not a mapping, carries a key other than `properties` and `before`, or a value of the wrong type |
 | `unknown_schema` | `schema` names no schema of the dataset's model, or is a short name that does not resolve where it is written (see [Names](meta-model.md#names)) |
 | `unknown_property` | `result.properties` names a property the target schema does not declare |
@@ -83,6 +84,7 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `text_not_found` | a `replace` finds no occurrence of `find` |
 | `text_not_unique` | a `replace` without `all: true` finds several occurrences of `find` |
 | `constraint_violation` | an `input` value or entry is malformed, or the resulting instance breaks a constraint of its schema (`mandatory`, `pattern`, `enum`, bounds, ownership, a patched key or `constant` property, a text or map operation where none applies), or a `create` supplies an `id` that is not a canonical lowercase uuid, already exists, or targets a `shared_by_name` schema |
+| `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance |
 | `not_upgrade_locator` | a `schema` or `scalar_type` is changed against a locator that is not an upgrade locator |
 | `upgrade_locator` | a data instance is changed against an upgrade locator |
 | `facet_not_addressable` | `schema` names a facet |
@@ -135,11 +137,14 @@ priority:
 | `lt`, `lte` | number, integer, date, date_time, time | less than / less than or equal |
 | `gt`, `gte` | number, integer, date, date_time, time | greater than / greater than or equal |
 | `in` | any scalar; relation | value is one of the given array |
+| `subset_of` | array property | every entry of the value is in the given array; true for an empty value; order and duplicates do not matter |
 | `contains` | array property; string | array has the value as an element, or string contains the substring |
 | `matches` | string | value matches the regexp |
 | `exists` | relation; array; map; property of a facet | relation is not null, array or map is not empty, or the property of a facet has a value |
 
 Relation predicates compare against the target's **key** (see [Keys](meta-model.md#keys)), not the full instance.
+
+**Paths on the right.** An operand can be a path on the instance being tested, written as one [placeholder](meta-model.md#placeholders) starting at `this`: `item.type.domain: {in: "${this.source.type.domains}"}`. It is resolved per instance. Only a whole placeholder that is a plain path is accepted, with no function and no surrounding text, so that a filter stays translatable. `${this...}` is refused with `invalid_filter` otherwise. A missing value on the right satisfies no predicate.
 
 **Combining.** `and` and `or` take an array of nested `filter`; `not` takes a single nested `filter`. `and: []` is vacuously true, `or: []` is vacuously false. A filter with no keys at all (`{}`) matches every instance — this is the `filter` type's default value, used when a command omits `filters`.
 
@@ -171,40 +176,91 @@ filters:
 
 *Definition.*
 
-A script is an ordered sequence of [commands](#command), executed one after another. You write a script and run it, the way an AI assistant or a REPL user would: create a node, create another node, connect them.
+A script is an ordered sequence of steps, executed one after another. You write a script and run it, the way an AI assistant or a REPL user would: create a node, create another node, connect them. A step is usually a [command](#command). A script with parameters, declared as the body of an [action](meta-model.md#action), is a **procedure**.
 
 ```yaml
 name: script
 embedded:
-description: an ordered sequence of commands, executed in order
+description: an ordered sequence of steps, executed in order
 properties:
+  - name: parameters
+    type: string
+    description: the parameters of a procedure, as JSON Schema
   - name: commands
     type: "[script_command]"
-    description: the commands to execute in order
+    description: the steps to execute in order
+  - name: result
+    type: string
+    description: a placeholder giving the result of the script; the result of its last step when absent
 ```
 
-A script's steps are not plain [commands](#command) but **script_command**, a small schema that extends `command` for the one thing only a chained command needs: a name for its result.
+A script's steps are not plain [commands](#command) but **script_command**, a small schema that extends `command` for what only a chained step needs.
 
 ```yaml
 name: script_command
 embedded:
 extends: command
-description: a command whose result is named for later reference within its enclosing script
+description: a step of a script
 properties:
   - name: as
     type: identifier
-    description: names this command's result within the enclosing script
+    description: names this step's result within the enclosing script, or the current entry of each
+  - name: when
+    type: filter
+    description: the step runs only when this filter holds on the parameters and the named results
+  - name: call
+    type: string
+    description: the id of an action to call
+  - name: with
+    type: string
+    description: the parameters of the called action
+  - name: each
+    type: string
+    description: a placeholder giving an array; do runs once per entry
+  - name: do
+    type: "[script_command]"
+    description: the steps run for each entry
+  - name: fail
+    type: string
+    description: a message; the step refuses the whole script
 ```
 
-**Chaining.** A `script_command` may set `as: identifier`, naming its `result` within the script. A later command can reference that name from its own `input` or `filters` through a [placeholder](meta-model.md#placeholders), e.g. `${n1.after.0.id}`. This is the only mechanism for moving data from one step's result into another step's input — there is no separate "variable" construct.
+A step is exactly one of a command, a `call`, an `each` with its `do`, or a `fail`. Any other shape is refused with `invalid_script_step`.
+
+```yaml
+parameters: { type: object, properties: { source: { type: string }, destination: { type: string }, item: { type: string } } }
+commands:
+  - create: flow
+    input: { source: "${params.source}", destination: "${params.destination}", item: "${params.item}" }
+    as: flow
+  - call: scflow/hold_item
+    with: { actor: "${params.source}", item: "${params.item}" }
+    when: { params.item: { exists: true } }
+  - call: scflow/hold_item
+    with: { actor: "${params.destination}", item: "${params.item}" }
+    when: { params.item: { exists: true } }
+result: "${flow.after.0}"
+```
+
+**Chaining.** A `script_command` may set `as: identifier`, naming its `result` within the script. A later step can reference that name through a [placeholder](meta-model.md#placeholders), e.g. `${n1.after.0.id}`. This is the only mechanism for moving data from one step's result into another step's input — there is no separate "variable" construct.
 
 Naming is only needed when the value isn't already known ahead of time — a generated id, a query result, an aggregate. If the target schema is [`shared_by_name`](meta-model.md#keys), you can usually just pick the name yourself when creating the instance and reference it directly by that name in a later command's `input`, without `as` at all — e.g. creating nodes named `n1` and `n2`, then a flow with `input: [{from: n1, to: n2}]`.
 
-**Processing.** Commands execute in array order. Before each command runs, its `input` and `filters` are resolved for placeholders against the usual context (see [Placeholders](meta-model.md#placeholders)) plus the results named so far in the script.
+**Parameters.** A procedure reads its parameters as `${params.name}`. An absent parameter resolves like a null value: a property of an `input` that receives it is left out.
 
-A command targeting `schema` or `scalar_type` is the exception: its `filters` resolve the same way, its `input` does not. That input is a description, and a `${...}` inside one of its `default_value`s addresses the instances that schema will later construct — [Schema Processing](#schema-processing) leaves it a literal string, and [Placeholders](meta-model.md#placeholders) resolves it at construction time, against a `this` that exists only then. The script's own pass leaves it untouched so that it survives that far. If a command throws, the script aborts immediately — commands already executed are not rolled back; that is left to [persistence](typescript-reference-implementation.md#persistence-interface)-level transactions, not the script.
+**Conditions.** `when` is a [filter](#filter) on the parameters and the named results: the first segment of a path is `params` or an `as` name. A step whose `when` does not hold is skipped, and its `as` name stays unset.
 
-**Result.** A script's result is the `result` of its last command.
+**Calls.** `call` runs an action by id, in the same transaction, with the parameters of `with`. An action calls only the actions of its own module and of its dependencies. Its result is named by `as`, as for a command.
+
+**Loops.** `each` gives an array, and `do` runs once per entry, with the entry named by `as`. A name set inside `do` is local to that run.
+
+**Errors.** `fail` refuses the whole script with `procedure_failed` and its message, and the transaction is rolled back. Its message may hold placeholders.
+
+**Purity.** A procedure follows the [contract of a body](meta-model.md#action): it reads no clock and no random source outside `${now()}` and the keys of the engine, so it can be replayed.
+
+**Processing.** Steps execute in array order. Before each step runs, its `input`, `filters` and `with` are resolved for placeholders against the usual context (see [Placeholders](meta-model.md#placeholders)) plus `params` and the results named so far in the script. A `${this...}` in `filters` is left as it is, since it is resolved per instance (see [Filter](#filter)).
+
+**Result.** A script's result is its `result` when given, otherwise the `result` of its last step.
 
 
 **Exceptions.**
@@ -212,6 +268,9 @@ A command targeting `schema` or `scalar_type` is the exception: its `filters` re
 | exception | thrown when |
 |---|---|
 | `unknown_reference` | a placeholder references an `as` name that hasn't executed yet, or that doesn't exist in the script |
+| `invalid_script_step` | a step is not exactly one of a command, a `call`, an `each` with its `do`, or a `fail` |
+| `procedure_failed` | a `fail` step runs |
+| `unknown_action` | `call` names no action the script can reach |
 | *(any command exception)* | propagated unchanged when a command in `commands` throws — see [Command](#command)'s exceptions |
 
 ## Schema Processing
@@ -234,6 +293,8 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Facets.** A schema F with `facet_of` is processed as a [facet](meta-model.md#facet) of its target T. Each breach below is a `constraint_violation`: F has a `name` property, or is `shared_by_name`, `embedded` or `is_root`; F takes part in `extends`, or another schema extends it; a property of F is a `mandatory` relation, or carries `inverse_name`, `owns` or `owner`; T is a facet or is `embedded`; a relation of any schema targets F. A property of F named like a property of another facet of the same module on T is refused the same way, and so is a property of T or of a descendant of T named like a namespace in use. The schema of T as stored holds no property of F when F belongs to another module: the engine adds the properties of the facets of the modules a dataset uses when it reads the schema for that dataset. Their values are stored in the instance of F, never in that of T.
 
+**Rules.** `checks`, `unique`, `acyclic` and `set_once` are validated here, and each breach is a `constraint_violation`: a rule name is declared twice on a schema; a `checks` entry has both `require` and `exists`, or neither; `each` appears without `exists`; a path crosses an array relation; a `unique` group names something other than a direct scalar or single-valued relation; `acyclic` is set on a relation whose target is neither the schema nor an ancestor of it; `set_once` is set with `constant`, on an array or on a map; a rule is set on a schema of another module.
+
 **Out of scope: placeholders.** Schema processing does not resolve `${...}` placeholders in `default_value` — those are left as literal strings on the normalized `property`. Placeholder resolution happens later, at instance construction time, per [Placeholders](meta-model.md#placeholders). Schema processing only has to guarantee the string survives normalization untouched.
 
 **Virtual relations.** When a normalized property carries `inverse_name`, schema processing also updates the *target* schema (the schema named by the property's `type`), adding or extending a property there named `inverse_name`, typed back to this schema, with `is_array` from `inverse_is_array` and `mandatory` from `inverse_is_mandatory`. If a property of that name already exists on the target schema and wasn't itself generated this way → `inverse_name_conflict`. This step runs after both schemas involved have otherwise finished their own processing, since either side may declare the relation. Schemas created by one command are processed together: the target of an inverse relation may be a schema of the same command, placed before or after the declaring schema, or the declaring schema itself. A target found neither in the command nor in the dataset throws `unknown_extends_target`.
@@ -255,7 +316,7 @@ The inverse is generated once, on behalf of the schema that declares the relatio
 | `inverse_name_conflict` | a virtual relation's target name collides with an existing, non-generated property on the target schema |
 | `reference_outside_module` | a schema refers to a module that is neither its own, nor a dependency, nor `mcl:core` (see [Module](meta-model.md#module)) |
 | `namespace_conflict` | two modules used in one dataset have the same namespace (see [Names](meta-model.md#names)) |
-| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*) |
+| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*), or declares a rule that is not valid (see *Rules*) |
 
 ## Examples
 

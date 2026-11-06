@@ -33,6 +33,7 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Relations](meta-model.md#relations): A property relating to another entity
 - [Facet](meta-model.md#facet): A schema that adds qualified, optional properties to the instances of another schema, stored apart and assembled per dataset
 - [On Delete](meta-model.md#on-delete): The on_delete relation constraint sets what happens to an instance when the target of its relation is deleted: restrict, cascade or set_null
+- [Rules](meta-model.md#rules): What must be true of the instances of a schema: checks, unique, acyclic and set_once, checked at the end of every transaction
 - [Ownership](meta-model.md#ownership): Each instance has an owner in the dataset
 - [Dataset](meta-model.md#dataset): A unit for persistence
 - [Module](meta-model.md#module): The unit that contributes schemas, scalar types and actions to a model, declared in a manifest
@@ -52,7 +53,7 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Language Model](model-command-language.md#language-model): The modeling language is itself defined using a model
 - [Command](model-command-language.md#command): One operation on the instances of a schema: query, create, update or delete, with its filters, input and result shaping
 - [Filter](model-command-language.md#filter): The filter schema used to restrict which instances of a schema a command matches
-- [Script](model-command-language.md#script): An ordered sequence of commands, chaining named results into later input
+- [Script](model-command-language.md#script): An ordered sequence of steps, chaining named results into later input; a script with parameters is a procedure
 - [Schema Processing](model-command-language.md#schema-processing): Turning a schema authored with the properties/constraints convention into a clean schema definition for the interpreter
 - [Examples](model-command-language.md#examples): Worked examples of query, create, update and delete commands against a simple example model, plus a script chaining several of them
 
