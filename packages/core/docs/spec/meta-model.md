@@ -186,7 +186,7 @@ As this schema is its own schema (it's the only one doing that) it has a `proper
 The schema `property` is described in [Property](#property).
 
 Constraints (see [Constraint](#constraints)) can be set directly on schemas and property definitions, alongside the declared properties, and are told apart by the same rule everywhere: a key not declared on the meta-schema is a constraint. Here are the schema constraints used above:
-- `shared_by_name`: meaning instances of this schema (all schemas) are not embedded, and their name is used as a key (which means the name is unique in a dataset). This implies they have a property `name` with type `identifier`.
+- `shared_by_name`: meaning instances of this schema (all schemas) are not embedded, and their name is used as a key (which means the name is unique in a dataset). This implies they have a property `name`, of type `identifier` unless the schema declares it with another string type, as [`module`](#module) does.
 - `has_description`: meaning instances of this schema have a non empty `description` property of type `markdown`, descriptions are useful for humans and AI assistants.
 
 Constraints on a schema look like properties, but actually they are not defined in the `schema` meta-schema — that's how they are identified. Constraints on a property definition look also like properties, but they are not defined in the `property` meta-schema.
@@ -203,7 +203,7 @@ The properties in a schema are:
 `extends` simply means that the schema reuses all properties and constraints from another schema (try to avoid loops, they will be detected and reported to the meta-police).
 We notice that `extends` is not defined on `schema`, meaning the meta-schema extends no other schema.
 
-A [Command](model-command-language.md#command)'s `schema` matches instances of that schema and, transitively, instances of every schema extending it — directly or through further extension. Querying, updating or deleting against a base schema therefore also reaches the instances of its descendants.
+A [Command](model-command-language.md#command)'s `schema` matches instances of that schema and, transitively, instances of every descendant of that schema: every schema extending it, directly or through another descendant. Querying, updating or deleting against a base schema therefore also reaches the instances of its descendants.
 
 `inverse_name: extended_by` names the "virtual" inverse relation (see [Relations](#relations)). This will match or create an `extended_by` property on the target schema listing all schemas extending it directly. We do not see this property on `schema` so it is added implicitly.
 
@@ -537,6 +537,20 @@ pattern: '^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)
 name: language_code
 extends: string
 pattern: '^[a-z]{2}(-[A-Z]{2})?$'
+
+# publisher:module, the key of a module
+name: module_key
+extends: string
+pattern: '^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$'
+
+name: semantic_version
+extends: string
+pattern: '^\d+\.\d+\.\d+$'
+
+# an exact version, or a range such as ^1.3
+name: version_range
+extends: string
+pattern: '^[\^~]?\d+(\.\d+){0,2}$'
 ```
 
 **number and integer constraints**
@@ -731,6 +745,151 @@ Changing the modeling part of a dataset may not be a light operation as it may i
 
 A dataset with `model_only: true` holds only the modelling part — instances of `schemas` and `scalar_types` — and no data part at all: the modelling language rejects `create` against any other root schema, [`import`](#import) included, so a `model_only` dataset can never itself hold an import. This is the shape of a **library** dataset: a reusable collection of schemas and scalar types with nothing else in it, meant to be imported into other datasets to align them on a common model.
 
+## Module
+
+*Feature.*
+
+A module is the unit that contributes schemas, scalar types and actions to a model. Every schema, scalar type and action belongs to exactly one module, which owns it.
+
+A module is declared in a **manifest**, a `module.yaml` file that holds its identity and its whole content in one file. A manifest is an instance of the `module` schema, so it is validated like any instance and needs no format of its own. It is read without running code, so a tool can list a module without trusting it.
+
+```yaml
+name: acme:carbon
+namespace: carbon
+version: 1.2.0
+mcl: ^1.0
+title: Carbon footprint
+dependencies:
+  - module: scflow:core
+    version: ^1.3
+
+schemas:
+  - name: actor_emissions
+    properties:
+      - name: co2
+        type: number
+```
+
+`module` is a schema of the meta-model:
+
+```yaml
+name: module
+description: the unit that contributes schemas, scalar types and actions to a model
+shared_by_name:
+properties:
+  - name: name
+    type: module_key
+    description: the key of the module, publisher:module
+  - name: namespace
+    type: identifier
+    description: the prefix of the names of this module outside it
+  - name: version
+    type: semantic_version
+  - name: mcl
+    type: version_range
+    description: the versions of mcl:core this module works with
+  - name: title
+    type: string
+  - name: dependencies
+    type: "[module_dependency]"
+  - name: schemas
+    type: "[schema]"
+    owns:
+    description: every schema of this module
+  - name: scalar_types
+    type: "[scalar_type]"
+    owns:
+    description: every scalar type of this module
+  - name: actions
+    type: "[action]"
+    owns:
+    description: the actions this module declares
+```
+
+```yaml
+name: module_dependency
+embedded:
+description: a module another module depends on, with the versions it accepts
+properties:
+  - name: module
+    type: module_key
+  - name: version
+    type: version_range
+```
+
+- **Name.** The name of a module is `publisher:module`, for example `acme:carbon`. It is the key of the module (see [Keys](#keys)).
+- **Version.** The semantic version is the only version of a module. Its patch marks a change of code only, and a change of the schemas that is not compatible needs a new major (see [Model Upgrade](#model-upgrade)).
+- **Dependencies.** A dependency is a range of versions, such as `^1.3`. `mcl:core` is not listed there: the `mcl` property gives its range.
+- **Ownership.** A schema name, a scalar type name and an action id are unique in their module, not across modules. Two modules can define the same name.
+- **References.** A schema refers only to its own module, to its dependencies and to `mcl:core`, through `extends` or a relation. An action calls only the actions of the same modules.
+
+## Action
+
+*Feature.*
+
+An action is an operation of a module, declared apart from its body. A manifest lists its actions, so a tool knows them without running code.
+
+```yaml
+name: action
+description: an operation of a module, declared apart from its body
+properties:
+  - name: id
+    type: string
+    description: the namespace of the module, a slash and a name, for example scflow/create_actor
+  - name: title
+    type: string
+  - name: kind
+    type: string
+    enum: [read, action]
+  - name: exposure
+    type: action_exposure
+  - name: parameters
+    type: string
+    description: the parameters of the action, as JSON Schema
+  - name: writes
+    type: "[schema]"
+    description: the schemas the action writes
+  - name: body
+    type: action_body
+```
+
+The prefix of an action id is the namespace of its module. `exposure` and `body` are specified with the contract of an action.
+
+## Names
+
+*Feature.*
+
+A **short name** is the name of a schema or a scalar type as its module declares it, such as `actor`. A **qualified name** adds the namespace of the module and a dot, such as `scflow.actor`. An action id already carries its namespace.
+
+A module declares its namespace, which stays stable because code and saved data name it. The namespace `mcl` belongs to `mcl:core`. Two modules with the same namespace cannot be used in one dataset: the second is refused with `namespace_conflict`.
+
+A name is resolved from where it is written:
+
+| Written | Short name | Qualified name |
+| --- | --- | --- |
+| In a module: a schema, a scalar type, or a command of one of its actions | Its own module, then `mcl:core` | Its own module, a dependency or `mcl:core` |
+| Outside a module: a command or a script run by a tool or a person | `mcl:core` only | Any module the dataset uses |
+
+- **A module wins over `mcl:core`**, so a type added to the specification breaks no existing module. The module still reaches the standard one with its qualified name, such as `mcl.date`.
+- **A short name is never searched for across modules.** It does not resolve, and the reference is refused, so adding a module to a dataset cannot change what an existing command means. A command is refused with `unknown_schema`.
+- **A reference to a module that is not a dependency** is refused with `reference_outside_module`.
+
+The `name` of a schema or a scalar type is always the short name, and it stays an `identifier`. A qualified name appears where a name is referenced: the `type` of a property, `extends`, the `schema` of a command. In a dataset, the key of a schema or a scalar type of a module is its qualified name, so it stays unique when two modules use the same short name.
+
+## The Core Module
+
+*Feature.*
+
+`mcl:core` holds the central concepts of MCL, in the same manifest format as any module: the meta-model (`schema`, `property`, `constraint`, `scalar_type`, `dataset`, `import`, `module`, `action`) and the standard types of [Scalar Types](#scalar-types). The two cannot be separated, since `schema.name` is an `identifier` and `dataset.created_at` a `date_time`. `string`, `number`, `integer` and `boolean` stay primitives of the engine, which `mcl:core` exposes and cannot define.
+
+| | Ordinary module | `mcl:core` |
+| --- | --- | --- |
+| Presence | Used by the dataset | Always there, given by the engine |
+| Dependency | Listed in `dependencies` | The `mcl` property of the manifest |
+| Names | Qualified from outside | Short everywhere |
+
+The engine embeds the manifest of `mcl:core`, which describes itself, as `schema` describes itself. Its version is the version of this specification, starting at `1.0.0`, and the manifest gives the standard in a form a machine reads.
+
 ## Keys
 
 *Concept.*
@@ -784,7 +943,7 @@ Imported schemas can be extended in the dataset.
 
 Imported schemas can be instantiated in the dataset. Importing schemas from a **library** — a [`model_only`](#dataset) dataset — is a good way to align datasets on a common model; a format's built-in dataset (below) is one such library, always available without an explicit import.
 
-Dataset instances can be created or updated with relations to the imported instances, exactly like any other relation — the ordinary relation-type compatibility rule (same schema, or an extension of it) already covers this, nothing special is needed.
+Dataset instances can be created or updated with relations to the imported instances, exactly like any other relation — the ordinary relation-type compatibility rule (same schema, or a descendant of it) already covers this, nothing special is needed.
 
 There are important rules on importation:
 
@@ -997,6 +1156,18 @@ classDiagram
         +created_at
         +updated_at
     }
+    class Module {
+        +name
+        +namespace
+        +version
+        +mcl
+        +title
+    }
+    class Action {
+        +id
+        +title
+        +kind
+    }
     class Import {
         +name
         +model_major_version
@@ -1008,6 +1179,11 @@ classDiagram
 
     Instance <|-- Schema
     Instance <|-- ScalarType
+    Instance <|-- Module
+    Instance <|-- Action
+    Module *-- Schema
+    Module *-- ScalarType
+    Module *-- Action
     Instance <|-- Dataset
     Instance <|-- Import
 

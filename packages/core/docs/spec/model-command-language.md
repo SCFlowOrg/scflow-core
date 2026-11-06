@@ -17,7 +17,7 @@ A command is one operation on the instances of one schema: a `query` reads them,
 | property | meaning |
 | --- | --- |
 | `kind` | `query`, `create`, `update` or `delete` |
-| `schema` | the target schema; the command reaches its instances and those of every schema extending it, transitively |
+| `schema` | the target schema, by a name resolved as in [Names](meta-model.md#names); the command reaches its instances and those of every schema extending it, transitively |
 | `namespace` | the empty string (default): the dataset's own instances; a specific import's namespace, or `*` for every namespace: imported instances too, `query` only (see [Import](meta-model.md#import)) |
 | `filters` | a [Filter](#filter) selecting the instances to act on; absent: every instance |
 | `input` | an array of objects for `create` and `update`; a bare object is shorthand for a one-element array |
@@ -75,7 +75,7 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `ambiguous_command_kind` | several kind keys are given, or `kind` together with a kind key |
 | `unknown_command_property` | a property outside `kind`, `schema`, `namespace`, `filters`, `input`, `result`, `as` |
 | `unknown_result_option` | `result` is not a mapping, carries a key other than `properties` and `before`, or a value of the wrong type |
-| `unknown_schema` | `schema` names no schema of the dataset's model |
+| `unknown_schema` | `schema` names no schema of the dataset's model, or is a short name that does not resolve where it is written (see [Names](meta-model.md#names)) |
 | `unknown_property` | `result.properties` names a property the target schema does not declare |
 | `empty_input` | an `update` carries no `input` |
 | `unknown_text_operation` | a text operation has a key other than `append` and `replace`, or several keys |
@@ -251,6 +251,8 @@ The inverse is generated once, on behalf of the schema that declares the relatio
 | `duplicate_property_name` | two entries of `properties` share a `name`, and neither comes from an `extends` override |
 | `property_type_change` | a property overriding an inherited one of the same name states a different `type` |
 | `inverse_name_conflict` | a virtual relation's target name collides with an existing, non-generated property on the target schema |
+| `reference_outside_module` | a schema refers to a module that is neither its own, nor a dependency, nor `mcl:core` (see [Module](meta-model.md#module)) |
+| `namespace_conflict` | two modules used in one dataset have the same namespace (see [Names](meta-model.md#names)) |
 | `constraint_violation` | a schema breaks the rules of an `extension` relation (see *Extensions*) |
 
 ## Examples
