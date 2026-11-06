@@ -15,7 +15,7 @@ The dedicated functions below must be used as specific processing is involved to
 
 | result field       | meaning                                                                                                                                                                        |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `canImport`         | whether the import is possible overall. Special case: `locator` and `importedLocator` name the same dataset — `canImport` reflects that, and every other field below is null or empty.       |
+| `canImport`         | whether the import is possible overall. It is false when the two datasets use two versions of one module. Special case: `locator` and `importedLocator` name the same dataset — `canImport` reflects that, and every other field below is null or empty.       |
 | `backImport`        | the existing import, if any, of the *importer* (`locator`) inside the *imported* dataset (`importedLocator`). If not null, the import is not possible (it would create a cycle).              |
 | `existingImport`    | the existing import, if any, of the *imported* dataset already present in the importer. If versions mismatch, import is not possible — realign first. If versions match, the import already exists and is not necessary. |
 | `additionalImports` | pairs `{imported, existing}`, one per import already present in the *imported* dataset: `imported` is that nested import, `existing` is an import of the same target already present in the importer, or `null`. |
@@ -44,7 +44,7 @@ function checkImport(locator: string, importedLocator: string): Promise<CheckImp
 | `dataset_not_found`         | `locator` or `importedLocator` does not resolve to an existing dataset              |
 
 ---
-**Creating an import.** Will create a new import for the imported dataset, assigning a namespace and copying all the content. Nothing is done if the dataset is already imported. An exception is thrown if any issue described in `checkImport` is encountered. Returns the new or existing import.
+**Creating an import.** Will create a new import for the imported dataset, assigning a namespace and copying its instances. Nothing is done if the dataset is already imported. An exception is thrown if any issue described in `checkImport` is encountered. Returns the new or existing import.
 
 ```ts
 function createImport(locator: string, importedLocator: string): Promise<TransientValue>
@@ -74,28 +74,7 @@ function removeImport(locator: string, importKey: Key): Promise<TransientValue>
 | `key_not_found`             | Import does not exist                                            |
 
 ---
-**Realigning an import.** Realigning an existing import is a multi-step operation as it may imply an upgrade and a refresh (see [Import](meta-model.md#import)).
-
-For the upgrade part (see `@scfloworg/core`'s `docs/model-upgrade.md`) the first step is to obtain an upgrade locator; there is no need to populate it as for an upgrade after a model change — it is already populated with the new versions of the schema from the dataset. This upgrade locator can then be used to upgrade the dataset with `checkUpgrade` and `upgradeDataset` (see `@scfloworg/core`'s `docs/model-upgrade.md`).
-
-**Creating an import upgrade locator.** Access the dataset in the import and copy its current model with the namespace into a temporary dataset, collect the changes to the model adding the namespace, and return it as an upgrade locator. This upgrade dataset also keeps track of the namespace, so `upgradeDataset` will also align the model version of the import, marking it ready for refresh.
-
-Upgrade is not necessary if the model version of the imported dataset did not change; in that case an empty string is returned.
-
-```ts
-function createImportUpgradeLocator(locator: string, importKey: Key): Promise<string>
-```
-
-*Exceptions.*
-
-| exception                   | thrown when                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| `unknown_persistent_format` | `locator` or the locator in the import format prefix has no registered Persistence Interface |
-| `dataset_not_found`         | `locator` or the locator in the import does not resolve to an existing dataset              |
-| `key_not_found`             | Import does not exist                                                                        |
-
----
-To refresh an import the dataset must have been upgraded first. This is checked by comparing the model version of the import and of the imported dataset.
+**Realigning an import.** Realigning an existing import is a refresh (see [Import Refresh](meta-model.md#import-refresh)). When the imported dataset uses a newer version of a module, the dataset must have upgraded to it first (see [Model Upgrade](meta-model.md#model-upgrade)). This is checked by comparing the versions of their modules.
 
 **Refreshing an import.** Will check the versions, access the imported dataset and import its data (adding the namespace), overwriting the previously imported data in the dataset. The result contains the following information as lists of shallow copies:
 
@@ -128,7 +107,7 @@ function refreshImport(locator: string, importKey: Key): Promise<RefreshResult>
 | `unknown_persistent_format` | `locator` or the locator in the import format prefix has no registered Persistence Interface |
 | `dataset_not_found`         | `locator` or the locator in the import does not resolve to an existing dataset              |
 | `key_not_found`             | Import does not exist                                                                        |
-| `import_not_upgraded`       | The import model version does not match the import dataset                                  |
+| `import_not_upgraded`       | The imported dataset uses a version of a module the dataset has not upgraded to             |
 
 ## Persistence Interface
 
@@ -142,7 +121,6 @@ A format provides:
 - its `name`, the locator prefix;
 - the dataset lifecycle: create, read and patch the scalar properties, delete;
 - instance storage by key, generic over every schema, with the property roles it may act on;
-- an area and the built-in dataset of that area;
 - optionally a write `lock` and support for transactions.
 
-The contract is stated by the doc comments of `PersistenceInterface` in `@scfloworg/core` (`src/types.ts`), and the rules of locators and areas by its `docs/formats.md`.
+The contract is stated by the doc comments of `PersistenceInterface` in `@scfloworg/core` (`src/types.ts`), and the rules of locators by its `docs/formats.md`.

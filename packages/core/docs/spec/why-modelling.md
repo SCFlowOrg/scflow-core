@@ -75,7 +75,7 @@ Integrity can be enforced ideally at data creation or update, and it can also be
 
 *Requirement.*
 
-The model must provide mechanisms to extend it's modelling power without changing the meta-model. New entities can be part of the same dataset as their instances.
+The model must provide mechanisms to extend it's modelling power without changing the meta-model. New entities come from modules, which a dataset uses and embeds beside its instances.
 
 ## Data Storage
 
@@ -122,8 +122,8 @@ There should be a **"locator"** mechanism similar to [**URL**](https://en.wikipe
 
 Instances in a dataset may have relations with instances from other datasets. 
 Two examples:
-- A dataset instances use schemas from a 'modeling' dataset shared with many other datasets in the same business area.
-- A dataset  instances have relations to instances in  a 'foundation/library' for example documents may share definitions, assemblies may share common parts, supply chains may share products.
+- A dataset instances use schemas from a module shared with many other datasets in the same business area. Schemas come from modules.
+- A dataset  instances have relations to instances in  a 'foundation/library' for example documents may share definitions, assemblies may share common parts, supply chains may share products. Data comes from imports.
 
 A dataset can be composed by **"importing"** other datasets. 
 A dataset can be autonomous in persistence by "caching" the instances they use from imported datasets.
@@ -133,10 +133,10 @@ A dataset will register the **locator** of an imported dataset to be able to rec
 
 *Requirement.*
 
-A dataset should keep two version, one for the model (entities) and one for the data (instances).
-When the model is composed it should keep track of the version of the datasets referred. (see [Composition](#composition))
+A dataset should keep the version of each module it uses, and one version for its data (instances).
+When data is composed it should keep track of the version of the datasets referred. (see [Composition](#composition))
 
-When the instances in a dataset have their entities located in another dataset this other dataset the model may have changed for a new version while the instances are still using cached entities.
+A module may have changed for a new version while the instances of a dataset are still using the embedded one.
 
 In that case the model should provide a way to upgrade, most of the time it should be new properties with default values. Otherwise an upgrade mechanism should be proposed.
 

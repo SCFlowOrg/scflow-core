@@ -499,7 +499,7 @@ enum: [spade, heart, diamond, club]
 | `regexp: boolean`     | the string must be a valid regexp       |
 | `markdown: boolean`   | the string contains markdown formatting |
 
-The following scalar types are the content of the standard built-in dataset a persistent format provides (see [Import](#import)'s "Built-in imports"), defining new string types:
+The following scalar types are the standard types of [`mcl:core`](#the-core-module), defining new string types:
 
 ```yaml
 name: date
@@ -695,19 +695,15 @@ This can happen also if the owner is updated or if the owner is deleted (this is
 
 *Feature.*
 
-A dataset is the unit of [persistence](why-modelling.md#data-storage): in a persistent format, everything in the model or the data ultimately lives inside exactly one dataset, and a dataset can be moved, copied, or transferred as a whole without loss.
+A dataset is the unit of [persistence](why-modelling.md#data-storage): everything in the data ultimately lives inside exactly one dataset, and a dataset can be moved, copied, or transferred as a whole without loss.
 
-The dataset owns, directly or indirectly, a set of instances which fall in two categories.
+A dataset holds instances and the list of the [modules](#module) it uses. A module holds the model and a dataset holds data, so a file stays self-contained by embedding whole modules. A file embeds each module it uses, apart from the data, so a tool reading the file alone knows the model and its actions.
 
-- the **modelling part**: instances of [schemas](#schema) and [scalar types](#scalar-types)
-- the **data part**: every other [instance](#instance)
-
-Every instance must have a schema in the dataset, the meta model or its area's built-in dataset (see [Import](#import)'s "Built-in — virtual, not imported"). The one exception is a dormant instance, kept as it is when its schema is missing (see [Import](#import)'s "Dormant instances").
-The modelling language will prevent creating instances of a schema not in the dataset, the meta model or the built-in.
+Every instance must have a schema in a module the dataset uses, or in `mcl:core`. The modelling language will prevent creating instances of any other schema.
 
 Every relation must be with an instance in the dataset, the modeling language will prevent setting relations outside the dataset.
 
-A dataset keeps two independent versions, one per part (see [Version Upgrade](why-modelling.md#version-upgrade)). Each is a major.minor pair: minor increments automatically on any change to that part; major is a deliberate bump, it is recommended to increase the mode major version if there is a need to upgrade the data.
+A dataset keeps one version, for its data (see [Version Upgrade](why-modelling.md#version-upgrade)). It is a major.minor pair: minor increments automatically on any change; major is a deliberate bump. The version of the model is the version of each module.
 
 A dataset has a `name`, plus creation/update information.
 Datasets have a schema `dataset` which is part of the meta-model.
@@ -715,17 +711,13 @@ Querying for `dataset` in a dataset will not be very exciting, it returns itself
 
 ```yaml
 name: dataset
-description: the unit of persistence, contains model and data
+description: the unit of persistence, holds data and the modules it uses
 shared_by_name:
 has_description:
 singleton:
 properties:
   - name: name
     type: identifier
-  - name: model_major_version
-    type: integer
-  - name: model_minor_version
-    type: integer
   - name: data_major_version
     type: integer
   - name: data_minor_version
@@ -734,32 +726,40 @@ properties:
     type: date_time
   - name: updated_at
     type: date_time
-  - name: model_only
-    type: boolean
-    description: this dataset holds only schemas and scalar types, no data — a library dataset
-  - name: schemas
-    type: "[schema]"
-    owns:
-    description: every schema owned by this dataset — the modelling part
-  - name: scalar_types
-    type: "[scalar_type]"
-    owns:
-    description: every scalar type owned by this dataset — the modelling part
+  - name: modules
+    type: "[dataset_module]"
+    description: every module this dataset uses
 ```
 
-`schemas` and `scalar_types` are declared explicitly here since they are the foundational modelling part every dataset starts with. Every other root schema — [`import`](#import), and any schema the dataset's own model defines, such as `task` in a task-tracking model — is not listed: per [Ownership](#ownership), a root schema automatically gains `dataset` one more relation, named from that schema's plural, collecting every instance of that schema owned directly by the dataset. This is the mechanism [Extensibility](why-modelling.md#extensibility) asks for: adding a new root schema extends what `dataset` can hold without touching the meta-model itself.
+```yaml
+name: dataset_module
+embedded:
+description: a module a dataset uses, at the version the dataset was written against
+properties:
+  - name: module
+    type: module_key
+  - name: version
+    type: semantic_version
+  - name: digest
+    type: string
+    description: the digest of the embedded module, to detect a hand-edited snapshot
+```
+
+Every root schema — [`import`](#import), and any root schema of a module the dataset uses, such as `task` in a task-tracking model — is not listed: per [Ownership](#ownership), a root schema automatically gains `dataset` one more relation, named from that schema's plural, collecting every instance of that schema owned directly by the dataset. This is the mechanism [Extensibility](why-modelling.md#extensibility) asks for: adding a new root schema extends what `dataset` can hold without touching the meta-model itself.
 
 **Commands on `dataset`.** `dataset` is a command target like any schema, with these rules:
 
 - `query` returns the dataset itself; `filters` apply to that one instance.
-- `update` renames the dataset: only `name` (an `identifier`) can be updated. The versions, the two timestamps, `model_only`, `schemas` and `scalar_types` are maintained by the engine or by model upgrade, so an `update` carrying one of them is a constraint violation.
+- `update` renames the dataset: only `name` (an `identifier`) can be updated. The versions, the two timestamps and `modules` are maintained by the engine or by model upgrade, so an `update` carrying one of them is a constraint violation.
 - `create` and `delete` are refused: a dataset is created and removed by the persistence lifecycle (see [Persistence Interface](typescript-reference-implementation.md#persistence-interface)), not by command.
-- A rename that changes the name is a change of the data part: the minor data version is incremented and `updated_at` recorded. A rename to the current name changes nothing.
+- A rename that changes the name is a change of the data: the minor data version is incremented and `updated_at` recorded. A rename to the current name changes nothing.
 - The rename joins a transaction's delta like any other update (see `@scfloworg/core`'s `docs/sessions.md`).
 
-Changing the modeling part of a dataset may not be a light operation as it may impact existing data, see [Model Upgrade](#model-upgrade)
+**Local module.** A local module holds the schemas of one project. Its name is `local:<name>`, it is embedded in the file, it is absent from any catalogue and it stays editable. It keeps a dataset autonomous with a model of its own, and it can be published later.
 
-A dataset with `model_only: true` holds only the modelling part — instances of `schemas` and `scalar_types` — and no data part at all: the modelling language rejects `create` against any other root schema, [`import`](#import) included, so a `model_only` dataset can never itself hold an import. This is the shape of a **library** dataset: a reusable collection of schemas and scalar types with nothing else in it, meant to be imported into other datasets to align them on a common model.
+**Embedded module.** An embedded module is a snapshot, not an authority: the installed module wins, and a hand-edited snapshot is checked against it through its digest. Changing the modules of a dataset goes through [Model Upgrade](#model-upgrade).
+
+Storage stays free: a host can keep a loaded module wherever it wants, and this specification does not name that place.
 
 ## Module
 
@@ -927,7 +927,7 @@ There are two kinds of keys:
 - **name keys**: if the schema is `shared_by_name`, the key is the instance's `name`.
 - **id keys**: if the schema is just `shared` (not `shared_by_name`), the key is an id string. 
   This schema always have an `id: string` property, the name is reserved.
-  A `create` may supply the `id`: a canonical lowercase uuid that no instance of the schema uses yet. Otherwise the modeling language generates a uuid. An id never changes, so instances of different datasets never collide and a library keeps stable keys across rebuilds. An instance created before uuid ids keeps its `<schema>_<n>` id, which stays valid.
+  A `create` may supply the `id`: a canonical lowercase uuid that no instance of the schema uses yet. Otherwise the modeling language generates a uuid. An id never changes, so instances of different datasets never collide and a shared dataset keeps stable keys across rebuilds. An instance created before uuid ids keeps its `<schema>_<n>` id, which stays valid.
 
 For convenience a virtual property `{name key, type: string}` exists on each shared schema unifying `name` an `id`, `key` is a reserved property name and this property can be used to read the name or the id.
 The key must be given at creation of the entity, explicitly if name, implicitly by the command language,.
@@ -937,27 +937,25 @@ the key is `constant`, it cannot be modified after creation.
 
 *Definition.*
 
-Importation is the mechanism to compose model. An `import` is reference from a dataset to another dataset to include it's content while keeping track to be able to refresh.
+Importation is the mechanism to share data. An `import` is a reference from a dataset to another dataset to include its instances while keeping track to be able to refresh. An import covers data only: schemas come from [modules](#module).
 
-When a dataset is imported all it's content, model and data, will be copied, however their keys will be prefixed with a namespace (a string finishing with a dot) to tag them as imported and assign to the import.
+When a dataset is imported all its instances will be copied, however their keys will be prefixed with a namespace (a string finishing with a dot) to tag them as imported and assign to the import. This namespace prefixes the keys of instances. It has no link with the namespace of a module, which qualifies names.
 
 The namespace is created automatically at the time of the import, it just has to be different from previous imports.
 
 The imported dataset may have imports too, but there is only one level of namespace, this ensured with **imports flattening** see below.
 
+An imported dataset brings its modules: they join the modules of the importing dataset. Two versions of one module are refused.
+
 Each entity in a dataset have a virtual relation to its `import`, null for original non-imported entities. 
 
-When an entity is imported in a dataset it cannot be updated or deleted, it is read-only. 
+When an entity is imported in a dataset it cannot be updated or deleted, it is read-only, and so are the values of its [facets](#facet).
 
-The original dataset may change (model and data) after the import, realigning the content of of the imported entities is called an upgrade when the model changed (see [Model Upgrade](#model-upgrade)) and a refresh when the data changed (see [Import Refresh](#import-refresh)), both may need to be done.
+The original dataset may change after the import, realigning the content of the imported entities is called a refresh (see [Import Refresh](#import-refresh)).
 
-An import keeps a snapshot of the versions of the imported dataset at the time of the first import or the last realignment, upgrade and refresh.
+An import keeps a snapshot of the data versions of the imported dataset at the time of the first import or the last refresh.
 
 Apart from being immutable imported entities become perfectly legitimate instances of the dataset, fully discoverable by queries.
-
-Imported schemas can be extended in the dataset.
-
-Imported schemas can be instantiated in the dataset. Importing schemas from a **library** — a [`model_only`](#dataset) dataset — is a good way to align datasets on a common model; a format's built-in dataset (below) is one such library, always available without an explicit import.
 
 Dataset instances can be created or updated with relations to the imported instances, exactly like any other relation — the ordinary relation-type compatibility rule (same schema, or a descendant of it) already covers this, nothing special is needed.
 
@@ -969,31 +967,15 @@ It is not allowed to import a dataset into a dataset it already imports, directl
 **Serialization caching policy**
 When a dataset is imported a serialization policy  is chosen:
 - **Full**: all instances are serialized, when the dataset is restored all entities can be used again
-- **Partial**: only instances used by other instances (as schema or relations) are saved, the dataset can be restored but new use cannot be created (this can create smaller snapshots for consultation)
-- **None**: no instance is saved, in that case the realignment is mandatory after restoring. Typically some application may keep some reference datasets (model libraries) as part of the application and there is no need to serialize them, they are supposed to be restored only by the same application.
+- **Partial**: only instances used by other instances through relations are saved, the dataset can be restored but new use cannot be created (this can create smaller snapshots for consultation)
+- **None**: no instance is saved, in that case the realignment is mandatory after restoring. Typically some application may keep some reference datasets as part of the application and there is no need to serialize them, they are supposed to be restored only by the same application.
 
 **Imports flattening**
 All imports becomes 'flattened', i.e. when a dataset is imported all its imports are imported too.
 The new imports dataset locators are first check against the existing imports to see if the same dataset is not imported twice.
-If this happens the versions (model and data) must be the same, otherwise an error is reported, it is up to the calling application to realign a dataset if required.
+If this happens the data versions must be the same, otherwise an error is reported, it is up to the calling application to realign a dataset if required.
 If the caching policy is different it will be aligned to the weakest one: None < Partial < Full
 Then a unique import per dataset is created. If a namespace conflicts with one already in use, it is the incoming import's namespace that gets reallocated, never an already-established one — existing keys and relations already built on a prior namespace are never touched. Reallocating a namespace updates every key and reference just copied in under it, so each instance stays consistent and instances from shared datasets are actually shared.
-
-**Built-in — virtual, not imported**
-A persistent format may designate, for each **area** it's attached to (an Obsidian vault, a database instance, a marker for a running application — see [Persistent Formats](#persistent-formats)), exactly one of its datasets as **built-in**: a fixed dataset, itself [`model_only`](#dataset), resolved from any dataset's own `rest` via `builtinRestFor` (see `@scfloworg/core`'s `docs/datasets.md`). Two different areas of the same format have two independent built-in datasets, even though `builtinRestFor` is the same function for both.
-
-Unlike an ordinary import, the built-in relationship is not materialized as a standing `import` instance and its schemas/scalar_types are not copied into the importing dataset:
-
-- A newly created dataset holds no import and no copied instances for its area's built-in — `initDataset` does not call `builtinRestFor` to seed anything. Its own `schemas`/`scalar_types` stay whatever its own model defines, nothing more.
-- Every read of a dataset's model — `list_schemas`/`describe_schema`, `listInstances(rest, "schema"/"scalar_type")`, and any command targeting `schema`/`scalar_type` — transparently overlays the area's built-in schemas and scalar types (resolved live via `builtinRestFor`) on top of the dataset's own, unprefixed, exactly as if they had been imported with the empty namespace `""`. This overlay is computed at read time; nothing is stored for it.
-- On `dumpDataset` (see `@scfloworg/core`'s `docs/datasets.md` ("Schemas and the built-in dataset")), a built-in `import` entry is synthesized on the fly and included in the dump: `namespace: ""` — the one exception to a namespace always finishing with a dot, reserved for exactly this synthesized entry, so built-in references stay unprefixed (`date`, `email`, `identifier`, …) rather than namespaced like an ordinary import's — `caching_policy: none`, and `imported_schemas`/`imported_scalar_types` listing what was overlaid. Its four version properties are written as `0` and ignored on restore: a built-in can be assembled at run time by its host (see "A built-in assembled by its host" below), so its version numbers depend on how it was assembled and say nothing about its content. No schema/scalar_type content is written beyond this bookkeeping — the receiving end reconstructs the overlay from `builtinRestFor`, not from the dump.
-- On `restoreDataset` (see `@scfloworg/core`'s `docs/datasets.md` ("Schemas and the built-in dataset")), this synthesized entry is recognized by its empty namespace and is not installed as a standing import. Each restored instance of a built-in schema is checked against that schema's current definition, as [Model Upgrade](#model-upgrade)'s automatic upgrade would check it: an instance that is valid, or becomes valid by backfilling defaults, is upgraded in place; if any instance cannot be, the restore fails with `incompatible_upgrade` and creates nothing. The restored dataset ends up with no built-in import at all, matching a freshly created dataset.
-
-This keeps the built-in's schemas and scalar types perpetually current — a dataset always sees whatever the format's built-in dataset currently defines — while a dump names the built-in schemas it relies on without holding a copy of them.
-
-**A built-in assembled by its host.** A built-in dataset need not be fixed: an application may create its area's built-in dataset at start-up, before any other dataset of the area, and change its model through the ordinary [Model Upgrade](#model-upgrade) protocol — for instance from the schemas its plugins contribute. Every dataset of the area sees each change at once, through the overlay. Checking that the instances of the area's open datasets can absorb a change before making it is the host's responsibility (`checkUpgrade` against each of them); the language does not propagate an incompatible built-in change, and a host refuses it.
-
-**Dormant instances.** An instance whose schema is neither in its dataset, nor in the meta-model, nor in its area's current built-in — typically restored from a dump written while a plugin that contributed the schema was installed, and restored without it — is **dormant**. `restoreDataset` keeps it stored as it is instead of failing; queries and commands do not see it; a relation to it is kept as stored; its owner is the dataset or another instance whose schema is missing too, since ownership does not cross the contributors of a built-in, so no cascade reaches it; `dumpDataset` writes it back unchanged. It becomes an ordinary instance again once its schema is available, and is checked like any other built-in instance at the next restore.
 
 **An import is constant** it cannot be modified through standard modeling language, actually it cannot even be created. Only specific api functions can be used to manage imports.
 
@@ -1002,7 +984,7 @@ The schema for imports is the following, it is part of the meta-model, instances
 ```yaml
 name: import
 is_root:
-description: a composition of another dataset into this one
+description: a composition of the data of another dataset into this one
 has_description:
 properties:
   - name: name
@@ -1013,27 +995,15 @@ properties:
     description: the location of the original dataset
   - name: namespace
     type: string
-    description: a prefix for imported instnaces keys
-  - name: model_major_version
-    type: integer
-  - name: model_minor_version
-    type: integer
+    description: a prefix for imported instances keys
   - name: data_major_version
     type: integer
   - name: data_minor_version
     type: integer
-    description: the version of the imported dataset pinned at the time of import
+    description: the data version of the imported dataset pinned at the time of import
   - name: caching_policy
     type: string
     enum: [full, partial, none]
-  - name: imported_schemas
-    type: identifier
-    is_array: true
-    description: the schema names this import copied in — unprefixed for the built-in import, namespaced under this import's own namespace for any other import
-  - name: imported_scalar_types
-    type: identifier
-    is_array: true
-    description: the scalar_type names this import copied in, same naming convention as imported_schemas
 ```
 
 The **locator** is a string that allows to access the original imported dataset (see [Persistent Formats](#persistent-formats)).
@@ -1042,27 +1012,29 @@ The **locator** is a string that allows to access the original imported dataset 
 
 *Feature.*
 
-Model upgrade is the process of reconciling existing data when a schema or scalar type changes. It applies in two situations:
-- the local (non-imported) model in a dataset is changed
-- an import is realigned and the model in the imported dataset has changed
+Model upgrade is the process of reconciling the instances of a dataset with a new version of a module it uses. It runs module by module, and it is evaluated **locally and independently by each dataset** against its own instances.
 
-Both situations go through the same mechanism, evaluated **locally and independently by whichever dataset actually holds instances** of the schema being changed. An import realignment does not inherit the source dataset's own minor/major decision: the importer runs its own compatibility check against its own local instances of the (namespaced) schema before accepting the change, even when the change was a minor, fully-automatic one for the source. A schema library with no data of its own will almost always change with minor bumps; that says nothing about whether a given importer's already-instantiated copy can absorb the change automatically — each importer has to check for itself.
+To perform an upgrade the two versions of the schemas must be available. The embedded module gives the old one and the installed module gives the new one.
 
-To change the local model in a dataset, three steps happen:
-- a copy of the changed schema is made and the copy is modified
-- the data is upgraded against the copy
-- the copy replaces the schema actually stored in the dataset
+**Opening a dataset**
 
-**Scalar types are never modified once added.** Only `add` is supported for a `scalar_type` — there is no update. A scalar type used by an existing property has to be replaced by adding a new one and updating the properties that reference it, which is itself a schema change subject to the same compatibility check below.
+A host compares the embedded and the installed version of each module:
 
-To perform an upgrade the two versions of the schema must be available.
+| Installed module | Result |
+| --- | --- |
+| Same version | Nothing to do |
+| Newer | Upgrade from the embedded schemas to the installed ones: automatic for a compatible change, through the migrations of the module otherwise |
+| Missing | The data is read with the embedded schemas, read only |
+| Older than the file | Read only, or refused |
 
 **Compatible vs incompatible changes**
 
 A check is made to see whether an automatic upgrade is possible on the instances actually present (see "Automatic upgrade" below; trivially possible if there are none).
 
-- If the change is **compatible**, the upgrade runs automatically: `model_minor_version` is bumped, and `data_minor_version` too if any instance was actually touched by the backfill.
-- If the change is **incompatible**, it is rejected — the modelling language does not perform it. The host application may report this to the user, or implement its own migration procedure outside the modelling language (e.g. deleting or rewriting the affected instances first, then re-attempting the change). Once a procedure like that pushes through a change that could not be applied automatically, it is mandatory to bump `model_major_version` instead of the minor one — this is the signal, downstream, to every import pinned against this dataset that automatic realignment is no longer possible for them either: they will hit the same incompatible-change rejection on their own local instances and have to handle it themselves, the same way.
+- If the change is **compatible**, the upgrade runs automatically: the dataset records the new version of the module, and `data_minor_version` is bumped if any instance was actually touched by the backfill.
+- If the change is **incompatible**, it needs a new major version of the module, and the upgrade runs through the migrations of the module. A module declares its migrations for incompatible changes, because two versions give the difference, not the transformation: a rename looks like a delete and an add. Without a migration that applies, the upgrade is refused.
+
+**Scalar types are never modified by a command.** A new version of a module can change a scalar type, under the same compatibility check.
 
 **Automatic upgrade**
 
@@ -1072,17 +1044,13 @@ Adding a [facet](#facet) is a compatible change that writes nothing: an instance
 
 **Data version on refresh — open**
 
-When realigning an import actually changes local data (see [Import Refresh](#import-refresh)), how that bumps `data_major_version`/`data_minor_version` isn't settled yet — candidates are: always major since the model changed, or left to the host application to decide case by case. Revisit once this is exercised in practice.
+When realigning an import actually changes local data (see [Import Refresh](#import-refresh)), how that bumps `data_major_version`/`data_minor_version` isn't settled yet — candidates are: always major, or left to the host application to decide case by case. Revisit once this is exercised in practice.
 
 ## Import Refresh
 
 *Feature.*
 
-When an import is realigned it may first need an upgrade if the model has changed.
-
-And it may need a refresh if the data has changed.
-
-An import of a [`model_only`](#dataset) dataset — including a format's built-in import — never needs a refresh: there is no data part to have changed, so realignment is always upgrade-only.
+An import is realigned by a refresh when the data has changed. When the imported dataset uses a newer version of a module, the importing dataset first upgrades to it (see [Model Upgrade](#model-upgrade)).
 
 To refresh all instances in the new version of imported dataset should be compared with all instances of the dataset having the namespace of the import.
 
@@ -1134,8 +1102,6 @@ A **persistent format** describe containers for datasets. They are accessed usin
 
 A dataset in a persistent format will have a **locator**: per [Data Storage](why-modelling.md#data-storage), a URL-like string that starts by encoding the persistent format's own `name`, with the rest of the string format-specific (a file path, a database connection string, and so on).
 
-Within that format-specific rest, a format recognizes an **area**: the concrete place it's attached to — an Obsidian vault, a database instance, a marker for a running application — grouping every dataset it stores there. An area is entirely the format's own notion, derived from `rest` however it sees fit (see [Persistence Interface](typescript-reference-implementation.md#persistence-interface)) — the locator's syntax itself carries no separate area segment, so a format is free to give an area whatever shape fits it, a nested URL included (a vault path, a `user:password@host:port/dbname`-style connection target, …). A format's built-in dataset (see `@scfloworg/core`'s `docs/datasets.md`) is attached to an area, not to the format as a whole: each area gets its own.
-
 A persistent format has an `name` (identifier) to distinguish it from other formats supported in the same host language.
 
 When a persistent format is supported by a host language it must provide an 'interface' implementation to the modeling language implementation in the host language. (see [Persistence Interface](typescript-reference-implementation.md#persistence-interface))
@@ -1165,8 +1131,6 @@ classDiagram
     }
     class Dataset {
         +name
-        +model_major_version
-        +model_minor_version
         +data_major_version
         +data_minor_version
         +created_at
@@ -1186,8 +1150,6 @@ classDiagram
     }
     class Import {
         +name
-        +model_major_version
-        +model_minor_version
         +data_major_version
         +data_minor_version
         +caching
@@ -1207,15 +1169,14 @@ classDiagram
     Schema "1" --> "many" Property : properties (embedded)
     Schema "0..1" --> "1" Schema : extends
     ScalarType "0..1" --> "1" ScalarType : extends
-    Dataset "1" --> "many" Schema : schemas (owns)
-    Dataset "1" --> "many" ScalarType : scalar_types (owns)
+    Dataset "many" --> "many" Module : modules
     Dataset "1" --> "many" Import : imports (owns)
     Dataset "1" --> "many" Instance : root-schema instances (owns, generated)
     Import "many" --> "1" Dataset : refers to
 ```
 
-Schema, ScalarType, Dataset, and Import are themselves Instances (the inheritance arrows) — there is no separate metamodel sitting above them, only more instances, classified the same way as everything else. Every [Instance](#instance) has a `type` relation to its [Schema](#schema); the loop from Schema back onto itself is Schema's own self-reference — the schema of schemas is typed by itself.
+Schema, ScalarType, Module, Action, Dataset, and Import are themselves Instances (the inheritance arrows) — there is no separate metamodel sitting above them, only more instances, classified the same way as everything else. Every [Instance](#instance) has a `type` relation to its [Schema](#schema); the loop from Schema back onto itself is Schema's own self-reference — the schema of schemas is typed by itself.
 
-`extends` on [Schema](#schema) and on [ScalarType](#scalar-types) are ordinary [Relations](#relations). `schemas`, `scalar_types`, and `imports` on [Dataset](#dataset) are `owns` relations, as is the generated relation each [root schema](#ownership) gets to its own ownerless instances — see [Ownership](#ownership).
+`extends` on [Schema](#schema) and on [ScalarType](#scalar-types) are ordinary [Relations](#relations). `schemas`, `scalar_types` and `actions` on [Module](#module) are `owns` relations, and so is `imports` on [Dataset](#dataset), as is the generated relation each [root schema](#ownership) gets to its own ownerless instances — see [Ownership](#ownership).
 
 Constraints and constraint applications (embedded in Schema, Property, and ScalarType) are left off this diagram for clarity — see [Constraints](#constraints).

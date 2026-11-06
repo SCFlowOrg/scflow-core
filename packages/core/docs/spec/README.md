@@ -40,7 +40,7 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Names](meta-model.md#names): Short and qualified names of schemas and scalar types, and how they resolve
 - [The Core Module](meta-model.md#the-core-module): `mcl:core` holds the meta-model and the standard types
 - [Keys](meta-model.md#keys): A string used to reference a shared instance within a dataset
-- [Import](meta-model.md#import): A dataset's local, namespaced copy of another dataset's model and data, kept aligned through upgrade and refresh
+- [Import](meta-model.md#import): A dataset's local, namespaced copy of another dataset's data, kept aligned through refresh
 - [Model Upgrade](meta-model.md#model-upgrade): Upgrading data to an updated model
 - [Import Refresh](meta-model.md#import-refresh): Refreshing imported data
 - [Transient Language](meta-model.md#transient-language): Programming language for transient data
