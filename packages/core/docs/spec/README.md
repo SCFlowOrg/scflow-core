@@ -37,7 +37,7 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Ownership](meta-model.md#ownership): Each instance has an owner in the dataset
 - [Dataset](meta-model.md#dataset): A unit for persistence
 - [Module](meta-model.md#module): The unit that contributes schemas, scalar types and actions to a model, declared in a manifest
-- [Action](meta-model.md#action): An operation of a module, declared apart from its body
+- [Action](meta-model.md#action): An operation of a module, the only API that writes: its contract, the `crud` of a schema and the generated actions
 - [Names](meta-model.md#names): Short and qualified names of schemas and scalar types, and how they resolve
 - [The Core Module](meta-model.md#the-core-module): `mcl:core` holds the meta-model and the standard types
 - [Keys](meta-model.md#keys): A string used to reference a shared instance within a dataset

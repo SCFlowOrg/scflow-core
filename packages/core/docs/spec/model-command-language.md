@@ -28,6 +28,8 @@ A command is one operation on the instances of one schema: a `query` reads them,
 
 **Facets.** The properties of the [facets](meta-model.md#facet) of a schema S are properties of S and of its descendants, under the namespace of the module of the facet: `query` returns them in a nested mapping (`carbon: {co2: 12}`), `filters` and `result.properties` name them by path (`carbon.co2`), and `create` and `update` accept them in `input` as the same nested mapping, all through S. Within that mapping a patch changes only the properties it names, and `null` unsets a value. The first value set creates the instance of the facet, and a `delete` removes it with the instance of S. A facet is not addressable: a command whose `schema` is one is refused with `facet_not_addressable`, before anything runs.
 
+**Writes.** A `create`, `update` or `delete` runs inside an [action](meta-model.md#action). Outside one it is refused with `write_outside_action`, and an action that writes beyond its limit is refused with `write_not_declared`. A `query` needs no action. Commands on the model itself, by a model author, stay below actions.
+
 **Matching.** `query`, `update` and `delete` act on the instances that satisfy `filters`, listed schema by schema (the target first, then the extending schemas), each filtered against its own properties. An `update` or `delete` without `filters` therefore acts on every instance of the schema. Virtual relations (see [Relations](meta-model.md#relations)) are resolved before filtering and before an instance is returned.
 
 **Query.** A query never mutates. Its `before` and `after` are identical copies of the matched instances, subject to *Result shaping*.
@@ -84,6 +86,9 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `text_not_found` | a `replace` finds no occurrence of `find` |
 | `text_not_unique` | a `replace` without `all: true` finds several occurrences of `find` |
 | `constraint_violation` | an `input` value or entry is malformed, or the resulting instance breaks a constraint of its schema (`mandatory`, `pattern`, `enum`, bounds, ownership, a patched key or `constant` property, a text or map operation where none applies), or a `create` supplies an `id` that is not a canonical lowercase uuid, already exists, or targets a `shared_by_name` schema |
+| `write_outside_action` | a `create`, `update` or `delete` runs outside an action |
+| `write_not_declared` | an action writes a schema outside its `writes`, or a property of a facet of another module |
+| `invalid_parameters` | the parameters of an action break its JSON Schema, or a `ref` matches no instance or several |
 | `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance |
 | `not_upgrade_locator` | a `schema` or `scalar_type` is changed against a locator that is not an upgrade locator |
 | `upgrade_locator` | a data instance is changed against an upgrade locator |
@@ -293,6 +298,8 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Facets.** A schema F with `facet_of` is processed as a [facet](meta-model.md#facet) of its target T. Each breach below is a `constraint_violation`: F has a `name` property, or is `shared_by_name`, `embedded` or `is_root`; F takes part in `extends`, or another schema extends it; a property of F is a `mandatory` relation, or carries `inverse_name`, `owns` or `owner`; T is a facet or is `embedded`; a relation of any schema targets F. A property of F named like a property of another facet of the same module on T is refused the same way, and so is a property of T or of a descendant of T named like a namespace in use. The schema of T as stored holds no property of F when F belongs to another module: the engine adds the properties of the facets of the modules a dataset uses when it reads the schema for that dataset. Their values are stored in the instance of F, never in that of T.
 
+**Actions.** Schema processing builds the generated actions of a schema (see [Action](meta-model.md#action)) and checks the declarations, and each breach is a `constraint_violation`: a declared action has no procedure and no bundle; a bundle has no declaration; an id named by `crud` or `updated_by` is not an action of the module; a schema named by `writes` belongs to another module; a module declares the `crud` of a schema of another module; `crud` offers a create or a delete on a facet or a `singleton`, or `updated_by` is set on a `constant` property.
+
 **Rules.** `checks`, `unique`, `acyclic` and `set_once` are validated here, and each breach is a `constraint_violation`: a rule name is declared twice on a schema; a `checks` entry has both `require` and `exists`, or neither; `each` appears without `exists`; a path crosses an array relation; a `unique` group names something other than a direct scalar or single-valued relation; `acyclic` is set on a relation whose target is neither the schema nor an ancestor of it; `set_once` is set with `constant`, on an array or on a map; a rule is set on a schema of another module.
 
 **Out of scope: placeholders.** Schema processing does not resolve `${...}` placeholders in `default_value` — those are left as literal strings on the normalized `property`. Placeholder resolution happens later, at instance construction time, per [Placeholders](meta-model.md#placeholders). Schema processing only has to guarantee the string survives normalization untouched.
@@ -316,7 +323,7 @@ The inverse is generated once, on behalf of the schema that declares the relatio
 | `inverse_name_conflict` | a virtual relation's target name collides with an existing, non-generated property on the target schema |
 | `reference_outside_module` | a schema refers to a module that is neither its own, nor a dependency, nor `mcl:core` (see [Module](meta-model.md#module)) |
 | `namespace_conflict` | two modules used in one dataset have the same namespace (see [Names](meta-model.md#names)) |
-| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*), or declares a rule that is not valid (see *Rules*) |
+| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*), or declares a rule that is not valid (see *Rules*), or an action that is not valid (see *Actions*) |
 
 ## Examples
 

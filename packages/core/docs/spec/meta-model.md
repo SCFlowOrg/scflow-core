@@ -400,6 +400,8 @@ The pre-built schema constraints are the following, default type is boolean.
 | `singleton`      | the schema has at most one instance in the dataset; a `create` of a second instance fails with `constraint_violation`. This constraint is incompatible with `embedded`.                                                                       |
 | `is_root`        | The schema instances are not owned, the schema must be shared. See [Ownership](#ownership). <br>This constraint is incompatible with `embedded`. |
 | `constant`       | The schema instances are immutable after creation. All properties are constant.                                                                                         |
+| `abstract`       | the schema has no instance of its own: a `create` against it is a `constraint_violation`, and only its descendants have instances. |
+| `crud: crud_declaration` | the actions that create, update and delete the instances, see [Action](#action). |
 | `checks: [check]` | named conditions on each instance, see [Rules](#rules). |
 | `unique: [unique_group]` | named groups of properties whose values no two instances share, see [Rules](#rules). |
 | `facet_of: schema` | the schema is a [facet](#facet) of the named schema. <br>This constraint is incompatible with `embedded`, `is_root` and `shared_by_name`. |
@@ -424,6 +426,7 @@ Most property constrains are described with:
 | `is_unique`           | the property is an array of distinct entries, kept in the order given. Implies `is_array`. Only valid on a scalar property of any type, with no `enum` required — setting it on a relation or a map is a `constraint_violation`. See "Unique arrays" below. |
 | `min_length: integer` | minimum length if the property is an array, or minimum number of entries if it is a map                                                                                                                                                                                                                                                                                |
 | `max_length: integer` | maximum length if the property is an array, or maximum number of entries if it is a map                                                                                                                                                                                                                                                                                |
+| `updated_by: string`  | the id of the action that updates this property, which the generated update leaves out. See [Action](#action). |
 | `set_once`            | a relation or a scalar set at most once: from no value to a value, by `create` or `update`. Setting the same value again changes nothing, and any other change, or clearing it, is a `constraint_violation`. Not valid with `constant`, on an array or on a map. |
 | `acyclic`             | valid only on a single-valued relation whose target is its own schema or an ancestor of it: following the relation from an instance never leads back to that instance. See [Rules](#rules). |
 | `constant`            | the value is fixed at creation — from an explicit `input` value, a `default_value` (including one resolved from a [Placeholder](#placeholders)), or left unset if there is none. Any later `update` touching it is a `constraint_violation`. Applies to relations as well as scalar properties. |
@@ -927,11 +930,18 @@ properties:
     description: the namespace of the module, a slash and a name, for example scflow/create_actor
   - name: title
     type: string
+  - name: description
+    type: string
   - name: kind
     type: string
     enum: [read, action]
+    default_value: action
+  - name: destructive
+    type: boolean
   - name: exposure
-    type: action_exposure
+    type: string
+    enum: [visible, hidden]
+    default_value: visible
   - name: parameters
     type: string
     description: the parameters of the action, as JSON Schema
@@ -942,7 +952,51 @@ properties:
     type: action_body
 ```
 
-The prefix of an action id is the namespace of its module. `exposure` is specified with the contract of an action.
+The prefix of an action id is the namespace of its module.
+
+**Actions are the API that writes.** Every write to a model goes through an action: user interfaces, scripts, AI assistants, MCP and the CLI call actions, and low-level commands are kept for action bodies. Queries need no action. One action, or one batch of actions, is one transaction that can be undone, and a batch refers to earlier results with `${name.path}`.
+
+A write command outside an action is refused with `write_outside_action`, because write access to a dataset exists only in the context an action receives. Some writes stay below actions, run by the engine: loading and saving a dataset, model upgrade, the definition of schemas by a model author, the creation of singleton instances with a dataset, and the removal of the owned instances and facets of a deleted instance.
+
+**Write limit.** An action writes only the schemas of its own module, and only those it declares in `writes`. To change the data of another module, it calls the actions of that module, in the same transaction, so a module cannot break the rules of another one. The limit holds per property for facets: a property of a facet is written only by the actions of its module, although commands show it on the target. A write outside this limit is refused with `write_not_declared`. No action reacts to another action: a module has no hook on the actions of another.
+
+**Parameters.** `parameters` is a JSON Schema object, which a standard validator checks before the body runs, so a body validates nothing by hand. It adds one keyword, `ref`, which names a schema: the value is the id of an instance of that schema, or the exact `display_name` of one instance, in any language, and the action receives the key. An id wins over a name that equals it. A value that matches no instance or several instances is refused with `invalid_parameters`, like any other breach of the parameters.
+
+**Exposure and hints.** `exposure` says whether an AI sees the action, because the author of the model knows best what an AI should use: `visible`, the default, or `hidden`. An action definition matches an MCP tool definition: `kind: read` gives the read-only hint, and `destructive` the destructive hint. Exporting actions to MCP or to another AI client is a plain mapping.
+
+**Each schema declares its write actions.** The schema constraint `crud` gives, for each of `create`, `update` and `delete`, either `generated`, the default, the id of the business action that takes its place, or `none`. What it does not offer is impossible. Only the module of a schema declares its `crud`, because two modules doing so would compete. A property can name its own update action with `updated_by`, and the generated update leaves it out.
+
+```yaml
+- name: item_at_actor
+  crud:
+    create: scflow/hold_item
+    delete: scflow/release_held_item
+
+- name: flow
+  properties:
+    - name: item
+      type: item
+      updated_by: scflow/set_flow_item
+```
+
+An action that takes the place of a CRUD operation follows the CRUD parameters, so any caller, a table among them, can route an edit without guessing.
+
+**Generated actions.** Generated actions are part of MCL, built from the schemas by [Schema Processing](model-command-language.md#schema-processing), under the namespace of the module of the schema:
+
+| Operation | Id | Parameters |
+| --- | --- | --- |
+| Create | `<namespace>/create_<schema>` | The property names |
+| Update | `<namespace>/update_<schema>` | `id` for the target, and the property names |
+| Delete | `<namespace>/delete_<schema>` | `id` for the target, and `cascade` |
+
+- No action is generated for an `abstract` schema.
+- No create or delete is generated for a `singleton` or a facet.
+- No update covers a `constant` property, a property with `updated_by` or a generated relation.
+- A relation is a `ref` parameter, an optional property is an optional parameter, and a `default_value` is the default of the parameter.
+
+**Actions of a facet.** The actions of a schema never change when a facet is added to it, because their signatures belong to the module of the schema, which does not know the facet. A facet has its own update action, `<namespace>/update_<facet>`, generated or named by its `crud`, with `id` for the target, and a generated read action, `<namespace>/get_<facet>`, because an AI reads through actions. It has no create or delete, since its instance follows its target. A caller that sets a facet value when it creates the target runs both actions in one batch, with a `${name.path}` reference to the created instance. A module can offer a composite action that calls the action of the target and writes its facet.
+
+**Impact of a delete.** The engine gives the impact of a delete, because it knows every facet and owned schema, and the module of the deleted schema does not.
 
 **Forms of an action.** An action takes the first form that fits, because each form is easier to check and to carry to another host than the next one:
 
