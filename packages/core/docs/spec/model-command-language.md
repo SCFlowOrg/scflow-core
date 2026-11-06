@@ -25,7 +25,7 @@ A command is one operation on the instances of one schema: a `query` reads them,
 
 **Authored form.** `kind` and `schema` may be written as one key: the kind names the key and its value names the schema, so `{update: task, filters: {id: t2}, input: {status: done}}` equals `{kind: update, schema: task, filters: {id: t2}, input: {status: done}}`. Exactly one of `kind` or one such key is given. A property outside the table above is refused before anything runs; a command of a [Script](#script) also carries `as`.
 
-**Extensions.** The properties of the extensions of a schema S (see [Relations](meta-model.md#relations), *Extensions*) are properties of S and of the schemas extending S: `query` returns them, `filters` and `result.properties` name them, and `create` and `update` accept them in `input`, all through S. A `create` also creates the instance of each extension of S, with the defaults for the properties its `input` leaves out, and validates it with the instance of S; a `delete` removes it with the instance of S. An extension schema is not addressable: a command whose `schema` is one is refused with `extension_not_addressable`, before anything runs.
+**Facets.** The properties of the [facets](meta-model.md#facet) of a schema S are properties of S and of its descendants, under the namespace of the module of the facet: `query` returns them in a nested mapping (`carbon: {co2: 12}`), `filters` and `result.properties` name them by path (`carbon.co2`), and `create` and `update` accept them in `input` as the same nested mapping, all through S. Within that mapping a patch changes only the properties it names, and `null` unsets a value. The first value set creates the instance of the facet, and a `delete` removes it with the instance of S. A facet is not addressable: a command whose `schema` is one is refused with `facet_not_addressable`, before anything runs.
 
 **Matching.** `query`, `update` and `delete` act on the instances that satisfy `filters`, listed schema by schema (the target first, then the extending schemas), each filtered against its own properties. An `update` or `delete` without `filters` therefore acts on every instance of the schema. Virtual relations (see [Relations](meta-model.md#relations)) are resolved before filtering and before an instance is returned.
 
@@ -85,7 +85,7 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `constraint_violation` | an `input` value or entry is malformed, or the resulting instance breaks a constraint of its schema (`mandatory`, `pattern`, `enum`, bounds, ownership, a patched key or `constant` property, a text or map operation where none applies), or a `create` supplies an `id` that is not a canonical lowercase uuid, already exists, or targets a `shared_by_name` schema |
 | `not_upgrade_locator` | a `schema` or `scalar_type` is changed against a locator that is not an upgrade locator |
 | `upgrade_locator` | a data instance is changed against an upgrade locator |
-| `extension_not_addressable` | `schema` names an extension schema |
+| `facet_not_addressable` | `schema` names a facet |
 | *(any Filter exception)* | propagated unchanged, see [Filter](#filter) |
 
 ## Filter
@@ -109,7 +109,7 @@ properties:
 
 As with constraints (see [Constraint](meta-model.md#constraints)), any key in a filter that is not `and`, `or` or `not` is not declared on the `filter` meta-schema — it is interpreted as a **predicate**: the key is a **property path**, the value is the test to apply.
 
-A property path is a dot-separated sequence of property names, navigated the same way as in [Placeholders](meta-model.md#placeholders): the first segment is a property of `schema`, or of an extension of `schema` (see [Relations](meta-model.md#relations), *Extensions*), each following segment reaches into an embedded property, into the entry of a map property by its key (e.g. `display_name.fr`), or across a relation into the target schema's properties (e.g. `assignee.team.name`). An instance with no entry for the key satisfies no predicate on that path, `ne` included.
+A property path is a dot-separated sequence of property names, navigated the same way as in [Placeholders](meta-model.md#placeholders): the first segment is a property of `schema`, or the namespace of a module with a [facet](meta-model.md#facet) of `schema` followed by a property of that facet (e.g. `carbon.co2`), each following segment reaches into an embedded property, into the entry of a map property by its key (e.g. `display_name.fr`), or across a relation into the target schema's properties (e.g. `assignee.team.name`). An instance with no entry for the key, or with no value for a property of a facet, satisfies no predicate on that path, `ne` included, except `exists`.
 
 A predicate value is either a literal — shorthand for `eq` — or an object of `operator: operand` pairs. Multiple operators on the same property are implicitly and-ed:
 
@@ -137,7 +137,7 @@ priority:
 | `in` | any scalar; relation | value is one of the given array |
 | `contains` | array property; string | array has the value as an element, or string contains the substring |
 | `matches` | string | value matches the regexp |
-| `exists` | relation; array; map | relation is not null, or array or map is not empty |
+| `exists` | relation; array; map; property of a facet | relation is not null, array or map is not empty, or the property of a facet has a value |
 
 Relation predicates compare against the target's **key** (see [Keys](meta-model.md#keys)), not the full instance.
 
@@ -232,7 +232,7 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Extends resolution.** If `extends` is set on a schema or a scalar type, the parent must be processed first (recursively) — though in practice this will already be true, since the parent has to exist in the dataset (or an import) before it can be named. The child's `properties` (for a schema) and `constraints` are layered on top of copies of the parent's: everything the child doesn't mention carries through unchanged. A child entry with the same `name` as a parent property refines that property rather than replacing it — every key the entry states wins, every key it omits comes from the parent, and their `constraints` layer the same way the schema's own do. `type` is what makes the two the same property, so an override may restate it and may leave it out, and stating a different one → `property_type_change`. Every other property description still requires a `type`. Circular `extends` → `extends_cycle`.
 
-**Extensions.** A schema E with a relation property carrying `extension` is processed as an extension of the relation's target T (see [Relations](meta-model.md#relations), *Extensions*). The `extension` relation takes `mandatory` and `owner` implicitly. Each breach below is a `constraint_violation`: E has several `extension` relations, or an `owner` relation besides it; E has a `name` property, or is `shared_by_name`, `embedded` or `is_root`; a property of E other than the `extension` relation is a `mandatory` relation, a scalar that is not an array and has no `default_value`, or carries `inverse_name`, `owns` or `owner`; E extends an extension schema; the `extension` relation carries `inverse_name`, `inverse_is_array`, `inverse_is_mandatory` or `is_array`; a relation of any schema targets E. Once E and T are processed, a property of E named like a property of T, of a schema extending T or of another extension of T is refused the same way. As for the inverse of a virtual relation, the properties of E are generated on T and on every schema extending T, each tagged by the internal constraint `__extension` naming E, so that the schema of T, as stored and as read, lists them. Their values are stored in the instance of E, never in that of T.
+**Facets.** A schema F with `facet_of` is processed as a [facet](meta-model.md#facet) of its target T. Each breach below is a `constraint_violation`: F has a `name` property, or is `shared_by_name`, `embedded` or `is_root`; F takes part in `extends`, or another schema extends it; a property of F is a `mandatory` relation, or carries `inverse_name`, `owns` or `owner`; T is a facet or is `embedded`; a relation of any schema targets F. A property of F named like a property of another facet of the same module on T is refused the same way, and so is a property of T or of a descendant of T named like a namespace in use. The schema of T as stored holds no property of F when F belongs to another module: the engine adds the properties of the facets of the modules a dataset uses when it reads the schema for that dataset. Their values are stored in the instance of F, never in that of T.
 
 **Out of scope: placeholders.** Schema processing does not resolve `${...}` placeholders in `default_value` — those are left as literal strings on the normalized `property`. Placeholder resolution happens later, at instance construction time, per [Placeholders](meta-model.md#placeholders). Schema processing only has to guarantee the string survives normalization untouched.
 
@@ -240,20 +240,22 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 The inverse is generated once, on behalf of the schema that declares the relation. Extends resolution above flattens `extends`, so a schema extending that one carries the relation among its own properties; processing it leaves the generated property as it stands, still typed to the declaring schema. A relation's value is the key of an instance of its declared schema or of a schema extending it (see [Relations](meta-model.md#relations)), so that one property accepts the instances of the whole family. A relation an extending schema declares itself generates its own inverse, typed to that extending schema.
 
+**Virtual relations across modules.** When the declaring schema and the target belong to different modules, the target stays unchanged. The generated property is qualified by the namespace of the declaring module (`carbon.emissions`), computed per dataset like the properties of a facet, and optional: `inverse_is_mandatory` is a `constraint_violation`.
+
 **Result.** A normalized `schema`, `property`, or `scalar_type` instance, stored in the dataset: declared keys read literally, `constraints` holding only resolved `constraint_value` entries. Nothing downstream — command processing, constraint checking, filtering — ever sees the authored (sugared) form again.
 
 **Exceptions.**
 
 | exception | thrown when |
 |---|---|
-| `unknown_extends_target` | `extends` names a schema or scalar type that cannot be resolved, or an `inverse_name` relation targets a schema found neither in the command nor in the dataset |
+| `unknown_extends_target` | `extends` or `facet_of` names a schema or scalar type that cannot be resolved, or an `inverse_name` relation targets a schema found neither in the command nor in the dataset |
 | `extends_cycle` | the `extends` chain of a schema or scalar type loops back on itself |
 | `duplicate_property_name` | two entries of `properties` share a `name`, and neither comes from an `extends` override |
 | `property_type_change` | a property overriding an inherited one of the same name states a different `type` |
 | `inverse_name_conflict` | a virtual relation's target name collides with an existing, non-generated property on the target schema |
 | `reference_outside_module` | a schema refers to a module that is neither its own, nor a dependency, nor `mcl:core` (see [Module](meta-model.md#module)) |
 | `namespace_conflict` | two modules used in one dataset have the same namespace (see [Names](meta-model.md#names)) |
-| `constraint_violation` | a schema breaks the rules of an `extension` relation (see *Extensions*) |
+| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*) |
 
 ## Examples
 

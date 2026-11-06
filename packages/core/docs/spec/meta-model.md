@@ -249,7 +249,7 @@ The default value is a `string` that must eventually convert to a valid value co
 
 The `default_value` may contain [Placeholders](#placeholders) of the form `${value}`.
 
-A very important feature on properties is that the value of a property which is not a relation (the type is not a shared schema) cannot be **null**. Null is only used for empty relations (which is possible only if the relation is not mandatory).
+A very important feature on properties is that the value of a property which is not a relation (the type is not a shared schema) cannot be **null**. Null is only used for empty relations (which is possible only if the relation is not mandatory). The one exception is a property of a [facet](#facet), whose unset value is stored by omission.
 
 An embedded property can define a `null_value` 
 
@@ -398,6 +398,7 @@ The pre-built schema constraints are the following, default type is boolean.
 | `singleton`      | the schema has at most one instance in the dataset; a `create` of a second instance fails with `constraint_violation`. This constraint is incompatible with `embedded`.                                                                       |
 | `is_root`        | The schema instances are not owned, the schema must be shared. See [Ownership](#ownership). <br>This constraint is incompatible with `embedded`. |
 | `constant`       | The schema instances are immutable after creation. All properties are constant.                                                                                         |
+| `facet_of: schema` | the schema is a [facet](#facet) of the named schema. <br>This constraint is incompatible with `embedded`, `is_root` and `shared_by_name`. |
 | `observable`     | The instances are tracked by the model's observability mechanism — a create, update, or delete is included in the notification delivered when a transaction commits or a dataset is reset. See `@scfloworg/core`'s `docs/observability.md`. <br>This constraint is incompatible with `embedded`. |
 | `ui_access: string` | how a user interface may expose the instances and their properties: `hidden`, `read_only` or `editable`, default `read_only`. It is the default level of the schema's properties, see "UI access" in [Property Constraints](#property-constraints). Advisory for user interfaces: command processing ignores it. Any other value is rejected by schema processing as a `constraint_violation`. Inherited through `extends` and refined by the extending schema. |
 
@@ -423,7 +424,6 @@ Most property constrains are described with:
 | `is_content`           | at most one per schema; the property's type must resolve to [`markdown`](#scalar-types). Marks the property a [persistent format](#persistent-formats) may treat as an instance's primary content instead of a discrete field — e.g. a note's body rather than its frontmatter. A format that doesn't interpret it stores the property as ordinary data. See the `getInstance` doc comment of `PersistenceInterface` in `@scfloworg/core`. |
 | `is_folder`            | at most one per schema; the property's type must resolve to a string-based scalar type. The property's value is a `/`-separated relative path a persistent format may use to place the instance. A format that doesn't interpret it stores the property as ordinary data. See the `getInstance` doc comment of `PersistenceInterface` in `@scfloworg/core`. |
 | `observable`           | valid only on a relation property, and only when the declaring schema itself carries the [`observable`](#schema-constraints) schema constraint — `constraint_violation` otherwise (a non-relation property, or a declaring schema without `observable`). Marks that a change to the relation's *target* instance is also reported as a `delta` entry for the declaring instance itself (`via` set to this property's name), even though the declaring instance's own storage wasn't touched. The target schema does not need `observable` itself for this to fire. See `@scfloworg/core`'s `docs/observability.md` ("Related changes"). |
-| `extension`            | valid only on a relation property: the declaring schema is an extension of the relation's target, and the relation is `mandatory` and `owner`. At most one per schema. See *Extensions* in [Relations](#relations). |
 | `ui_access: string`    | how a user interface may expose the property: `hidden`, `read_only` or `editable`. No default: when absent, the property takes the level of its schema. A property restricts its schema's level and never exceeds it. Any other value is rejected by schema processing as a `constraint_violation`. See "UI access" below. |
 
 **Sets.** `is_set` implies `is_array`: the processed property carries both, so `min_length` and `max_length` apply and count entries. A `create` or `update` whose value holds the same entry twice is a `constraint_violation`; a value holding an entry outside the `enum` is one too. The stored value lists its entries in the declaration order of the `enum`, whatever the order of the input, so two equal sets are stored identically. A value stored before `is_set` was set keeps its stored order until the instance is next written. A filter compares a set without regard to order (see Filter, *Sets*).
@@ -585,7 +585,6 @@ The following constraints are applicable on relations.
 | `inverse_is_mandatory: boolean` | The inverse relation is mandatory (it should not be an array) |
 | `on_delete: string`             | what a deletion of the target does to the declaring instance: `restrict`, `cascade` or `set_null`, see [On Delete](#on-delete) |
 | `owns: boolean`                 | see [Ownership](#ownership)            |
-| `extension: boolean`            | the declaring schema is an extension of the target, see *Extensions* below. Implies `mandatory` and `owner` |
 | `owner: boolean`                | see [Ownership](#ownership)            |
 
 A relation must be declared on one side only, the declaration of an inverse relation is not mandatory, when it is done it creates a "virtual" relation on the target schema. 
@@ -621,16 +620,33 @@ properties:
     inverse_is_array:
 ```
 
-**Extensions.** A relation declared `extension` makes the schema E that declares it an extension of the relation's target T. An extension adds properties to T without a key or a command target of its own: an instance of E holds the properties of E for one instance of T, and the properties of E are seen as properties of T in every [Command](model-command-language.md#command).
+## Facet
 
-- `extension` implies `mandatory` and `owner`: the instance of T owns its instance of E, which is removed with it.
-- E has one `extension` relation and no other `owner`. It has no `name` property and no key: its instance has the key of the instance of T it extends. Every other property of E has a `default_value` or is a relation.
-- An `extension` relation carries no `inverse_name`, `inverse_is_array` or `inverse_is_mandatory`, and no relation targets E.
-- T and the schemas extending T (see [Schema](#schema)'s `extends`) carry the properties of E. A property of E named like a property of T, of a schema extending T or of another extension of T is refused.
-- The schema of T, as a client reads it (`describe_schema` of the MCP, the schema of the TypeScript API), lists the properties of E among its own.
-- Creating an instance of T creates its instance of E from the defaults, with the values the `input` gives for properties of E. Deleting the instance of T deletes the instance of E.
+*Feature.*
 
-A breach of these rules is a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing). The instances of E are reached only through T: a command whose `schema` is E is refused with `extension_not_addressable`.
+A facet is a schema that adds properties to the instances of another schema, its **target**, of the same module or of a dependency. It is the only way for a module to add a property to a schema of another module: the owner of the target stays unchanged, and an instance of the target stays whole when the module goes away.
+
+```yaml
+# Module acme:carbon, namespace carbon, depends on scflow:core
+name: actor_emissions
+facet_of: scflow.actor
+properties:
+  - name: co2
+    type: number
+```
+
+- **Stored apart.** The values sit in an instance of the facet, with the key of the target instance. A facet has no `name` property and no key of its own. The target and its descendants (see [Schema](#schema)'s `extends`) show the properties of the facet in every [Command](model-command-language.md#command), and in the schema as a client reads it.
+- **Qualified properties.** A property of a facet carries the namespace of the module of the facet: a path names `carbon.co2`, and a result holds `{id, display_name, carbon: {co2: 12}}`. Two modules can each define `capacity`. A property of the target or of a descendant named like a namespace in use is refused.
+- **Several facets of one module on one target** share the namespace, and a name clash between them is refused.
+- **Optional values.** A property of a facet needs no default, and an unset value is stored by omission. This is the one exception to the rule that a scalar is never null, because a capacity of `0` and an unknown capacity are different facts. An unset value satisfies no predicate, `ne` included, like a missing entry of a map, and only `exists` tests it (see [Filter](model-command-language.md#filter)).
+- **Created on first value.** Using a module in a dataset writes nothing. The instance of a facet is created when one of its values is first set. A `default_value` is read when no value is stored.
+- **Applies to every instance of the target.** A facet has no condition. A property that makes no sense on some instances stays unset.
+- **Reached only through its target.** A command whose `schema` is a facet is refused with `facet_not_addressable`, and no relation targets a facet.
+- **One instance per target.** Several values per target are an owned schema, whose inverse relation is qualified too, such as `carbon.emissions` (see [Virtual relations](model-command-language.md#schema-processing)).
+- **Assembled per dataset.** The schema of a module holds no facet of another module. The engine adds the facets of the modules a dataset uses, so a dataset without the module sees the target bare.
+- **Deleted with its target.** Deleting an instance of the target removes its facet instances, whatever their module.
+
+A breach of these rules is a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing).
 
 ## On Delete
 
@@ -646,7 +662,7 @@ A breach of these rules is a `constraint_violation` raised by [Schema Processing
 
 Without `on_delete`, a `mandatory` relation is `restrict` and any other relation is `set_null`.
 
-A `mandatory` relation cannot be `set_null`, since it cannot be null. `on_delete` is refused on an `owner` or an `extension` relation, whose owner already removes the instance with it. Both breaches are a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing).
+A `mandatory` relation cannot be `set_null`, since it cannot be null. `on_delete` is refused on an `owner` relation, whose owner already removes the instance with it. Both breaches are a `constraint_violation` raised by [Schema Processing](model-command-language.md#schema-processing).
 
 An instance that the same delete removes anyway, an owned one for example, does not block it. An instance deleted by `cascade` applies the same rules to what it owns and to what references it. The constraint is declared on the declaring side of the relation, never on a virtual one.
 
@@ -821,7 +837,7 @@ properties:
 - **Version.** The semantic version is the only version of a module. Its patch marks a change of code only, and a change of the schemas that is not compatible needs a new major (see [Model Upgrade](#model-upgrade)).
 - **Dependencies.** A dependency is a range of versions, such as `^1.3`. `mcl:core` is not listed there: the `mcl` property gives its range.
 - **Ownership.** A schema name, a scalar type name and an action id are unique in their module, not across modules. Two modules can define the same name.
-- **References.** A schema refers only to its own module, to its dependencies and to `mcl:core`, through `extends` or a relation. An action calls only the actions of the same modules.
+- **References.** A schema refers only to its own module, to its dependencies and to `mcl:core`, through `extends`, `facet_of` or a relation. An action calls only the actions of the same modules.
 
 ## Action
 
@@ -1052,7 +1068,7 @@ A check is made to see whether an automatic upgrade is possible on the instances
 
 What counts as an automatic, compatible change is left to implementation, but the general rule is: a change that can never invalidate an already-stored value is compatible; a change that could turn an existing stored value into something violating the new schema is not. The easiest case is adding a property with a default value — the upgrade is just a backfill on all instances (equivalent to serializing and restoring).
 
-Adding an extension schema (see [Relations](#relations), *Extensions*) is a compatible change of the same kind: the backfill creates, for each existing instance of the target, its instance of the extension from the defaults.
+Adding a [facet](#facet) is a compatible change that writes nothing: an instance of the facet is created on its first value.
 
 **Data version on refresh — open**
 
