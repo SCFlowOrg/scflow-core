@@ -215,6 +215,11 @@ deleted.
 
 ### Extensions
 
+An extension adds properties to a schema of the same model. A module adds
+properties to a schema of another module with a facet instead (see
+[modules.md](modules.md), Facets); extensions stay beside facets until the graph
+styles of `scflow-plugins` move to facets.
+
 A relation declared `extension` makes its schema an *extension* of the relation's
 target: the properties of the extension are seen as properties of the target, in
 the schema of the target and in every command on it.

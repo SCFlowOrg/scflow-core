@@ -1,5 +1,6 @@
 import { BUILTIN_SCALAR_TYPES, isBaseScalarType } from "./builtins.js";
 import { modelError } from "./errors.js";
+import { facetOfProperty } from "./facets.js";
 import { parseMapType } from "./mapTypes.js";
 import type { TypeResolutionContext } from "./schemaProcessing.js";
 import type { NormalizedProperty, NormalizedSchema, TransientValue } from "./types.js";
@@ -44,9 +45,9 @@ export function propertiesOfExtension(schema: NormalizedSchema, extensionName: s
   return schema.properties.filter((p) => extensionOfProperty(p) === extensionName);
 }
 
-/** Whether `prop` belongs to its schema itself rather than being generated on it by an extension. */
+/** Whether `prop` belongs to its schema itself rather than being generated on it by an extension or added by a facet (see `facets.ts`). */
 export function isOwnProperty(prop: NormalizedProperty): boolean {
-  return extensionOfProperty(prop) === undefined;
+  return extensionOfProperty(prop) === undefined && facetOfProperty(prop) === undefined;
 }
 
 /** The properties an extension schema adds to its target: all its own, except the `extension` relation. */

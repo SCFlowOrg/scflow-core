@@ -11,6 +11,12 @@
   ones included; it leaves no review to the host before it writes.
 - **Published modules are not upgraded.** The modules of a dataset are set by
   `initDataset`, a restore or an import; only a local module changes afterwards.
+- **Facets have no actions yet.** The engine does not generate the
+  `<namespace>/update_<facet>` and `<namespace>/get_<facet>` actions, and does not
+  hold the write limit of a facet to the actions of its module: any command may
+  write the values of a facet through its target.
+- **Extensions stay beside facets.** The `extension` relation still works; it is
+  removed once the graph styles of `scflow-plugins` use facets.
 - **Embedded schemas are not command targets.** An embedded schema is a data shape
   inside its owner; a command addressed to it fails with `unknown_schema`.
 - **Unknown input keys are ignored.** A key of a `create` or `update` `input` that

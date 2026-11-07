@@ -171,7 +171,13 @@ await runCommand("js:plant", { create: "scflow.actor", input: { name: "acme" } }
   their qualified names, and the standard scalar types of `mcl:core` apply with
   their patterns.
 - A relation with an `inverse_name` generates its inverse on its target, as in a
-  model upgrade.
+  model upgrade. When the target belongs to another module, the inverse is
+  qualified by the namespace of the declaring module, `carbon.emissions`, and
+  `inverse_is_mandatory` fails with `constraint_violation`.
+- The facets of the modules the dataset uses add their properties to their
+  targets (see [modules.md](modules.md), Facets); a dataset without the module of
+  a facet sees the target bare. A dump holds the instances of a facet under the
+  facet's qualified name.
 - A schema the dataset defines itself, or reads from its built-in dataset, keeps
   its short name and wins over a module on a name collision. This older path
   stays until the built-in dataset is removed.
@@ -245,7 +251,8 @@ removeImport(locator, importKey): Promise<TransientValue>         // the removed
   instances of that import, and `namespace: "*"` every instance. Any other
   command with a namespace fails with `constraint_violation`, as does a
   namespace no import uses. An own instance may hold a relation to an imported
-  one.
+  one. The values of the facets of an imported instance are copied with it, and
+  are read-only too.
 - `refreshImport` copies the instances added since, overwrites the changed ones
   and deletes the removed ones, and reports them in `added`, `before`/`after`
   and `removed`. A relation of an own instance to a removed one is cleared, and

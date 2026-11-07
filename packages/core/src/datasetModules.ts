@@ -1,6 +1,7 @@
 import { MCL_CORE } from "./mclCore.js";
 import type { ModuleManifest } from "./mclCore.js";
 import { modelError } from "./errors.js";
+import { assembleFacets, generatedInverseName } from "./facets.js";
 import { createModuleSet, validateModuleManifest } from "./modules.js";
 import type { ModuleSet } from "./modules.js";
 import { NO_ROLES } from "./schemaProcessing.js";
@@ -112,8 +113,11 @@ export async function writeModules(impl: PersistenceInterface, rest: string, man
  * The model a dataset reads from its modules: each schema and scalar type of a
  * module under its key, the qualified name, which is also its `name` here, so
  * that commands and storage name it the same way; the standard scalar types of
- * `mcl:core` under their short names; and, on the target of each relation with
- * an `inverse_name`, its generated inverse relation.
+ * `mcl:core` under their short names; on the target of each relation with an
+ * `inverse_name`, its generated inverse relation, qualified by the namespace of
+ * the declaring module when the target belongs to another; and, on the target
+ * of each facet and the schemas extending it, the properties of the facet under
+ * its namespace (see `facets.ts`).
  */
 export interface DatasetModel {
   set: ModuleSet;
@@ -123,8 +127,10 @@ export interface DatasetModel {
 
 /**
  * Builds the model of a dataset from the manifests of its modules. Throws what
- * `createModuleSet` throws, and `inverse_name_conflict` when a generated inverse
- * relation would take the name of a declared property.
+ * `createModuleSet` throws, `inverse_name_conflict` when a generated inverse
+ * relation would take the name of a declared property, and
+ * `constraint_violation` for an `inverse_is_mandatory` across modules and for
+ * the rules of a facet that need every schema (see `assembleFacets`).
  */
 export function buildDatasetModel(manifests: readonly ModuleManifest[]): DatasetModel {
   const set = createModuleSet(manifests);
@@ -138,6 +144,7 @@ export function buildDatasetModel(manifests: readonly ModuleManifest[]): Dataset
     for (const [short, schema] of module.schemas) schemas.set(qualify(short), { ...schema, name: qualify(short) });
   }
   generateInverseRelations(schemas);
+  assembleFacets(schemas);
   return { set, schemas, scalarTypes };
 }
 
@@ -166,8 +173,13 @@ function generateInverseRelations(schemas: Map<string, NormalizedSchema>): void 
       if (typeof inverseName !== "string") continue;
       if (parent?.properties.some((p) => p.name === prop.name && p.constraints.inverse_name === inverseName)) continue;
       if (!schemas.has(prop.type)) continue;
+      // across modules the target stays unchanged: the relation is qualified by the declaring module, and optional
+      const name = generatedInverseName(schema.name, prop);
+      if (name !== inverseName && prop.constraints.inverse_is_mandatory === true) {
+        throw modelError("constraint_violation", `"${schema.name}.${prop.name}" has "inverse_is_mandatory" on "${prop.type}" of another module — a virtual relation across modules is optional`);
+      }
       const virtual: NormalizedProperty = {
-        name: inverseName,
+        name,
         type: schema.name,
         default_value: null,
         null_value: null,
@@ -180,10 +192,10 @@ function generateInverseRelations(schemas: Map<string, NormalizedSchema>): void 
       };
       for (const targetName of withExtenders(schemas, prop.type)) {
         const target = schemas.get(targetName) as NormalizedSchema;
-        const existing = target.properties.find((p) => p.name === inverseName);
+        const existing = target.properties.find((p) => p.name === name);
         if (existing) {
           if (existing.constraints.__generated === true) continue;
-          throw modelError("inverse_name_conflict", `"${inverseName}" already exists on "${target.name}" and is not a generated inverse relation`);
+          throw modelError("inverse_name_conflict", `"${name}" already exists on "${target.name}" and is not a generated inverse relation`);
         }
         schemas.set(targetName, { ...target, properties: [...target.properties, virtual] });
       }

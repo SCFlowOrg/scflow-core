@@ -1,6 +1,17 @@
 import { modelError } from "./errors.js";
 import { deleteExtensionInstances, mergeExtensionValues, writeExtensionInstances } from "./extensionData.js";
 import { extensionRelationOf } from "./extensions.js";
+import {
+  deleteFacetInstances,
+  facetOfProperty,
+  flattenQualified,
+  generatedInverseName,
+  isFacet,
+  mergeFacetValues,
+  nestQualified,
+  qualifiedNamespacesOf,
+  writeFacetValues,
+} from "./facets.js";
 import { resolveCreateId } from "./ids.js";
 import { checkFilter, checkFilterOnCandidates, matchFilter } from "./filter.js";
 import { isModelSchema, getUpgradeMarker, runSchemaCommand } from "./modelUpgrade.js";
@@ -80,12 +91,18 @@ function shapeResult(
 ): CommandResult {
   let shaped = result;
   if (options?.properties !== undefined) {
+    const namespaces = qualifiedNamespacesOf(schema);
     for (const name of options.properties) {
-      if (!KEY_PROPERTIES.includes(name) && !findProperty(schema, name)) {
+      if (!KEY_PROPERTIES.includes(name) && !findProperty(schema, name) && !namespaces.includes(name)) {
         throw modelError("unknown_property", `"${name}" is not a property of "${schema.name}"`);
       }
     }
+    // a namespace keeps every property it qualifies
     const keep = new Set<string>([...KEY_PROPERTIES, ...options.properties]);
+    for (const prop of schema.properties) {
+      const dot = prop.name.indexOf(".");
+      if (dot > 0 && keep.has(prop.name.slice(0, dot))) keep.add(prop.name);
+    }
     shaped = {
       before: result.before.map((v) => projectObject(v, keep)),
       after: result.after.map((v) => projectObject(v, keep)),
@@ -499,8 +516,10 @@ function validateInstance(
   options: { isUpdate: boolean },
 ): boolean {
   for (const prop of schema.properties) {
-    const resolved = resolveType(prop.type, resolvers.ctx);
     const value = instance[prop.name];
+    // an unset value of a facet is valid: it is stored by omission
+    if (facetOfProperty(prop) !== undefined && (value === undefined || value === null)) continue;
+    const resolved = resolveType(prop.type, resolvers.ctx);
     const isArray = prop.constraints.is_array === true;
 
     if (resolved.kind === "relation") {
@@ -709,6 +728,8 @@ async function resolveVirtualProperties(
   const key = keyOf(schema, instance);
   // the values the extensions of the schema hold for this instance are read in, so every reader sees them as its own
   await mergeExtensionValues(impl, rest, resolvers.ctx, schema, key, instance);
+  // and so are the values of its facets, under their qualified names
+  await mergeFacetValues(impl, rest, resolvers.ctx, schema, key, instance);
   return resolveInverseRelations(impl, rest, resolvers, schema, instance, cache);
 }
 
@@ -741,7 +762,7 @@ async function resolveInverseRelations(
 function withoutVirtualRelations(schema: NormalizedSchema, instance: TransientObject): TransientObject {
   const stripped: TransientObject = { ...instance };
   for (const prop of schema.properties) {
-    if (prop.constraints.__generated === true || prop.constraints.__extension !== undefined) {
+    if (prop.constraints.__generated === true || prop.constraints.__extension !== undefined || facetOfProperty(prop) !== undefined) {
       delete stripped[prop.name];
     }
   }
@@ -776,8 +797,9 @@ async function propagateInverseChange(
   acc: Accumulator,
   cache: LiveJoinCache,
 ) {
-  const inverseName = prop.constraints.inverse_name;
-  if (typeof inverseName !== "string") return;
+  if (typeof prop.constraints.inverse_name !== "string") return;
+  // the name of the virtual relation on the target, qualified when it comes from another module
+  const inverseName = generatedInverseName(declaringRootSchema(sourceSchema, resolvers, prop).name, prop);
   const inverseIsArray = prop.constraints.inverse_is_array === true;
   const targetSchemaName = prop.type;
   const targetSchema = resolvers.schemas.get(targetSchemaName);
@@ -877,7 +899,8 @@ async function findReferrers(
 ): Promise<Referrer[]> {
   const found: Referrer[] = [];
   for (const [, refSchema] of resolvers.schemas) {
-    if (!keyPropertyName(refSchema)) continue;
+    // the relations of a facet are reached through its target, which carries them
+    if (!keyPropertyName(refSchema) || isFacet(refSchema)) continue;
     const refProps = refSchema.properties.filter(
       (p) =>
         p.constraints.__generated !== true &&
@@ -889,12 +912,14 @@ async function findReferrers(
     );
     if (refProps.length === 0) continue;
     const readsExtension = refProps.some((p) => p.constraints.__extension !== undefined);
+    const readsFacet = refProps.some((p) => facetOfProperty(p) !== undefined);
     const candidates = await impl.listInstances(rest, refSchema.name, derivePropertyRoles(refSchema));
     for (const candidate of candidates) {
       const candKey = keyOf(refSchema, candidate);
-      const values = readsExtension
+      let values = readsExtension
         ? await mergeExtensionValues(impl, rest, resolvers.ctx, refSchema, candKey, { ...(candidate as TransientObject) })
         : (candidate as TransientObject);
+      if (readsFacet) values = await mergeFacetValues(impl, rest, resolvers.ctx, refSchema, candKey, { ...values });
       for (const prop of refProps) {
         if (values[prop.name] === key) found.push({ schema: refSchema, key: candKey, prop, mode: onDeleteOf(prop) });
       }
@@ -991,12 +1016,23 @@ async function clearReference(
   const roles = derivePropertyRoles(referrer.schema);
   const stored = await impl.getInstance(rest, referrer.schema.name, referrer.key, roles);
   if (!stored) return;
-  const current = await mergeExtensionValues(impl, rest, resolvers.ctx, referrer.schema, referrer.key, { ...(stored as TransientObject) });
+  const current = await mergeFacetValues(
+    impl,
+    rest,
+    resolvers.ctx,
+    referrer.schema,
+    referrer.key,
+    await mergeExtensionValues(impl, rest, resolvers.ctx, referrer.schema, referrer.key, { ...(stored as TransientObject) }),
+  );
   if (current[referrer.prop.name] === null || current[referrer.prop.name] === undefined) return;
   const updated: TransientObject = { ...current, [referrer.prop.name]: null };
+  // a value of a facet is unset rather than set to null
+  const isFacetValue = facetOfProperty(referrer.prop) !== undefined;
+  if (isFacetValue) delete updated[referrer.prop.name];
   acc.updatedBefore.push(clone(await resolveVirtualProperties(impl, rest, resolvers, referrer.schema, clone(current) as TransientObject, cache)));
   await impl.putInstance(rest, referrer.schema.name, referrer.key, withoutVirtualRelations(referrer.schema, updated), roles);
   await writeExtensionInstances(impl, rest, resolvers.ctx, referrer.schema, referrer.key, updated);
+  if (isFacetValue) await writeFacetValues(impl, rest, resolvers.ctx, referrer.schema, referrer.key, { [referrer.prop.name]: null });
   acc.updatedAfter.push(clone(await resolveVirtualProperties(impl, rest, resolvers, referrer.schema, clone(updated) as TransientObject, cache)));
 }
 
@@ -1082,6 +1118,8 @@ async function performDelete(
   }
 
   await deleteExtensionInstances(impl, rest, resolvers.ctx, schema, key);
+  // the facet instances go with their target, whatever their module
+  await deleteFacetInstances(impl, rest, resolvers.ctx, schema, key);
   await impl.deleteInstance(rest, schema.name, key);
 }
 
@@ -1131,7 +1169,11 @@ function isSchemaOrDescendant(schema: NormalizedSchema, ancestorName: string, re
 function findInverseProperty(resolvers: Resolvers, schema: NormalizedSchema, name: string): InverseProperty | undefined {
   for (const candidate of resolvers.schemas.values()) {
     for (const prop of candidate.properties) {
-      if (prop.constraints.inverse_name === name && isSchemaOrDescendant(schema, prop.type, resolvers)) {
+      if (
+        typeof prop.constraints.inverse_name === "string" &&
+        generatedInverseName(candidate.name, prop) === name &&
+        isSchemaOrDescendant(schema, prop.type, resolvers)
+      ) {
         return { sourceSchema: candidate, sourceProp: prop };
       }
     }
@@ -1342,6 +1384,9 @@ export async function runCommand(
       `"${command.schema}" is an extension schema — its instances are reached through "${extensionRelationOf(schema)?.type}"`,
     );
   }
+  if (isFacet(schema)) {
+    throw modelError("facet_not_addressable", `"${command.schema}" is a facet — its values are reached through "${String(schema.constraints.facet_of)}"`);
+  }
   // `input` is typed as an array (types.ts), but nothing enforced that at the
   // MCP boundary or here — a caller passing a bare object reached create's
   // for-of or update's indexing and failed in kind-specific, sometimes
@@ -1362,8 +1407,43 @@ export async function runCommand(
       );
     }
   }
+  // the namespaces of the facets and of the virtual relations of other modules are nested mappings in an input
+  const descendants = collectExtendingSchemas(schema, resolvers);
+  if (command.kind !== "query" && Array.isArray(command.input) && descendants.some((s) => qualifiedNamespacesOf(s).length > 0)) {
+    command = { ...command, input: command.input.map((item) => flattenInput(item, descendants)) };
+  }
   const result = await executeCommand(impl, rest, command, resolvers, schema);
-  return shapeResult(result, schema, command.result, command.kind);
+  return nestResult(shapeResult(result, schema, command.result, command.kind));
+}
+
+/**
+ * An input entry with its namespaces flattened (see `flattenQualified`),
+ * against the first of `schemas` (the command's schema, then those extending
+ * it) that has every qualified name it gives, so an update reaching a
+ * descendant can name what only the descendant carries.
+ */
+function flattenInput(item: TransientValue, schemas: NormalizedSchema[]): TransientValue {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) return item;
+  let firstError: unknown;
+  for (const candidate of schemas) {
+    try {
+      return flattenQualified(candidate, item as TransientObject);
+    } catch (err) {
+      firstError ??= err;
+    }
+  }
+  throw firstError;
+}
+
+/** `result` with the qualified properties of every instance nested by namespace, as a command returns them. */
+function nestResult(result: CommandResult): CommandResult {
+  return {
+    before: result.before.map(nestQualified),
+    after: result.after.map(nestQualified),
+    "cascade-deleted": result["cascade-deleted"].map(nestQualified),
+    "updated-before": result["updated-before"].map(nestQualified),
+    "updated-after": result["updated-after"].map(nestQualified),
+  };
 }
 
 async function executeCommand(
@@ -1514,8 +1594,11 @@ async function executeCommand(
         // order) see no change.
         const withResolved = schema.properties.map((prop) => ({ prop, resolved: resolveType(prop.type, resolvers.ctx) }));
         const computed: TransientObject = {};
+        // a value of a facet given no value, or null, stays unset
+        const unsetFacet = (prop: NormalizedProperty) =>
+          facetOfProperty(prop) !== undefined && (itemObj[prop.name] === undefined || itemObj[prop.name] === null);
         for (const { prop, resolved } of withResolved) {
-          if (resolved.kind !== "relation") continue;
+          if (resolved.kind !== "relation" || unsetFacet(prop)) continue;
           const hasProvided = Object.prototype.hasOwnProperty.call(itemObj, prop.name);
           computed[prop.name] = computePropertyValue(
             prop,
@@ -1528,7 +1611,7 @@ async function executeCommand(
           );
         }
         for (const { prop, resolved } of withResolved) {
-          if (resolved.kind === "relation") continue;
+          if (resolved.kind === "relation" || unsetFacet(prop)) continue;
           const hasProvided = Object.prototype.hasOwnProperty.call(itemObj, prop.name);
           computed[prop.name] = computePropertyValue(
             prop,
@@ -1541,7 +1624,10 @@ async function executeCommand(
           );
         }
         const instance: TransientObject = {};
-        for (const prop of schema.properties) instance[prop.name] = computed[prop.name];
+        for (const prop of schema.properties) {
+          if (facetOfProperty(prop) !== undefined && computed[prop.name] === undefined) continue;
+          instance[prop.name] = computed[prop.name];
+        }
 
         let key: Key;
         if (isSharedByName(schema)) {
@@ -1569,6 +1655,12 @@ async function executeCommand(
         // putInstance's `instance` argument.
         await impl.putInstance(rest, schema.name, key, withoutVirtualRelations(schema, instance), roles);
         await writeExtensionInstances(impl, rest, resolvers.ctx, schema, key, instance);
+        // the first value set creates the instance of a facet
+        const facetValues: TransientObject = {};
+        for (const prop of schema.properties) {
+          if (facetOfProperty(prop) !== undefined && instance[prop.name] !== undefined) facetValues[prop.name] = instance[prop.name];
+        }
+        await writeFacetValues(impl, rest, resolvers.ctx, schema, key, facetValues);
 
         for (const prop of schema.properties) {
           if (typeof prop.constraints.inverse_name === "string") {
@@ -1635,6 +1727,8 @@ async function executeCommand(
         const updated: TransientObject = { ...(instance as TransientObject) };
         const relationChanges: { prop: NormalizedProperty; oldValue: TransientValue }[] = [];
         const virtualChanges: { inv: InverseProperty; oldValue: TransientValue; newValue: TransientValue }[] = [];
+        // the values of facets the patch names: a patch changes only those, and null unsets one
+        const facetChanges: TransientObject = {};
 
         for (const [propName, rawValue] of Object.entries(patch as TransientObject)) {
           if (propName === instKeyProp) {
@@ -1661,6 +1755,11 @@ async function executeCommand(
           if (prop.constraints.constant === true) {
             throw modelError("constraint_violation", `"${propName}" is constant on "${instSchema.name}"`);
           }
+          if (facetOfProperty(prop) !== undefined && (rawValue === null || rawValue === undefined)) {
+            delete updated[propName];
+            facetChanges[propName] = null;
+            continue;
+          }
           const resolved = resolveType(prop.type, resolvers.ctx);
           if (resolved.kind === "relation" && typeof prop.constraints.inverse_name === "string") {
             relationChanges.push({ prop, oldValue: (instance as TransientObject)[propName] ?? null });
@@ -1673,6 +1772,7 @@ async function executeCommand(
             ? resolvePatchMapping(prop, resolved, instSchema.name, (instance as TransientObject)[propName], rawValue)
             : rawValue;
           updated[propName] = computePropertyValue(prop, true, providedValue, resolved, updated, instSchema, datasetValue);
+          if (facetOfProperty(prop) !== undefined) facetChanges[propName] = updated[propName];
         }
 
         await validateRelationTargets(impl, rest, resolvers, instSchema, updated);
@@ -1699,6 +1799,7 @@ async function executeCommand(
         // putInstance's `instance` argument.
         await impl.putInstance(rest, instSchema.name, key, withoutVirtualRelations(instSchema, updated), instRoles);
         await writeExtensionInstances(impl, rest, resolvers.ctx, instSchema, key, updated);
+        await writeFacetValues(impl, rest, resolvers.ctx, instSchema, key, facetChanges);
 
         for (const { prop, oldValue } of relationChanges) {
           await propagateInverseChange(impl, rest, resolvers, instSchema, key, prop, oldValue, updated[prop.name], acc, cache);

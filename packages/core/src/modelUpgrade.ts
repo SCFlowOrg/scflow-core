@@ -1,4 +1,5 @@
 import { modelError } from "./errors.js";
+import { isFacet } from "./facets.js";
 import { addedProperties, extensionOfProperty, extensionRelationOf } from "./extensions.js";
 import { checkFilter, matchFilter } from "./filter.js";
 import type { Resolvers } from "./resolvers.js";
@@ -237,6 +238,18 @@ export async function applyInverseRelations(
   }
 }
 
+/**
+ * A schema of the dataset itself belongs to no module, and a facet carries the
+ * namespace of its module: `facet_of` is refused here with
+ * `constraint_violation`. A facet is declared in a module (see `docs/modules.md`).
+ */
+function refuseFacetOutsideModule(schema: NormalizedSchema): NormalizedSchema {
+  if (isFacet(schema)) {
+    throw modelError("constraint_violation", `schema "${schema.name}" has "facet_of" but belongs to no module — a facet is declared in a module, whose namespace its properties carry`);
+  }
+  return schema;
+}
+
 /** `target` and every schema extending it, directly or through further extension. */
 function withExtendingSchemas(schemas: Map<string, NormalizedSchema>, target: NormalizedSchema): NormalizedSchema[] {
   const result = [target];
@@ -463,7 +476,7 @@ export async function runSchemaCommand(impl: PersistenceInterface, rest: string,
         if (typeof name === "string" && resolvers.schemas.has(name)) {
           throw modelError("duplicate_name", `schema "${name}" already exists`);
         }
-        const normalized = processSchemaDescription(item, resolvers.ctx);
+        const normalized = refuseFacetOutsideModule(processSchemaDescription(item, resolvers.ctx));
         await impl.putInstance(rest, "schema", normalized.name, normalized as unknown as TransientValue, SCHEMA_ROLES);
         resolvers.schemas.set(normalized.name, normalized);
         created.push(normalized);
@@ -500,7 +513,7 @@ export async function runSchemaCommand(impl: PersistenceInterface, rest: string,
         if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
           throw modelError("constraint_violation", "update input entries must be objects");
         }
-        const normalized = processSchemaDescription({ ...(patch as TransientObject), name: prev.name }, resolvers.ctx);
+        const normalized = refuseFacetOutsideModule(processSchemaDescription({ ...(patch as TransientObject), name: prev.name }, resolvers.ctx));
         // preserve virtual properties injected by other schemas' inverse relations,
         // which the freshly-authored `patch` won't mention. They come from the current schema:
         // an earlier entry of this command may have generated one since `matched` was read.

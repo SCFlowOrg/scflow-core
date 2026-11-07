@@ -41,7 +41,8 @@ export const ErrorCode = {
    * as a `ui_access` outside its three levels), for `create` and `delete` on
    * `dataset`, and for a text or map operation used where it does not apply, and
    * for a map whose key, value or entry count breaks its type or constraints, and
-   * for a schema that breaks the rules of an `extension` relation (see `docs/authoring.md`, *Extensions*).
+   * for a schema that breaks the rules of an `extension` relation (see `docs/authoring.md`, *Extensions*),
+   * or of a facet (see `docs/modules.md`, *Facets*).
    */
   constraint_violation: "constraint_violation",
   /**
@@ -71,6 +72,8 @@ export const ErrorCode = {
   unknown_relation_target: "unknown_relation_target",
   /** `schema` of a command names an extension schema, whose instances are reached only through the schema it extends. */
   extension_not_addressable: "extension_not_addressable",
+  /** `schema` of a command names a facet: its values are reached only through its target (see `docs/modules.md`, *Facets*). */
+  facet_not_addressable: "facet_not_addressable",
 
   // Model upgrade
   /** A `schema` or `scalar_type` command runs against a locator that is not an upgrade locator. */

@@ -1,6 +1,7 @@
 import { modelError } from "./errors.js";
 import { mergeExtensionValues } from "./extensionData.js";
 import { extensionNamesOf } from "./extensions.js";
+import { facetNamesOf, facetOfProperty, mergeFacetValues, resolvePathSegment } from "./facets.js";
 import { findProperty, isEmbedded } from "./schema.js";
 import type { TypeResolutionContext } from "./schemaProcessing.js";
 import { derivePropertyRoles, resolveType } from "./schemaProcessing.js";
@@ -18,6 +19,19 @@ const COMBINATORS = new Set(["and", "or", "not"]);
  * entry satisfies no predicate on the path, `ne` included.
  */
 const NO_ENTRY = Symbol("no map entry");
+
+/**
+ * What a path yields when it reaches a property of a facet that has no value:
+ * an unset value, which satisfies no predicate except `exists` (see Filter).
+ */
+const UNSET = Symbol("unset facet value");
+
+/** Whether a predicate holds on an unset value: only `{exists: false}` does. */
+function matchesUnset(predicateValue: unknown): boolean {
+  if (predicateValue === null || typeof predicateValue !== "object" || Array.isArray(predicateValue)) return false;
+  const ops = Object.entries(predicateValue as TransientObject);
+  return ops.length > 0 && ops.every(([op, operand]) => op === "exists" && operand === false);
+}
 
 /** The JSON text of `value` with the entries of every mapping in key order: a map is unordered, so two maps with the same entries are equal. */
 function canonicalJson(value: TransientValue): string {
@@ -101,21 +115,23 @@ async function getPathValue(
   schema: NormalizedSchema,
   path: string[],
   ctx: FilterEvalContext,
-): Promise<TransientValue | typeof NO_ENTRY> {
+): Promise<TransientValue | typeof NO_ENTRY | typeof UNSET> {
   let current: TransientValue = instance;
   let currentSchema: NormalizedSchema | null = schema;
 
-  for (let i = 0; i < path.length; i++) {
-    const segment = path[i];
-    const isLast = i === path.length - 1;
+  for (let i = 0; i < path.length; ) {
     if (current === null || typeof current !== "object" || Array.isArray(current)) {
       return null;
     }
     const obj = current as TransientObject;
-    const prop = currentSchema ? findProperty(currentSchema, segment) : undefined;
+    // a segment is a property, or a namespace followed by a property of a facet or a virtual relation of another module
+    const { prop, name: segment, consumed } = currentSchema ? resolvePathSegment(currentSchema, path, i) : { prop: undefined, name: path[i], consumed: 1 };
+    i += consumed;
+    const isLast = i >= path.length;
     if (!prop && segment !== "id" && segment !== "name") {
       throw modelError("unknown_property", `"${segment}" does not resolve on schema "${currentSchema?.name}"`);
     }
+    if (prop && facetOfProperty(prop) !== undefined && (obj[segment] === undefined || obj[segment] === null)) return UNSET;
     const value = obj[segment] ?? null;
     if (isLast) return value;
 
@@ -124,7 +140,7 @@ async function getPathValue(
     const resolved = resolveType(prop.type, ctx);
     if (resolved.kind === "map") {
       // the next segment is the key of an entry: `display_name.fr`; `resolvePathIsArray` has refused a path that goes on
-      const entryKey = path[i + 1];
+      const entryKey = path[i];
       if (value === null || typeof value !== "object" || Array.isArray(value)) return NO_ENTRY;
       return Object.prototype.hasOwnProperty.call(value, entryKey) ? (value as TransientObject)[entryKey] : NO_ENTRY;
     }
@@ -133,9 +149,15 @@ async function getPathValue(
     }
     if (Array.isArray(value) || value === null) return null; // multi-valued/absent — not traversable further here
     const target = await ctx.impl.getInstance(ctx.rest, resolved.schema.name, value as Key, derivePropertyRoles(resolved.schema));
-    // the target's extension values live in other instances: read in, on a copy, so the path reaches them like its own properties
-    const reachesExtensions = target !== null && typeof target === "object" && !Array.isArray(target) && extensionNamesOf(resolved.schema).length > 0;
-    current = reachesExtensions ? await mergeExtensionValues(ctx.impl, ctx.rest, ctx, resolved.schema, value as Key, { ...(target as TransientObject) }) : target;
+    // the target's extension and facet values live in other instances: read in, on a copy, so the path reaches them like its own properties
+    const isObject = target !== null && typeof target === "object" && !Array.isArray(target);
+    current = target;
+    if (isObject && extensionNamesOf(resolved.schema).length > 0) {
+      current = await mergeExtensionValues(ctx.impl, ctx.rest, ctx, resolved.schema, value as Key, { ...(target as TransientObject) });
+    }
+    if (isObject && facetNamesOf(resolved.schema).length > 0) {
+      current = await mergeFacetValues(ctx.impl, ctx.rest, ctx, resolved.schema, value as Key, { ...(current as TransientObject) });
+    }
     currentSchema = resolved.schema;
   }
   return current;
@@ -156,10 +178,10 @@ function resolvePathIsArray(schema: NormalizedSchema, path: string[], ctx: TypeR
 function resolvePathKind(schema: NormalizedSchema, path: string[], ctx: TypeResolutionContext): { isArray: boolean; isSet: boolean } {
   const singleValued = { isArray: false, isSet: false };
   let currentSchema = schema;
-  for (let i = 0; i < path.length; i++) {
-    const segment = path[i];
-    const isLast = i === path.length - 1;
-    const prop = findProperty(currentSchema, segment);
+  for (let i = 0; i < path.length; ) {
+    const { prop, name: segment, consumed } = resolvePathSegment(currentSchema, path, i);
+    i += consumed;
+    const isLast = i >= path.length;
     if (!prop) {
       if ((segment === "id" || segment === "name") && isLast) return singleValued;
       throw modelError("unknown_property", `"${segment}" does not resolve on schema "${currentSchema.name}"`);
@@ -168,7 +190,7 @@ function resolvePathKind(schema: NormalizedSchema, path: string[], ctx: TypeReso
     const resolved = resolveType(prop.type, ctx);
     if (resolved.kind === "map") {
       // the one segment after a map property is the key of an entry, a single value; a path that goes on does not resolve
-      if (i + 2 !== path.length) {
+      if (i + 1 !== path.length) {
         throw modelError("unknown_property", `a path through the map "${segment}" ends with the key of an entry, cannot continue path "${path.join(".")}"`);
       }
       return singleValued;
@@ -335,6 +357,10 @@ export async function matchFilter(
     if (COMBINATORS.has(key)) continue;
     const actual = await getPathValue(instance, schema, key.split("."), ctx);
     if (actual === NO_ENTRY) return false;
+    if (actual === UNSET) {
+      if (!matchesUnset(predicateValue)) return false;
+      continue;
+    }
     const isSet = Array.isArray(actual) && resolvePathKind(schema, key.split("."), ctx).isSet;
     if (!matchPredicate(actual, predicateValue, isSet)) return false;
   }

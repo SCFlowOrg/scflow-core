@@ -46,6 +46,16 @@ The error codes of a failing command are documented on `ErrorCode`.
   filters, including a path across a relation, and `result.properties` name them,
   and `create` and `update` take them. A command whose `schema` is an extension
   schema fails with `extension_not_addressable`.
+- The properties of the **facets** of a schema (see [modules.md](modules.md),
+  Facets) are qualified by the namespace of the module of the facet. `query`
+  returns them as a nested mapping, `carbon: {co2: 12}`. Filters, including a
+  path across a relation, and `result.properties` name them by path,
+  `carbon.co2`; `result.properties` may also name a whole namespace, `carbon`.
+  `create` and `update` take the same nested mapping: a patch changes only the
+  properties it names, `null` unsets a value, and a name that is no property
+  fails with `unknown_property`. An unset value is left out of an instance and
+  satisfies no predicate except `exists`. A command whose `schema` is a facet
+  fails with `facet_not_addressable`.
 
 ### Result
 

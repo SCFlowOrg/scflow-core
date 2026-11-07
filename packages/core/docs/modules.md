@@ -110,6 +110,61 @@ dataset.
 
 A map type takes qualified names too: `{scflow.code: number}`.
 
+## Facets
+
+A facet adds properties to the instances of a schema of the same module or of a
+dependency, its target, without changing it. The rules are in the
+specification: [Facet](spec/meta-model.md#facet), and *Facets* in
+[Command](spec/model-command-language.md#command) and
+[Schema Processing](spec/model-command-language.md#schema-processing).
+
+```yaml
+# module acme:carbon, namespace carbon, depends on scflow:core
+schemas:
+  - name: actor_emissions
+    facet_of: scflow.actor
+    properties:
+      - name: co2
+        type: number
+```
+
+```ts
+await runCommand(locator, { create: "scflow.actor", input: { name: "acme", carbon: { co2: 12 } } });
+await runCommand(locator, { query: "scflow.actor", filters: { "carbon.co2": { gt: 10 } } });
+// after: [{ name: "acme", ..., carbon: { co2: 12 } }]
+await runCommand(locator, { update: "scflow.actor", filters: { name: "acme" }, input: { carbon: { co2: null } } });
+```
+
+- A property of a facet carries the namespace of the module of the facet, even
+  on a target of the same module: a path names `carbon.co2`, and an instance
+  holds `carbon: {co2: 12}`. The facets of one module on one target share the
+  namespace.
+- The facets are assembled per dataset: the schemas of a module never hold the
+  properties of a facet. The schema of a target, and of every schema extending
+  it, as a dataset reads it lists them under their qualified names, each tagged
+  by the internal constraint `__facet` with the key of the facet.
+- A value of a facet is optional and stored by omission. An unset value is left
+  out of an instance, and so is a namespace with no value at all. A
+  `default_value` is read when nothing is stored, and counts as a value. An
+  unset value satisfies no predicate except `exists`: `{exists: false}` finds it.
+- The values are stored in an instance of the facet, under the facet's
+  qualified name, with the key of the instance of the target. That instance is
+  created on the first value set, removed when its last value is unset, and
+  deleted with the instance of the target. A relation of a facet to a deleted
+  instance is unset, or follows its `on_delete`.
+- A command whose `schema` is a facet fails with `facet_not_addressable`.
+- A facet has no `name` property, is not `shared_by_name`, `embedded` or
+  `is_root`, takes no part in `extends`, and has no `mandatory` relation and no
+  property with `inverse_name`, `owns` or `owner`. Its target is neither a facet
+  nor `embedded`, and no relation targets a facet. Two properties of one module
+  on one target cannot share a name, and a property of a schema cannot be named
+  like a namespace of its facets. Each breach is a `constraint_violation`; a
+  target that does not resolve is `unknown_extends_target`.
+- A relation with an `inverse_name` whose target belongs to another module
+  generates its inverse under the namespace of the declaring module,
+  `carbon.emissions`, read and written like any virtual relation. It is optional:
+  `inverse_is_mandatory` is a `constraint_violation`.
+
 ## mcl:core
 
 `MCL_CORE` is the manifest of `mcl:core`, embedded in the engine: namespace
