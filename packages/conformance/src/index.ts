@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   bumpMajorVersions,
   createApiSession,
+  createModuleSet,
   checkUpgrade,
   createUpgradeLocator,
+  MCL_CORE,
   deleteDataset,
   dumpDataset,
   initDataset,
@@ -12,6 +14,7 @@ import {
   processSchemaDescription,
   queryDataset,
   queryUpgradeLocator,
+  readModuleManifest,
   registerPersistentFormat,
   restoreDataset,
   runCommand,
@@ -2250,6 +2253,228 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
 
       const dataset = await queryDataset(locator);
       expect((dataset as Record<string, unknown>).name).toBe("original");
+    });
+  });
+
+  /**
+   * Modules and names, per the Module, Names and The Core Module parts of
+   * packages/core/docs/spec/meta-model.md. A manifest and a set of modules
+   * live in the engine, apart from any dataset, so these cases run the same
+   * for every format.
+   */
+  describe(`module conformance — ${formatPrefix}`, () => {
+    const scflow = `
+name: scflow:core
+namespace: scflow
+version: 1.3.0
+mcl: ^1.0
+title: Supply chain flow
+scalar_types:
+  - name: code
+    extends: string
+    pattern: '^[A-Z]{3}$'
+schemas:
+  - name: actor
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+      - name: code
+        type: code
+      - name: founded
+        type: date
+actions:
+  - id: scflow/create_actor
+    title: Create an actor
+`;
+    const carbon = `
+name: acme:carbon
+namespace: carbon
+version: 1.2.0
+mcl: ^1.0
+title: Carbon footprint
+dependencies:
+  - module: scflow:core
+    version: ^1.3
+schemas:
+  - name: site
+    extends: scflow.actor
+    properties:
+      - name: co2
+        type: number
+`;
+
+    it("reads a manifest as an instance of the module schema", () => {
+      const manifest = readModuleManifest(carbon);
+      expect(manifest).toMatchObject({
+        name: "acme:carbon",
+        namespace: "carbon",
+        version: "1.2.0",
+        mcl: "^1.0",
+        title: "Carbon footprint",
+        dependencies: [{ module: "scflow:core", version: "^1.3" }],
+      });
+      expect(manifest.schemas.map((s) => s.name)).toEqual(["site"]);
+    });
+
+    it("refuses a manifest that breaks the module schema", () => {
+      const refused = (text: string) => expect(() => readModuleManifest(text)).toThrow(expect.objectContaining({ code: "constraint_violation" }));
+      // the key is publisher:module
+      refused("name: carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\n");
+      // the namespace is an identifier, and every module has one
+      refused("name: acme:carbon\nversion: 1.0.0\nmcl: ^1.0\n");
+      refused("name: acme:carbon\nnamespace: acme.carbon\nversion: 1.0.0\nmcl: ^1.0\n");
+      // a semantic version, and a range of mcl:core
+      refused("name: acme:carbon\nnamespace: carbon\nversion: '1.0'\nmcl: ^1.0\n");
+      refused("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\n");
+      // a property the module schema does not declare
+      refused("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\nauthor: me\n");
+      // mcl:core is given by `mcl`, never listed in the dependencies
+      refused("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\ndependencies:\n  - module: mcl:core\n    version: ^1.0\n");
+      // the name of a schema is a short name
+      refused("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\nschemas:\n  - name: carbon.site\n");
+      // the prefix of an action id is the namespace of its module
+      refused("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\nactions:\n  - id: scflow/create_site\n");
+    });
+
+    it("keeps names unique in their module", () => {
+      expect(() =>
+        readModuleManifest("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\nschemas:\n  - name: site\n  - name: site\n"),
+      ).toThrow(expect.objectContaining({ code: "duplicate_name" }));
+      expect(() =>
+        readModuleManifest("name: acme:carbon\nnamespace: carbon\nversion: 1.0.0\nmcl: ^1.0\nactions:\n  - id: carbon/a\n  - id: carbon/a\n"),
+      ).toThrow(expect.objectContaining({ code: "duplicate_name" }));
+      // two modules can define the same name
+      const set = createModuleSet([
+        readModuleManifest(scflow),
+        readModuleManifest("name: acme:other\nnamespace: other\nversion: 1.0.0\nmcl: ^1.0\nschemas:\n  - name: actor\n    properties: []\n"),
+      ]);
+      expect(set.resolveSchema("scflow.actor")?.module.key).toBe("scflow:core");
+      expect(set.resolveSchema("other.actor")?.module.key).toBe("acme:other");
+    });
+
+    it("embeds mcl:core, with its own manifest", () => {
+      expect(MCL_CORE).toMatchObject({ name: "mcl:core", namespace: "mcl", version: "1.0.0" });
+      const names = MCL_CORE.schemas.map((s) => s.name);
+      for (const name of ["schema", "property", "scalar_type", "dataset", "import", "module", "action"]) expect(names).toContain(name);
+      const types = MCL_CORE.scalar_types.map((t) => t.name);
+      for (const name of ["date", "identifier", "module_key", "semantic_version", "version_range"]) expect(types).toContain(name);
+      // always there, in an empty set too
+      const set = createModuleSet([]);
+      expect(set.resolveSchema("module")?.module.key).toBe("mcl:core");
+      expect(set.resolveSchema("mcl.module")?.key).toBe("module");
+    });
+
+    it("refuses two modules with the same namespace", () => {
+      expect(() =>
+        createModuleSet([
+          readModuleManifest(scflow),
+          readModuleManifest("name: acme:scflow\nnamespace: scflow\nversion: 1.0.0\nmcl: ^1.0\n"),
+        ]),
+      ).toThrow(expect.objectContaining({ code: "namespace_conflict" }));
+      // `mcl` belongs to mcl:core
+      expect(() => createModuleSet([readModuleManifest("name: acme:mcl\nnamespace: mcl\nversion: 1.0.0\nmcl: ^1.0\n")])).toThrow(
+        expect.objectContaining({ code: "namespace_conflict" }),
+      );
+    });
+
+    it("resolves a short name in its own module, then in mcl:core", () => {
+      const set = createModuleSet([readModuleManifest(scflow)]);
+      const actor = set.module("scflow:core")?.schemas.get("actor");
+      // references are kept in their canonical form: qualified, or short for mcl:core
+      expect(actor?.properties.find((p) => p.name === "code")?.type).toBe("scflow.code");
+      expect(actor?.properties.find((p) => p.name === "founded")?.type).toBe("date");
+      expect(set.resolveSchema("actor", "scflow:core")?.key).toBe("scflow.actor");
+      expect(set.resolveScalarType("date", "scflow:core")?.module.key).toBe("mcl:core");
+    });
+
+    it("lets a module win over mcl:core, which stays reachable by its qualified name", () => {
+      const set = createModuleSet([
+        readModuleManifest(`
+name: acme:calendar
+namespace: calendar
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: date
+    properties:
+      - name: day
+        type: mcl.date
+  - name: meeting
+    properties:
+      - name: on
+        type: date
+`),
+      ]);
+      expect(set.resolveSchema("date", "acme:calendar")?.key).toBe("calendar.date");
+      expect(set.resolveScalarType("date", "acme:calendar")).toBeUndefined();
+      const meeting = set.module("acme:calendar")?.schemas.get("meeting");
+      expect(meeting?.properties.find((p) => p.name === "on")?.type).toBe("calendar.date");
+      const date = set.module("acme:calendar")?.schemas.get("date");
+      expect(date?.properties.find((p) => p.name === "day")?.type).toBe("date");
+    });
+
+    it("resolves only mcl:core short names outside a module", () => {
+      const set = createModuleSet([readModuleManifest(scflow), readModuleManifest(carbon)]);
+      expect(set.resolveSchema("scflow.actor")?.key).toBe("scflow.actor");
+      expect(set.resolveSchema("schema")?.key).toBe("schema");
+      // a short name is never searched for across modules
+      expect(set.resolveSchema("actor")).toBeUndefined();
+      expect(() => set.requireSchema("actor")).toThrow(expect.objectContaining({ code: "unknown_schema" }));
+      expect(() => set.requireSchema("nowhere.actor")).toThrow(expect.objectContaining({ code: "unknown_schema" }));
+    });
+
+    it("resolves a qualified name in a module to itself, a dependency or mcl:core", () => {
+      const set = createModuleSet([readModuleManifest(scflow), readModuleManifest(carbon)]);
+      const site = set.module("acme:carbon")?.schemas.get("site");
+      expect(site?.extends).toBe("scflow.actor");
+      // inherited properties keep the references of the module that declares them
+      expect(site?.properties.map((p) => [p.name, p.type])).toEqual([
+        ["name", "identifier"],
+        ["code", "scflow.code"],
+        ["founded", "date"],
+        ["co2", "number"],
+      ]);
+      expect(set.resolveSchema("scflow.actor", "acme:carbon")?.module.key).toBe("scflow:core");
+      expect(set.resolveSchema("carbon.site", "acme:carbon")?.module.key).toBe("acme:carbon");
+    });
+
+    it("refuses a reference to a module that is not a dependency", () => {
+      const intruder = readModuleManifest(`
+name: acme:intruder
+namespace: intruder
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: plant
+    properties:
+      - name: operator
+        type: scflow.actor
+`);
+      expect(() => createModuleSet([readModuleManifest(scflow), intruder])).toThrow(
+        expect.objectContaining({ code: "reference_outside_module" }),
+      );
+      const set = createModuleSet([readModuleManifest(scflow), readModuleManifest(carbon)]);
+      expect(() => set.resolveSchema("scflow.actor", "scflow:core")).not.toThrow();
+      expect(() => set.resolveSchema("carbon.site", "scflow:core")).toThrow(expect.objectContaining({ code: "reference_outside_module" }));
+    });
+
+    it("refuses a short name of another module, even a dependency", () => {
+      const careless = readModuleManifest(`
+name: acme:careless
+namespace: careless
+version: 1.0.0
+mcl: ^1.0
+dependencies:
+  - module: scflow:core
+    version: ^1.3
+schemas:
+  - name: plant
+    properties:
+      - name: operator
+        type: actor
+`);
+      expect(() => createModuleSet([readModuleManifest(scflow), careless])).toThrow(expect.objectContaining({ code: "unknown_scalar_type" }));
     });
   });
 }

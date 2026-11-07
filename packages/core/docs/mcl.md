@@ -47,6 +47,7 @@ Each rule is stated in the file named in brackets; read it before relying on the
 
 - [formats.md](formats.md): locators, persistent formats, the `js` format.
 - [datasets.md](datasets.md): datasets, the `dataset` instance, lifecycle, the built-in dataset.
+- [modules.md](modules.md): module manifests, module sets, namespaces, short and qualified names, `mcl:core`.
 - [model-upgrade.md](model-upgrade.md): changing a model through an upgrade locator.
 - [sessions.md](sessions.md): `MclAccess`, `ApiSession`, transactions, revert.
 - [actions.md](actions.md): `ModelActionDefinition`, the actions a domain package exposes to UIs and AI assistants.
