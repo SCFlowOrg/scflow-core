@@ -203,7 +203,8 @@ setLocalModule(locator, manifest): Promise<TransientValue>   // the dataset, as 
   cannot take the change (a new mandatory relation, a value that breaks a new
   constraint) or when a schema that has instances leaves the module.
 - It fails with `constraint_violation` for a module that is not local: a
-  published module changes through a model upgrade.
+  published module changes through a model upgrade (see `upgradeModule` in
+  [model-upgrade.md](model-upgrade.md#upgrading-a-module)).
 - A local module edited by hand in a dump is accepted on restore, with its new
   digest.
 

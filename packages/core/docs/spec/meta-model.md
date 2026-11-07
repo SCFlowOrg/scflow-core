@@ -1211,10 +1211,15 @@ A host compares the embedded and the installed version of each module:
 
 | Installed module | Result |
 | --- | --- |
-| Same version | Nothing to do |
+| Same version and digest | Nothing to do |
+| Same version, another digest | The embedded module was edited by hand, and the installed one wins: upgrade to it as a compatible change, with no migration |
 | Newer | Upgrade from the embedded schemas to the installed ones: automatic for a compatible change, through the migrations of the module otherwise |
 | Missing | The data is read with the embedded schemas, read only |
 | Older than the file | Read only, or refused |
+
+- **Module by module.** The modules upgrade one at a time, in the order of the `modules` of the dataset, where a dependency comes before the module that needs it. Each module upgrades in one transaction: a refused upgrade changes nothing of that module, and the modules upgraded before it stay upgraded.
+- **A refused upgrade refuses the opening**, with the reason, so the data is never written with schemas it does not match. The host can open it read only.
+- **Read only.** A host can open a dataset read only: nothing is upgraded, the data is read with the embedded schemas, and every write is refused. Opening read only is how a dataset is read without changing it, such as to look at an old file or before deciding to upgrade.
 
 **Compatible vs incompatible changes**
 
@@ -1261,7 +1266,11 @@ A migration has exactly one form:
 | `delete_property: {schema, property}` | The values of a property are removed |
 | `body` | A bundle, under the [contract of a body](#action), which converts values or splits a schema |
 
-The migrations between the embedded and the installed version run in version order. They run in one transaction, and the rules of the module are checked at its end: an upgrade that breaks a rule is refused with the list of the instances at fault.
+The migrations between the embedded and the installed version run in version order: those whose `to` is newer than the embedded version and not newer than the installed one. They run in one transaction, and the rules of the module are checked at its end: an upgrade that breaks a rule is refused with the list of the instances at fault.
+
+- **The installed schemas.** The installed module replaces the embedded one before the first migration runs, so a migration writes with the installed schemas. It reads the values stored for the embedded ones: a value a schema no longer declares stays readable until the end of the upgrade.
+- **The check at the end.** After the last migration, every instance of the schemas of the module is checked against the installed schemas, as a compatible change is: a property missing from an instance takes its default, a property the schema no longer declares is dropped, and a value the schema no longer accepts, or an instance of a schema that leaves the module, refuses the upgrade with `incompatible_upgrade`.
+- **A body** of a migration receives the access to its dataset that an action receives, inside the transaction of the upgrade, and no parameters. It cannot call actions.
 
 **Scalar types are never modified by a command.** A new version of a module can change a scalar type, under the same compatibility check.
 
