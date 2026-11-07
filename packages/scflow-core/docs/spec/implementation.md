@@ -4,11 +4,17 @@
 
 *Implementation.*
 
-The `@scfloworg/scflow-core` package of the `core` repository implements the schemas and scalar types of section 3, THE SCHEMAS, as the YAML file `src/schemas.yaml`, which holds the `scalar_types` and the `schemas` as authored by core-plugin (Accessing MCL And Extending The Built-in Model). Section 3 states the model and takes precedence: the file follows it, and a difference between the two is a defect of the file.
+The `@scfloworg/scflow-core` package of the `core` repository is the module `scflow:core`. Its manifest, `module.yaml` at the root of the package, is a [module manifest](../../../core/docs/spec/meta-model.md#module) and holds the whole module in one file:
 
-A script of the package compiles the YAML to `src/schemas.generated.ts` before each build and each test run; the generated file is not versioned. The package exports the result as `SCHEMAS`, shaped as the `SchemaPackage` of `@scfloworg/core-plugin-core`, which `scflow-plugin` passes to `upgradeModel` (part `model_contribution`) and tests pass to `createTestDocument`.
+- `name: scflow:core`, `namespace: scflow`, and `mcl: ^1.0`, the range of `mcl:core` it works with. It has no other dependency.
+- `version`, the version of the module, always equal to the `version` of the `package.json` of the package. A test checks it.
+- `title: Supply chain flow`.
+- `scalar_types` and `schemas`: the schemas and scalar types of section 3, THE SCHEMAS. Section 3 states the model and takes precedence: the manifest follows it, and a difference between the two is a defect of the manifest.
+- `actions`: one declaration for each action of `ACTIONS` (see `docs/actions.md`), with its `id`, `title`, `description` and `kind`. A test checks that the declarations and `ACTIONS` agree.
 
-The file holds the scalar types `flow_domain`, `transformation_role`, `tag`, `latitude`, `longitude`, `country_code` and `un_locode`, then the schemas in the order of section 3: `annotable`, `note`, `actor_type`, `item_type`, `actor`, `flow`, `item`, `item_at_actor`, `transformation_type`, `transformation`, `transformation_line`, `conversion`, `scope`, `location`.
+A script of the package compiles the `scalar_types` and the `schemas` of the manifest to `src/schemas.generated.ts` before each build and each test run; the generated file is not versioned. The package exports the result as `SCHEMAS`, shaped as the `SchemaPackage` of `@scfloworg/core-plugin-core`, which `scflow-plugin` passes to `upgradeModel` (part `model_contribution`) and tests pass to `createTestDocument`.
+
+The manifest holds the scalar types `flow_domain`, `transformation_role`, `tag`, `latitude`, `longitude`, `country_code` and `un_locode`, then the schemas in the order of section 3: `annotable`, `note`, `actor_type`, `item_type`, `actor`, `flow`, `item`, `item_at_actor`, `transformation_type`, `transformation`, `transformation_line`, `conversion`, `scope`, `location`.
 
 ## SCFLOW Model Contribution
 

@@ -2,7 +2,7 @@
 
 The supply chain flow model: why flows are modelled, the concepts and schemas that describe them, and how they are implemented on the CORE model.
 
-This specification is normative: the code and `src/schemas.yaml` follow it. The language it is written in is specified in [`@scfloworg/core`](../../../core/docs/spec/README.md).
+This specification is normative: the code and `module.yaml` follow it. The language it is written in is specified in [`@scfloworg/core`](../../../core/docs/spec/README.md).
 
 ## [Why modelling supply chain flows](why-modelling-flows.md)
 
@@ -62,7 +62,7 @@ This specification is normative: the code and `src/schemas.yaml` follow it. The 
 
 ## [Implementation](implementation.md)
 
-- [Schemas Package](implementation.md#schemas-package): `@scfloworg/scflow-core` holds the SCFLOW schemas as `schemas.yaml`, compiled to TypeScript at build time and exported as `SCHEMAS`
+- [Schemas Package](implementation.md#schemas-package): `@scfloworg/scflow-core` is the module `scflow:core`, declared in its manifest `module.yaml`; the schemas are compiled to TypeScript at build time and exported as `SCHEMAS`
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin contributes the SCFLOW schemas to the built-in model of its area through core-plugin's upgradeModel
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
 - [Network Rules](implementation.md#network-rules): The nine rules a network satisfies beyond CORE constraints, each with a stable name used in check results

@@ -3,9 +3,16 @@
 Business package of the supply chain flow model: MCL schemas and pure domain logic.
 The model is stated in its [specification](docs/spec/README.md).
 
+## Module
+
+The package is the module `scflow:core`, namespace `scflow`. Its manifest, `module.yaml`, holds
+its identity, its scalar types, its schemas and the declarations of its actions, and is read by
+`readModuleManifest` of `@scfloworg/core`. Its `version` is always the `version` of
+`package.json`, and its actions agree with `ACTIONS`: `tests/module.test.ts` checks both.
+
 ## Exports
 
-- `SCHEMAS`: the scalar types and schemas, compiled from `src/schemas.yaml`.
+- `SCHEMAS`: the scalar types and schemas, compiled from `module.yaml`.
 - `createActor(mcl, locator, { display_name, type, scope?, location?, description?, parent_actor?, tags? })`: creates an
   actor and returns it. The actor takes `scope` when given, otherwise the `default_scope`
   of its type, and no scope when the type has none; the default is applied at creation
