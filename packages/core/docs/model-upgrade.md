@@ -39,6 +39,10 @@ Rules:
   extends and of the schemas extending that one, its extension instance from the
   defaults, and bumps `data_minor_version`. The properties an extension adds are
   not stored on the extended instances, so they are never backfilled there.
+- Adding a facet to a module (see [modules.md](modules.md), Facets) writes
+  nothing: the instance of a facet is created on its first value. A schema the
+  dataset defines itself belongs to no module, so `facet_of` fails there with
+  `constraint_violation`.
 - A scalar type is created and never updated or deleted.
 - The schemas of one `create` command may reference each other through
   `inverse_name`, in any order, and a schema may reference itself. A target found

@@ -3,6 +3,7 @@ import { validateUiAccessConstraints } from "./uiAccess.js";
 import { parseMapType } from "./mapTypes.js";
 import { modelError } from "./errors.js";
 import { validateExtensionSchema } from "./extensions.js";
+import { validateFacetSchema } from "./facets.js";
 import type {
   NormalizedProperty,
   NormalizedScalarType,
@@ -227,6 +228,7 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
   validateOnDeleteConstraints(obj.name, properties, ctx);
   validateUiAccessConstraints(obj.name, properties, constraints);
   validateExtensionSchema(obj.name, properties, constraints, ctx);
+  validateFacetSchema(obj.name, properties, constraints, parent, ctx);
 
   return {
     name: obj.name,
