@@ -17,6 +17,8 @@ runConformanceSuite(createJsPersistenceInterface(), "js");
 
 The suite also holds the cases of modules and names: a `module.yaml` read as an instance of the `module` schema, `mcl:core` embedded, namespace conflicts, and how short and qualified names resolve. They use no dataset, so they give the same result for every format. The cases of the modules of a dataset and of imports do use datasets: modules embedded with their digest, commands by qualified name, a dump and its restore, local modules, and `checkImport`, `createImport`, `refreshImport` and `removeImport`.
 
+The cases of declared rules use a module, `acme:net`, with one schema per rule: `checks` with `require` and with `exists`, a `unique` group, `acyclic`, `set_once` and `on_delete: confirm` with the `cascade` of a delete, checked by a standalone command, at the end of a transaction and by an upgrade that is refused with the instances at fault. They also cover paths on the right of a filter, `subset_of`, defaults across relations, procedures (`runProcedure`) and declared migrations (`upgradeModule`).
+
 A format that provides the optional `lock(rest)` of the persistence interface also runs a lock case: a second holder waits for the first, two sessions writing at once lose no version increment, and the lock is released after a failed command and after a rolled-back transaction. The case is skipped for a format without `lock`.
 
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.

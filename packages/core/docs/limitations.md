@@ -9,8 +9,19 @@
 - **Refresh overwrites.** `refreshImport` applies every change of the imported
   dataset and clears the relations of own instances to removed ones, mandatory
   ones included; it leaves no review to the host before it writes.
-- **Published modules are not upgraded.** The modules of a dataset are set by
-  `initDataset`, a restore or an import; only a local module changes afterwards.
+- **A module upgrade runs when the host asks.** `upgradeModule` carries a dataset
+  to a newer version of a module; nothing compares the versions and digests when a
+  dataset opens. A migration body runs under the new schemas only, so it cannot
+  read the values of a schema the new version drops.
+- **Rules of a facet are not evaluated.** `checks` and `unique` declared on a
+  facet are accepted and ignored.
+- **Rule paths do not cross virtual relations.** A path in a rule or a filter
+  crosses declared single-valued relations; a generated one reads as no value.
+- **Rules are evaluated in memory.** A breach is found by reading the instances of
+  the schemas concerned; no persistent format implements a rule natively yet.
+- **A default across a relation is not backfilled.** A property added by an
+  upgrade whose `default_value` crosses a relation fails to resolve on the
+  existing instances.
 - **Facets have no actions yet.** The engine does not generate the
   `<namespace>/update_<facet>` and `<namespace>/get_<facet>` actions, and does not
   hold the write limit of a facet to the actions of its module: any command may
@@ -29,7 +40,7 @@
   instance before it processes the next, so a refusal on a later instance leaves
   the earlier ones written.
 - **Map types are narrow.** A map holds scalar values under string-based keys: no
-  relation, array or nested map, no `default_value`. The engine has no current
+  relation, array or nested map. The engine has no current
   language, no source language and no detection of a translation made stale by a
   change of the source; the reader chooses the language.
 - **A script session from `createScriptSession` loads the model once**, when it

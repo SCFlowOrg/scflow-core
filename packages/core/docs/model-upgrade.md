@@ -80,8 +80,34 @@ not changed by schema commands: a module is replaced by another version.
 - A local module, `local:<name>`, is replaced with `setLocalModule`, which checks
   the stored instances as a compatible upgrade does and refuses an incompatible
   change with `incompatible_upgrade`.
-- Upgrading a published module, on open or by the host, with its migrations, is
-  not implemented yet.
+- A published module is carried to a newer version with
+  `upgradeModule(locator, manifest, { migrations })`. The migrations of the new
+  manifest past the embedded version run in version order: a declared form
+  rewrites the stored values under the embedded schemas, then the instances are
+  checked against the new schemas as a compatible upgrade, the module is
+  embedded at its new version, and each `body` runs through commands under the new
+  schemas. `migrations` maps the version a body reaches to its code, which the
+  bundle of the module gives. Every declared rule is checked last.
+
+  ```yaml
+  migrations:
+    - to: 2.0.0
+      rename_schema: { from: site, to: place }
+    - to: 2.0.0
+      rename_property: { schema: place, from: label, to: title }
+    - to: 2.0.0
+      delete_property: { schema: place, property: legacy }
+  ```
+
+  The upgrade is one step: any failure undoes it. An instance the new schemas
+  cannot take, a schema that leaves the module with instances no migration moves,
+  fails with `incompatible_upgrade`; an older version, a migration without exactly
+  one form or a body with no code, with `constraint_violation`; a breach of a rule,
+  with `rule_violation` listing every instance at fault in `details.violations`.
+  Deciding when to upgrade (on open, versions and digests) is the host's.
+- `upgradeDataset` also checks every declared rule once the new model applies,
+  and refuses the upgrade with `rule_violation` when one breaks (see
+  [rules.md](rules.md)).
 - `refreshImport` fails with `import_not_upgraded` while the imported dataset
   uses another version of a module than the dataset (see
   [datasets.md](datasets.md#imports)).

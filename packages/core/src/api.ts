@@ -13,10 +13,13 @@ import {
   setUpgradeSnapshot,
 } from "./modelUpgrade.js";
 import { importNamespaceOf, loadResolvers } from "./resolvers.js";
+import { evaluateRules, modelHasRules, ruleViolationError } from "./rules.js";
+import { validateRules } from "./ruleValidation.js";
 import {
   buildDatasetModel,
   isLocalModule,
   loadDatasetModel,
+  MODULE_STORE,
   moduleDigest,
   readModuleEntries,
   readModuleManifests,
@@ -811,6 +814,195 @@ async function setLocalModuleIn(scope: EngineScope, locator: string, manifest: M
 }
 
 // ---------------------------------------------------------------------------
+// Module upgrade — see `docs/model-upgrade.md`, Module upgrade
+// ---------------------------------------------------------------------------
+
+/** What a migration body runs its commands through: the dataset being upgraded, under the installed schemas of the module. */
+export interface MigrationContext {
+  /** The locator of the dataset being upgraded. */
+  readonly locator: string;
+  /** Runs a command on the dataset; a target, when given first, must be `locator`. */
+  runCommand(targetOrCommand: string | AuthoredCommand, command?: AuthoredCommand): Promise<CommandResult>;
+}
+
+/** The body of a migration: a bundle, under the contract of a body, which emits commands only. */
+export type MigrationBody = (context: MigrationContext, params?: unknown) => unknown;
+
+/** What `upgradeModule` takes beside the manifest. */
+export interface UpgradeModuleOptions {
+  /** The body of each migration of the module, by the version it reaches: the code its bundle gives. */
+  migrations?: ReadonlyMap<string, MigrationBody>;
+}
+
+const MIGRATION_FORMS = ["rename_property", "rename_schema", "delete_property", "body"] as const;
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  return 0;
+}
+
+/**
+ * Carries the dataset at `locator` from the embedded manifest of a module it
+ * uses to `manifest`, a newer version of the same module, and returns the
+ * dataset's transient form; observers get a reset. The migrations of
+ * `manifest` past the embedded version, up to its own, run in version order
+ * and in the order written: a declared form (`rename_property`,
+ * `rename_schema`, `delete_property`) rewrites the stored values under the
+ * embedded schemas, then the stored instances are checked against the
+ * installed schemas as an automatic upgrade (a property missing from an
+ * instance takes its default), the module is embedded at its new version, and
+ * each `body`, given by `options.migrations`, runs through commands under the
+ * installed schemas. Every declared rule is then checked on every instance.
+ *
+ * It all happens as one step: a failure undoes everything. Throws
+ * `constraint_violation` for a manifest that is not a newer version of a
+ * published module the dataset uses, or a migration that has not exactly one
+ * form or whose body the options do not give; `incompatible_upgrade` when a
+ * stored instance cannot take the installed schemas; `rule_violation`, with
+ * every instance at fault in `details.violations`, when a rule breaks; what
+ * `createModuleSet` throws for the new set of modules, and what a body throws.
+ */
+async function upgradeModuleIn(scope: EngineScope, locator: string, manifest: ModuleManifest, options: UpgradeModuleOptions = {}): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
+  const next = validateModuleManifest(manifest);
+  if (isLocalModule(next.name)) {
+    throw modelError("constraint_violation", `"${next.name}" is a local module: it changes with setLocalModule`);
+  }
+  await withLock(impl, rest, async () => {
+    if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
+    const before = await readModuleManifests(impl, rest);
+    const index = before.findIndex((m) => m.name === next.name);
+    if (index < 0) throw modelError("constraint_violation", `"${locator}" does not use the module "${next.name}"`);
+    const embedded = before[index];
+    if (compareVersions(next.version, embedded.version) < 0) {
+      throw modelError("constraint_violation", `"${next.name}" ${next.version} is older than ${embedded.version}, the version "${locator}" uses`);
+    }
+    const where = `upgrading "${next.name}" of "${locator}" from ${embedded.version} to ${next.version}`;
+    const steps = (next.migrations as unknown[])
+      .map((raw, order) => ({ raw: raw as TransientObject, order }))
+      .filter(({ raw }) => raw !== null && typeof raw === "object" && typeof raw.to === "string")
+      .filter(({ raw }) => compareVersions(raw.to as string, embedded.version) > 0 && compareVersions(raw.to as string, next.version) <= 0)
+      .sort((a, b) => compareVersions(a.raw.to as string, b.raw.to as string) || a.order - b.order)
+      .map(({ raw }) => {
+        const forms = MIGRATION_FORMS.filter((f) => raw[f] !== undefined && raw[f] !== null);
+        if (forms.length !== 1) throw modelError("constraint_violation", `${where}: the migration to ${String(raw.to)} has ${forms.length} forms, and a migration has exactly one`);
+        const form = forms[0];
+        if (form === "body" && !options.migrations?.has(raw.to as string)) {
+          throw modelError("constraint_violation", `${where}: the migration to ${String(raw.to)} is a body, which the code of the module does not give`);
+        }
+        return { to: raw.to as string, form, operand: raw[form] as TransientValue };
+      });
+
+    const after = before.map((m, i) => (i === index ? next : m));
+    const oldModel = await loadDatasetModel(impl, rest);
+    const newModel = buildDatasetModel(after);
+    const resolversBefore = await loadResolvers(impl, rest);
+    const captured: OpenTransaction = { id: "module-upgrade", depth: 1, delta: new Map(), versionsAtBegin: {} };
+    const writer = wrapForDeltaCapture(impl, locator, new Map([[locator, captured]]), async () => resolversBefore);
+    const qualify = (short: unknown) => `${next.namespace}.${String(short)}`;
+    const rolesOf = (name: string) => {
+      const schema = newModel.schemas.get(name) ?? oldModel?.schemas.get(name);
+      return schema ? derivePropertyRoles(schema) : NO_ROLES;
+    };
+    const operandOf = (step: { to: string; form: string; operand: TransientValue }, keys: string[]): TransientObject => {
+      const operand = step.operand;
+      if (operand === null || typeof operand !== "object" || Array.isArray(operand) || keys.some((k) => typeof (operand as TransientObject)[k] !== "string")) {
+        throw modelError("constraint_violation", `${where}: ${step.form} of the migration to ${step.to} takes ${keys.join(", ")}`);
+      }
+      return operand as TransientObject;
+    };
+
+    try {
+      // the declared forms rewrite the stored values, still under the embedded schemas
+      for (const step of steps) {
+        if (step.form === "rename_schema") {
+          const { from, to } = operandOf(step, ["from", "to"]);
+          for (const raw of await impl.listInstances(rest, qualify(from), rolesOf(qualify(from)))) {
+            const instance = raw as TransientObject;
+            const key = (instance.name ?? instance.id) as string;
+            await writer.putInstance(rest, qualify(to), key, instance, rolesOf(qualify(to)));
+            await writer.deleteInstance(rest, qualify(from), key);
+          }
+        } else if (step.form === "rename_property" || step.form === "delete_property") {
+          const operand = operandOf(step, step.form === "rename_property" ? ["schema", "from", "to"] : ["schema", "property"]);
+          const name = qualify(operand.schema);
+          for (const raw of await impl.listInstances(rest, name, rolesOf(name))) {
+            const instance = { ...(raw as TransientObject) };
+            const from = (step.form === "rename_property" ? operand.from : operand.property) as string;
+            if (!Object.prototype.hasOwnProperty.call(instance, from)) continue;
+            if (step.form === "rename_property") instance[operand.to as string] = instance[from];
+            delete instance[from];
+            await writer.putInstance(rest, name, (instance.name ?? instance.id) as string, instance, rolesOf(name));
+          }
+        }
+      }
+
+      // what no migration covers is an automatic upgrade
+      const datasetValue = await impl.getDataset(rest);
+      const ctx: TypeResolutionContext = { resolveSchema: (n) => newModel.schemas.get(n), resolveScalarType: (n) => newModel.scalarTypes.get(n) };
+      const importNamespaces = (await listImports(impl, rest)).map((i) => i.namespace);
+      const names = new Set<string>();
+      for (const [key] of oldModel?.schemas ?? []) if (oldModel?.set.resolveSchema(key)?.module.key === next.name) names.add(key);
+      for (const [key] of newModel.schemas) if (newModel.set.resolveSchema(key)?.module.key === next.name) names.add(key);
+      for (const key of names) {
+        const schema = newModel.schemas.get(key);
+        const stored = await impl.listInstances(rest, key, rolesOf(key));
+        if (stored.length === 0) continue;
+        if (!schema) throw modelError("incompatible_upgrade", `${where}: schema "${key}" leaves the module but the dataset holds instances of it, and no migration moves them`);
+        const keyProp = keyPropertyName(schema);
+        if (!keyProp) continue;
+        for (const raw of stored) {
+          const instanceKey = (raw as TransientObject)[keyProp] as string;
+          const ns = importNamespaceOf(instanceKey, importNamespaces) ?? "";
+          const bare = { ...(raw as TransientObject), [keyProp]: instanceKey.slice(ns.length) };
+          const reconciled = reconcileInstanceAgainstSchema(schema, bare, ctx, datasetValue, where);
+          if (reconciled) await writer.putInstance(rest, key, instanceKey, { ...reconciled, [keyProp]: instanceKey }, derivePropertyRoles(schema));
+        }
+      }
+
+      await writeModules(writer, rest, after);
+
+      // a body runs through commands, under the installed schemas
+      for (const step of steps) {
+        if (step.form !== "body") continue;
+        const body = options.migrations?.get(step.to) as MigrationBody;
+        const context: MigrationContext = Object.freeze({
+          locator,
+          async runCommand(targetOrCommand: string | AuthoredCommand, command?: AuthoredCommand) {
+            if (typeof targetOrCommand === "string" && targetOrCommand !== locator) {
+              throw modelError("dataset_not_found", `a migration of "${locator}" reaches only that dataset, not "${targetOrCommand}"`);
+            }
+            const authored = typeof targetOrCommand === "string" ? (command as AuthoredCommand) : targetOrCommand;
+            const resolved = resolveCommandForm(authored) as unknown as Command;
+            return runCommandEngine(writer, rest, resolved, await loadResolvers(writer, rest));
+          },
+        });
+        await body(context, {});
+      }
+
+      const violations = await evaluateRules(impl, rest, await loadResolvers(impl, rest), "all");
+      if (violations.length > 0) throw ruleViolationError(violations, `the upgrade of "${next.name}" to ${next.version}`);
+    } catch (error) {
+      await applyEntries(impl, rest, resolversBefore, [...captured.delta.values()], true);
+      await writeModules(impl, rest, before);
+      throw error;
+    }
+
+    const dataChanged = [...captured.delta.values()].some((e) => e.schema !== MODULE_STORE);
+    const patch: TransientObject = { updated_at: new Date().toISOString() };
+    if (dataChanged) {
+      const info = (await impl.getDataset(rest)) as TransientObject;
+      patch.data_minor_version = (typeof info.data_minor_version === "number" ? info.data_minor_version : 0) + 1;
+    }
+    await impl.updateDataset(rest, patch);
+  });
+  notifyObservable(scope, locator, { kind: "reset" });
+  return datasetTransientForm(impl, rest);
+}
+
+// ---------------------------------------------------------------------------
 // Import — see `docs/datasets.md`, Imports
 // ---------------------------------------------------------------------------
 
@@ -1250,7 +1442,13 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
 
   const diff = await computeModelDiff(upgradeImpl, upgradeRest);
   const upgradeResolvers = await loadResolvers(upgradeImpl, upgradeRest);
+  // the rules of the new model are declared against all of it
+  validateRules(upgradeResolvers.schemas, upgradeResolvers.ctx);
   const datasetValue = await impl.getDataset(rest);
+  // every write is captured, so a breach of a rule undoes the upgrade as a whole
+  const resolversBefore = await loadResolvers(impl, rest);
+  const captured: OpenTransaction = { id: "upgrade", depth: 1, delta: new Map(), versionsAtBegin: {} };
+  const writer = wrapForDeltaCapture(impl, locator, new Map([[locator, captured]]), async () => resolversBefore);
 
   const before: TransientValue[] = [];
   const after: TransientValue[] = [];
@@ -1268,7 +1466,7 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
       const backfilled = backfillInstance(oldSchema, newSchema, raw as TransientObject, upgradeResolvers.ctx, datasetValue);
       if (!backfilled) continue;
       before.push(cloneUpgrade(raw));
-      await impl.putInstance(rest, entry.name, backfilled[keyProp] as string, backfilled, newRoles);
+      await writer.putInstance(rest, entry.name, backfilled[keyProp] as string, backfilled, newRoles);
       after.push(cloneUpgrade(backfilled));
     }
   }
@@ -1278,10 +1476,10 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
     // itself back into the real dataset's model store, so the roles are the
     // `schema` meta-schema's own, never a data schema's.
     if (entry.after !== null) {
-      await impl.putInstance(rest, entry.kind, entry.name, entry.after, entry.kind === "schema" ? SCHEMA_ROLES : NO_ROLES);
+      await writer.putInstance(rest, entry.kind, entry.name, entry.after, entry.kind === "schema" ? SCHEMA_ROLES : NO_ROLES);
     } else {
       try {
-        await impl.deleteInstance(rest, entry.kind, entry.name);
+        await writer.deleteInstance(rest, entry.kind, entry.name);
       } catch {
         // already gone — nothing left to remove
       }
@@ -1292,7 +1490,14 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
   // didn't change, so nothing is written back for them here.
 
   // an extension added to a populated dataset lacks an instance for each instance it extends
-  const createdExtensions = await ensureExtensionInstances(impl, rest, upgradeResolvers, datasetValue);
+  const createdExtensions = await ensureExtensionInstances(writer, rest, upgradeResolvers, datasetValue);
+
+  // the declared rules hold on every instance under the new model: an upgrade that breaks one is refused
+  const violations = await evaluateRules(impl, rest, await loadResolvers(impl, rest), "all");
+  if (violations.length > 0) {
+    await applyEntries(impl, rest, resolversBefore, [...captured.delta.values()], true);
+    throw ruleViolationError(violations, "the upgrade");
+  }
 
   const patch: TransientObject = { updated_at: new Date().toISOString() };
   const info = (await impl.getDataset(rest)) as TransientObject;
@@ -1333,10 +1538,37 @@ async function runCommandIn(scope: EngineScope, locator: string, command: Author
   const resolved = resolveCommandForm(command) as unknown as Command;
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
-    const result = await runCommandEngine(impl, rest, resolved, resolvers);
+    const result = await runChecked(impl, rest, locator, resolvers, (checked) => runCommandEngine(checked, rest, resolved, resolvers));
     if (resolved.kind !== "query" && !isModelSchema(resolved.schema) && !isNoopDatasetRename(resolved, result)) await bumpVersion(impl, rest, "data_minor_version");
     return result;
   });
+}
+
+/**
+ * Runs `fn`, the writes of a command or a script run outside a transaction,
+ * as a transaction of its own (see Rules, *When rules are checked*): through
+ * `impl` wrapped to capture what it writes, the declared rules are evaluated
+ * on that delta once `fn` is done, and a breach undoes every write and throws
+ * `rule_violation`. A model without any rule runs `fn` on `impl` directly.
+ */
+async function runChecked<T>(
+  impl: PersistenceInterface,
+  rest: string,
+  locator: string,
+  resolvers: Resolvers,
+  fn: (checked: PersistenceInterface) => Promise<T>,
+): Promise<T> {
+  if (!modelHasRules(resolvers)) return fn(impl);
+  const state: OpenTransaction = { id: "implicit", depth: 1, delta: new Map(), versionsAtBegin: {} };
+  const checked = wrapForDeltaCapture(impl, locator, new Map([[locator, state]]), async () => resolvers);
+  const result = await fn(checked);
+  const entries = [...state.delta.values()];
+  const violations = entries.length === 0 ? [] : await evaluateRules(impl, rest, resolvers, entries);
+  if (violations.length > 0) {
+    await applyEntries(impl, rest, resolvers, entries, true);
+    throw ruleViolationError(violations, "the command");
+  }
+  return result;
 }
 
 /**
@@ -1349,7 +1581,7 @@ async function runScriptIn(scope: EngineScope, locator: string, script: Authored
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
     const resolvedScript: Script = { commands: resolvedCommands };
-    const result = await runScriptEngine(impl, rest, resolvedScript, async () => resolvers);
+    const result = await runChecked(impl, rest, locator, resolvers, (checked) => runScriptEngine(checked, rest, resolvedScript, async () => resolvers));
     if (resolvedCommands.some((c) => c.kind !== "query" && !isModelSchema(c.schema))) await bumpVersion(impl, rest, "data_minor_version");
     return result;
   });
@@ -1373,12 +1605,27 @@ async function runScriptIn(scope: EngineScope, locator: string, script: Authored
 async function createScriptSessionIn(scope: EngineScope, locator: string): Promise<ScriptSession> {
   const { impl, rest } = resolveImpl(scope, locator);
   const resolvers = await loadResolvers(impl, rest);
-  const session = await createScriptSessionEngine(impl, rest, async () => resolvers);
+  // each run is a transaction of its own: its writes go through the capture of the current run
+  let current: PersistenceInterface = impl;
+  const through = new Proxy(impl, {
+    get: (_target, name) => {
+      const value = Reflect.get(current, name);
+      return typeof value === "function" ? value.bind(current) : value;
+    },
+  }) as PersistenceInterface;
+  const session = await createScriptSessionEngine(through, rest, async () => resolvers);
   return {
     variables: session.variables,
     run(scriptCommand: ScriptCommand): Promise<CommandResult> {
       return withLock(impl, rest, async () => {
-        const result = await session.run(scriptCommand);
+        const result = await runChecked(impl, rest, locator, resolvers, async (checked) => {
+          current = checked;
+          try {
+            return await session.run(scriptCommand);
+          } finally {
+            current = impl;
+          }
+        });
         if (scriptCommand.kind !== "query" && !isModelSchema(scriptCommand.schema)) await bumpVersion(impl, rest, "data_minor_version");
         return result;
       });
@@ -2120,6 +2367,9 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
     let observableDelta: ObservableDelta = [];
     if (entries.length > 0) {
       const resolvers = await getResolvers(impl, rest, locator);
+      // the declared rules hold at the end of the transaction, and prepare stays read-only
+      const violations = await evaluateRules(impl, rest, resolvers, entries);
+      if (violations.length > 0) throw ruleViolationError(violations);
       observableDelta = await filterObservableDelta(entries, resolvers, impl, rest);
     }
     const versions = await readVersions(impl, rest);
@@ -2138,7 +2388,10 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
           const resolvers = await getResolvers(impl, rest, locator);
           const resolved = resolveCommandForm(command) as unknown as Command;
           const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
-          const result = await runCommandEngine(deltaImpl, rest, resolved, resolvers);
+          // inside a transaction the rules wait for its prepare phase; outside, the command is a transaction of its own
+          const result = openTx.has(locator)
+            ? await runCommandEngine(deltaImpl, rest, resolved, resolvers)
+            : await runChecked(impl, rest, locator, resolvers, (checked) => runCommandEngine(checked, rest, resolved, resolvers));
           if (resolved.kind !== "query" && !isModelSchema(resolved.schema) && !isNoopDatasetRename(resolved, result)) await bumpVersion(impl, rest, "data_minor_version");
           return result;
         });
@@ -2154,7 +2407,10 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
           await revalidateModel(impl, rest, locator);
           const resolvedScript: Script = { commands: resolvedCommands };
           const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
-          const result = await runScriptEngine(deltaImpl, rest, resolvedScript, () => getResolvers(impl, rest, locator));
+          const lookup = () => getResolvers(impl, rest, locator);
+          const result = openTx.has(locator)
+            ? await runScriptEngine(deltaImpl, rest, resolvedScript, lookup)
+            : await runChecked(impl, rest, locator, await lookup(), (checked) => runScriptEngine(checked, rest, resolvedScript, lookup));
           if (resolvedCommands.some((c) => c.kind !== "query" && !isModelSchema(c.schema))) await bumpVersion(impl, rest, "data_minor_version");
           return result;
         });
@@ -2165,7 +2421,15 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
       refuseIfPrepared(locator);
       const { impl, rest } = resolveImpl(scope, locator);
       const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
-      const session = await createScriptSessionEngine(deltaImpl, rest, () => getResolvers(impl, rest, locator));
+      // outside a transaction each run is a transaction of its own, written through the capture of that run
+      let current: PersistenceInterface = deltaImpl;
+      const through = new Proxy(deltaImpl, {
+        get: (_target, name) => {
+          const value = Reflect.get(current, name);
+          return typeof value === "function" ? value.bind(current) : value;
+        },
+      }) as PersistenceInterface;
+      const session = await createScriptSessionEngine(through, rest, () => getResolvers(impl, rest, locator));
       return {
         variables: session.variables,
         run(scriptCommand: ScriptCommand): Promise<CommandResult> {
@@ -2173,7 +2437,16 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
             refuseIfPrepared(locator);
             return withWriteLock(locator, impl, rest, async () => {
               await revalidateModel(impl, rest, locator);
-              const result = await session.run(scriptCommand);
+              const result = openTx.has(locator)
+                ? await session.run(scriptCommand)
+                : await runChecked(impl, rest, locator, await getResolvers(impl, rest, locator), async (checked) => {
+                    current = checked;
+                    try {
+                      return await session.run(scriptCommand);
+                    } finally {
+                      current = deltaImpl;
+                    }
+                  });
               if (scriptCommand.kind !== "query" && !isModelSchema(scriptCommand.schema) && !isNoopDatasetRename(scriptCommand, result)) await bumpVersion(impl, rest, "data_minor_version");
               return result;
             });
@@ -2380,6 +2653,7 @@ export interface Engine {
   dumpDataset(locator: string, format: DumpFormat): Promise<string>;
   restoreDataset(locator: string, dump: string, format: DumpFormat): Promise<RestoreResult>;
   setLocalModule(locator: string, manifest: ModuleManifest): Promise<TransientValue>;
+  upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<TransientValue>;
   checkImport(locator: string, importedLocator: string): Promise<CheckImportResult>;
   createImport(locator: string, importedLocator: string): Promise<TransientValue>;
   removeImport(locator: string, importKey: Key): Promise<TransientValue>;
@@ -2405,6 +2679,7 @@ function engineOf(scope: EngineScope): Engine {
     dumpDataset: (locator: string, format: DumpFormat) => dumpDatasetIn(scope, locator, format),
     restoreDataset: (locator: string, dump: string, format: DumpFormat) => restoreDatasetIn(scope, locator, dump, format),
     setLocalModule: (locator: string, manifest: ModuleManifest) => setLocalModuleIn(scope, locator, manifest),
+    upgradeModule: (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) => upgradeModuleIn(scope, locator, manifest, options),
     checkImport: (locator: string, importedLocator: string) => checkImportIn(scope, locator, importedLocator),
     createImport: (locator: string, importedLocator: string) => createImportIn(scope, locator, importedLocator),
     removeImport: (locator: string, importKey: Key) => removeImportIn(scope, locator, importKey),
@@ -2443,6 +2718,7 @@ export const {
   dumpDataset,
   restoreDataset,
   setLocalModule,
+  upgradeModule,
   checkImport,
   createImport,
   removeImport,

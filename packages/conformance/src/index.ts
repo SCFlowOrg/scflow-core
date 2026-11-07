@@ -24,6 +24,8 @@ import {
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
+import { procedureCases } from "./procedures.js";
+import { ruleCases } from "./rules.js";
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -2482,4 +2484,6 @@ schemas:
 
   datasetModuleCases(formatPrefix, newLocator);
   facetCases(formatPrefix, newLocator);
+  ruleCases(formatPrefix, newLocator);
+  procedureCases(formatPrefix, newLocator);
 }
