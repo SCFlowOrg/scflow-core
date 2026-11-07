@@ -88,6 +88,13 @@ export interface TextOperation {
 export interface Command {
   kind: CommandKind;
   schema: string;
+  /**
+   * Which instances the command reaches: `""` (the default) the dataset's own;
+   * the namespace of an import, ending with a dot, the instances of that
+   * import; `*` every instance, own and imported. Any value but `""` is for a
+   * `query` only: imported instances are read-only.
+   */
+  namespace?: string;
   filters?: Filter;
   input?: TransientValue[];
   result?: ResultOptions;
@@ -188,7 +195,8 @@ export type ObservableListener = (change: ObservableChange) => void;
  *
  * The interface is deliberately low-level: raw storage of instances by key.
  * Command processing and schema processing are generic and run once above it.
- * A `schema`, `scalar_type` or `import` is an ordinary root-schema instance,
+ * A `schema`, `scalar_type`, `import` or `module` (the manifest of a module the
+ * dataset uses, by module key) is an ordinary root-schema instance,
  * read with `listInstances`/`getInstance` like any other, through no dedicated
  * accessor. Keys are local to the dataset, never namespaced. Reads reflect what
  * is stored at the time of the call, never a copy kept from an earlier call or
@@ -238,9 +246,11 @@ export interface PersistenceInterface {
   /** Creates an empty dataset named `name` at `rest` and returns its transient form; throws `dataset_already_exists` when one is there. */
   createDataset(rest: string, name: string): Promise<TransientValue>;
   /**
-   * Returns the scalar properties of the dataset at `rest` (`name`, the four
-   * versions, `created_at`, `updated_at`); throws `dataset_not_found` when none
-   * is there. Not `schemas`, `scalar_types` or `imports`: those are read with
+   * Returns the properties stored on the dataset at `rest` (`name`, the four
+   * versions, `created_at`, `updated_at`, and `modules`, the list of
+   * `dataset_module` entries, once the dataset uses a module); throws
+   * `dataset_not_found` when none is there. Not `schemas`, `scalar_types`,
+   * `imports` or the manifests of the modules: those are read with
    * `listInstances`.
    */
   getDataset(rest: string): Promise<TransientValue>;
@@ -248,7 +258,8 @@ export interface PersistenceInterface {
    * Merges `patch` into the scalar properties of the dataset at `rest` and
    * returns the dataset as it is afterwards. The engine calls it to bump a
    * version after a change: a model version after a `schema` or `scalar_type`
-   * change, `data_minor_version` after a data change.
+   * change, `data_minor_version` after a data change, `modules` when the
+   * modules of the dataset change. A format keeps every key it is given.
    */
   updateDataset(rest: string, patch: TransientValue): Promise<TransientValue>;
   /**

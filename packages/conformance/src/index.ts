@@ -22,6 +22,7 @@ import {
   upgradeDataset,
 } from "@scfloworg/core";
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
+import { datasetModuleCases } from "./datasetModules.js";
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -2477,4 +2478,6 @@ schemas:
       expect(() => createModuleSet([readModuleManifest(scflow), careless])).toThrow(expect.objectContaining({ code: "unknown_scalar_type" }));
     });
   });
+
+  datasetModuleCases(formatPrefix, newLocator);
 }

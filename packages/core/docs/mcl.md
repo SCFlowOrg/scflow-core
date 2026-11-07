@@ -46,7 +46,7 @@ Each rule is stated in the file named in brackets; read it before relying on the
 - [spec/](spec/README.md): the normative specification of the meta-model and of MCL.
 
 - [formats.md](formats.md): locators, persistent formats, the `js` format.
-- [datasets.md](datasets.md): datasets, the `dataset` instance, lifecycle, the built-in dataset.
+- [datasets.md](datasets.md): datasets, the `dataset` instance, lifecycle, the built-in dataset, the modules of a dataset, local modules, imports.
 - [modules.md](modules.md): module manifests, module sets, namespaces, short and qualified names, `mcl:core`.
 - [model-upgrade.md](model-upgrade.md): changing a model through an upgrade locator.
 - [sessions.md](sessions.md): `MclAccess`, `ApiSession`, transactions, revert.

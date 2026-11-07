@@ -66,3 +66,18 @@ Rules:
   `before` and `after`: a batch of model edits mixes additions, modifications and
   removals. A schema that was not edited but extends one that was is "considered
   as deleted" and appears in `cascade-deleted`.
+
+## Modules
+
+The protocol above changes the schemas and scalar types a dataset holds itself.
+The schemas of the [modules](datasets.md#modules-of-a-dataset) of a dataset are
+not changed by schema commands: a module is replaced by another version.
+
+- A local module, `local:<name>`, is replaced with `setLocalModule`, which checks
+  the stored instances as a compatible upgrade does and refuses an incompatible
+  change with `incompatible_upgrade`.
+- Upgrading a published module, on open or by the host, with its migrations, is
+  not implemented yet.
+- `refreshImport` fails with `import_not_upgraded` while the imported dataset
+  uses another version of a module than the dataset (see
+  [datasets.md](datasets.md#imports)).

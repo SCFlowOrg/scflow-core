@@ -17,7 +17,16 @@ export {
   createScriptSession,
   createApiSession,
   subscribeObservable,
+  setLocalModule,
+  checkImport,
+  createImport,
+  removeImport,
+  refreshImport,
 } from "./api.js";
+export type { InitDatasetOptions } from "./api.js";
+export type { CheckImportResult, RefreshResult } from "./imports.js";
+export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
+export type { DatasetModule } from "./datasetModules.js";
 export type { RestoreResult, CheckUpgradeResult, ApiSession, TransactionId, DatasetVersions, Delta, PreparedTransaction, ObservableChange, ObservableDelta, ObservableListener } from "./api.js";
 export type { ModelActionDefinition, ModelActionParamsSchema } from "./action.js";
 export { resolveCommandForm } from "./command.js";

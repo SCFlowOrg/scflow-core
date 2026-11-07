@@ -16,7 +16,7 @@ A command is one operation on the instances of one schema.
 | `filters` | A filter selecting the instances to act on; absent: every instance |
 | `input` | An object or an array of objects, for `create` and `update` |
 | `result` | Narrows what comes back: `properties` and `before` |
-| `namespace` | `""` (default) for the dataset's own instances; an import namespace or `*` for imported ones, `query` only |
+| `namespace` | `""` (default) for the dataset's own instances; the namespace of an import for its instances; `*` for every instance. Any value other than `""` is for `query` only (see [datasets.md](datasets.md), Imports) |
 
 `kind` and `schema` may be written as one key whose name is the kind: `{ update:
 "task", filters, input }`. A key outside the table is refused before anything runs.

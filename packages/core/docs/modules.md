@@ -5,9 +5,8 @@ A module owns schemas, scalar types and actions. It is declared in a manifest,
 [Module](spec/meta-model.md#module), [Names](spec/meta-model.md#names) and
 [The Core Module](spec/meta-model.md#the-core-module). This page shows the API.
 
-Datasets do not use modules yet: a dataset still holds its own schemas and reads
-the built-in dataset of its area (see [datasets.md](datasets.md)). A module set
-stands apart from any dataset.
+A dataset uses modules and embeds them (see [datasets.md](datasets.md), Modules
+of a dataset). A module set also stands apart from any dataset.
 
 ## Read a manifest
 

@@ -12,7 +12,20 @@ import {
   setUpgradeMarker,
   setUpgradeSnapshot,
 } from "./modelUpgrade.js";
-import { loadResolvers } from "./resolvers.js";
+import { importNamespaceOf, loadResolvers } from "./resolvers.js";
+import {
+  buildDatasetModel,
+  isLocalModule,
+  loadDatasetModel,
+  moduleDigest,
+  readModuleEntries,
+  readModuleManifests,
+  writeModules,
+} from "./datasetModules.js";
+import { listImports, performImport, performRefreshImport, performRemoveImport, planImport } from "./imports.js";
+import type { CheckImportResult, DatasetRef, RefreshResult } from "./imports.js";
+import type { ModuleManifest } from "./mclCore.js";
+import { validateModuleManifest } from "./modules.js";
 import { isEmbedded, keyPropertyName } from "./schema.js";
 import { createScriptSession as createScriptSessionEngine, runScript as runScriptEngine } from "./script.js";
 import { NO_ROLES, SCHEMA_ROLES, derivePropertyRoles, resolveType } from "./schemaProcessing.js";
@@ -232,7 +245,7 @@ async function reconcileRestoredBuiltinData(
     if (!keyProp) continue; // embedded — never independently stored
     const roles = derivePropertyRoles(schema);
     for (const raw of await impl.listInstances(rest, schema.name, roles)) {
-      const reconciled = reconcileInstanceAgainstSchema(schema, raw as TransientObject, resolvers.ctx, datasetValue, locator);
+      const reconciled = reconcileInstanceAgainstSchema(schema, raw as TransientObject, resolvers.ctx, datasetValue, `restoring "${locator}" against its built-in`);
       if (reconciled) await impl.putInstance(rest, schema.name, reconciled[keyProp] as string, reconciled, roles);
     }
   }
@@ -254,7 +267,7 @@ function reconcileInstanceAgainstSchema(
   instance: TransientObject,
   ctx: TypeResolutionContext,
   datasetValue: TransientValue,
-  locator: string,
+  where: string,
 ): TransientObject | null {
   const keyProp = keyPropertyName(schema);
   const props = new Map(schema.properties.map((p) => [p.name, p] as const));
@@ -276,7 +289,7 @@ function reconcileInstanceAgainstSchema(
     } catch {
       throw modelError(
         "incompatible_upgrade",
-        `restoring "${locator}": built-in schema "${schema.name}"'s property "${name}" has an unresolvable type "${prop.type}"`,
+        `${where}: schema "${schema.name}"'s property "${name}" has an unresolvable type "${prop.type}"`,
       );
     }
 
@@ -284,7 +297,7 @@ function reconcileInstanceAgainstSchema(
       if (resolved.kind === "relation" && prop.constraints.mandatory === true) {
         throw modelError(
           "incompatible_upgrade",
-          `restoring "${locator}": an existing "${schema.name}" instance has no value for "${name}", now mandatory on the built-in's current schema`,
+          `${where}: an existing "${schema.name}" instance has no value for "${name}", now mandatory on its current schema`,
         );
       }
       result[name] = computePropertyValue(prop, false, undefined, resolved, result, schema, datasetValue);
@@ -306,7 +319,7 @@ function reconcileInstanceAgainstSchema(
       } catch {
         throw modelError(
           "incompatible_upgrade",
-          `restoring "${locator}": an existing "${schema.name}" instance's "${name}" no longer satisfies the built-in's current schema`,
+          `${where}: an existing "${schema.name}" instance's "${name}" no longer satisfies its current schema`,
         );
       }
     }
@@ -319,13 +332,31 @@ function reconcileInstanceAgainstSchema(
 // Dataset lifecycle
 // ---------------------------------------------------------------------------
 
+/** What a new dataset is created with. */
+export interface InitDatasetOptions {
+  /**
+   * The modules the dataset uses, each embedded with it. Published modules
+   * (`publisher:module`) and local modules (`local:<name>`) alike; `mcl:core` is
+   * always there and is never listed.
+   */
+  modules?: ModuleManifest[];
+}
+
 /**
- * Creates an empty dataset named `name` at `locator` and returns its transient form; observers get a reset.
- * Throws `unknown_persistent_format` and `dataset_already_exists`. See `docs/datasets.md`.
+ * Creates an empty dataset named `name` at `locator`, with the modules of
+ * `options`, and returns its transient form; observers get a reset.
+ * Throws `unknown_persistent_format` and `dataset_already_exists`; and, before
+ * anything is created, what `createModuleSet` throws for the modules:
+ * `duplicate_name` for two versions of one module, `namespace_conflict`,
+ * `constraint_violation` for a manifest that breaks the `module` schema. See
+ * `docs/datasets.md`.
  */
-export async function initDataset(locator: string, name: string): Promise<TransientValue> {
+export async function initDataset(locator: string, name: string, options: InitDatasetOptions = {}): Promise<TransientValue> {
   const { impl, rest } = resolveImpl(locator);
+  const manifests = (options.modules ?? []).map((m) => validateModuleManifest(m));
+  if (manifests.length > 0) buildDatasetModel(manifests);
   await impl.createDataset(rest, name);
+  if (manifests.length > 0) await writeModules(impl, rest, manifests);
   notifyObservable(locator, { kind: "reset" });
   return datasetTransientForm(impl, rest);
 }
@@ -338,8 +369,9 @@ export async function initDataset(locator: string, name: string): Promise<Transi
  * a Key (name), never a nested object (see `TransientValue`).
  * `schemas`/`scalar_types` include the area's built-in overlay (see
  * `loadBuiltinOverlay`) alongside `rest`'s own; `rest`'s own names win on a
- * name collision. `imports` is always `[]`: the built-in is never a standing
- * import (`import` part, "Built-in — virtual, not imported").
+ * name collision. `modules` lists the `dataset_module` entries, `[]` for a
+ * dataset with none. `imports` names the stored imports: the built-in is
+ * never a standing import (`import` part, "Built-in — virtual, not imported").
  */
 async function datasetTransientForm(impl: PersistenceInterface, rest: string): Promise<TransientValue> {
   const info = (await impl.getDataset(rest)) as TransientObject;
@@ -357,7 +389,8 @@ async function datasetTransientForm(impl: PersistenceInterface, rest: string): P
     ...info,
     schemas: [...names(schemas), ...overlaySchemaNames],
     scalar_types: [...names(scalarTypes), ...overlayScalarTypeNames],
-    imports: [],
+    modules: Array.isArray(info.modules) ? info.modules : [],
+    imports: names(await impl.listInstances(rest, "import", NO_ROLES)),
   };
 }
 
@@ -442,9 +475,13 @@ function validateDumpShape(
   scalar_types: TransientObject;
   imports: TransientObject;
   data: TransientObject;
+  modules?: TransientObject;
+  model?: TransientObject;
 } {
   if (!isPlainObject(parsed)) throw modelError("invalid_dump", "dump is not an object");
-  const { dataset, schemas, scalar_types, imports, data } = parsed;
+  const { dataset, schemas, scalar_types, imports, data, modules, model } = parsed;
+  if (modules !== undefined && !isPlainObject(modules)) throw modelError("invalid_dump", "dump.modules is not an object");
+  if (model !== undefined && !isPlainObject(model)) throw modelError("invalid_dump", "dump.model is not an object");
   if (!isPlainObject(dataset) || typeof dataset.name !== "string") {
     throw modelError("invalid_dump", "dump has no dataset.name");
   }
@@ -455,8 +492,11 @@ function validateDumpShape(
 }
 
 /**
- * Serializes the dataset's model (schemas, scalar types) and data (every
- * instance of every schema the dataset itself defines) as a single string.
+ * Serializes the dataset's model (schemas, scalar types), its modules (the
+ * `modules` section, each entry with its version and digest, and the `model`
+ * section, each manifest embedded whole) and data (every instance of every
+ * schema the dataset defines or reads from its modules, imported instances
+ * included) as a single string.
  * Deliberately dumps by schema name rather than filtering on `is_root`: the
  * fixture model in packages/conformance only tags `task` `is_root: true`
  * (not `person`/`comment`, which are still queried/created directly at the
@@ -501,7 +541,12 @@ export async function dumpDataset(locator: string, format: DumpFormat): Promise<
   // stored data in `rest` even though the "widget" schema definition itself
   // is never stored there.
   const data: TransientObject = {};
-  const schemasForData = [...schemaInstances.map((raw) => raw as unknown as NormalizedSchema), ...(overlay?.schemas ?? [])];
+  const datasetModel = await loadDatasetModel(impl, rest);
+  const schemasForData = [
+    ...schemaInstances.map((raw) => raw as unknown as NormalizedSchema),
+    ...(overlay?.schemas ?? []),
+    ...(datasetModel ? datasetModel.schemas.values() : []),
+  ];
   for (const schema of schemasForData) {
     if (isEmbedded(schema)) continue;
     const key = keyPropertyName(schema);
@@ -525,7 +570,20 @@ export async function dumpDataset(locator: string, format: DumpFormat): Promise<
     if (Object.keys(bySchemaKey).length > 0) data[schemaName] = bySchemaKey;
   }
 
-  return serialize({ dataset: info, schemas, scalar_types: scalarTypes, imports, data }, format);
+  // The modules of the dataset, in the shape of the `modules` and `model`
+  // sections of a project file: the entries by module key, and each manifest
+  // embedded whole.
+  const entries = await readModuleEntries(impl, rest);
+  const manifests = await readModuleManifests(impl, rest, entries);
+  const modules: TransientObject = {};
+  const model: TransientObject = {};
+  entries.forEach((entry, i) => {
+    modules[entry.module] = { version: entry.version, digest: entry.digest };
+    model[entry.module] = manifests[i] as unknown as TransientValue;
+  });
+  const { modules: _listed, ...datasetRecord } = info;
+
+  return serialize({ dataset: datasetRecord, modules, model, schemas, scalar_types: scalarTypes, imports, data }, format);
 }
 
 /**
@@ -543,10 +601,12 @@ export async function dumpDataset(locator: string, format: DumpFormat): Promise<
  * extension) gets it, from the defaults, as `upgradeDataset` does; the dump's
  * versions are kept. A restore that fails once the dataset is created deletes
  * it again, so it creates nothing.
+ * The modules of the dump (its `modules` and `model` sections) are embedded
+ * again; a snapshot of a published module that does not match its digest is
+ * refused with `invalid_dump` (see `restoredModules`).
  * `pendingRealignment` lists every import restored with a `none` caching
  * policy still needing manual realignment; the built-in never appears in it,
- * and no other kind of import is implemented yet (see scaffoldplan.md), so
- * it is always `[]`.
+ * and `createImport` makes every import `full`, so it is always `[]`.
  */
 export async function restoreDataset(locator: string, dump: string, format: DumpFormat): Promise<RestoreResult> {
   const { impl, rest } = resolveImpl(locator);
@@ -570,9 +630,21 @@ async function populateRestoredDataset(
   impl: PersistenceInterface,
   rest: string,
   locator: string,
-  parsed: { dataset: TransientObject; schemas: TransientObject; scalar_types: TransientObject; imports: TransientObject; data: TransientObject },
+  parsed: {
+    dataset: TransientObject;
+    schemas: TransientObject;
+    scalar_types: TransientObject;
+    imports: TransientObject;
+    data: TransientObject;
+    modules?: TransientObject;
+    model?: TransientObject;
+  },
 ): Promise<void> {
-  await impl.updateDataset(rest, parsed.dataset);
+  const { modules: _listed, ...datasetRecord } = parsed.dataset;
+  await impl.updateDataset(rest, datasetRecord);
+  const manifests = await restoredModules(parsed.modules ?? {}, parsed.model ?? {});
+  const datasetModel = manifests.length > 0 ? buildDatasetModel(manifests) : null;
+  if (manifests.length > 0) await writeModules(impl, rest, manifests);
 
   for (const [name, instance] of Object.entries(parsed.scalar_types)) {
     await impl.putInstance(rest, "scalar_type", name, instance, NO_ROLES);
@@ -599,6 +671,7 @@ async function populateRestoredDataset(
     const schemaDef =
       (parsed.schemas[schemaName] as unknown as NormalizedSchema | undefined) ??
       overlaySchemasByName.get(schemaName) ??
+      datasetModel?.schemas.get(schemaName) ??
       (Object.prototype.hasOwnProperty.call(META_SCHEMAS, schemaName) ? META_SCHEMAS[schemaName] : undefined);
     const roles = schemaDef ? derivePropertyRoles(schemaDef) : NO_ROLES;
     for (const [key, instance] of Object.entries(bySchemaKey)) {
@@ -614,6 +687,191 @@ async function populateRestoredDataset(
   // instances, in `rest` or in its built-in, holds no extension instance for
   // them. The versions of the dump are kept, so nothing is bumped here.
   await ensureExtensionInstances(impl, rest, await loadResolvers(impl, rest), await impl.getDataset(rest));
+}
+
+/**
+ * The manifests a dump embeds, in the order of its `modules` section. Each entry
+ * of `modules` has its manifest in `model`, named and versioned as the entry
+ * says. A published module whose manifest does not match its digest is a
+ * hand-edited snapshot and is refused with `invalid_dump`; a local module is
+ * editable, so its digest is computed again.
+ */
+async function restoredModules(modules: TransientObject, model: TransientObject): Promise<ModuleManifest[]> {
+  const manifests: ModuleManifest[] = [];
+  for (const [key, entry] of Object.entries(modules)) {
+    if (!isPlainObject(entry)) throw modelError("invalid_dump", `dump.modules["${key}"] is not an object`);
+    if (!Object.prototype.hasOwnProperty.call(model, key)) throw modelError("invalid_dump", `dump.model has no manifest for module "${key}"`);
+    let manifest: ModuleManifest;
+    try {
+      manifest = validateModuleManifest(model[key]);
+    } catch (err) {
+      throw modelError("invalid_dump", `the manifest of module "${key}" in the dump is not valid: ${(err as Error).message}`);
+    }
+    if (manifest.name !== key) throw modelError("invalid_dump", `dump.model["${key}"] is the manifest of "${manifest.name}"`);
+    if (manifest.version !== entry.version) {
+      throw modelError("invalid_dump", `dump.modules lists "${key}" at version ${String(entry.version)}, its manifest is at ${manifest.version}`);
+    }
+    if (!isLocalModule(key) && (await moduleDigest(manifest)) !== entry.digest) {
+      throw modelError("invalid_dump", `the manifest of module "${key}" does not match its digest: a snapshot of a published module is never edited`);
+    }
+    manifests.push(manifest);
+  }
+  return manifests;
+}
+
+// ---------------------------------------------------------------------------
+// Local modules — see `docs/datasets.md`, Local modules
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds or replaces the local module `manifest` (`local:<name>`) of the dataset
+ * at `locator` and returns the dataset's transient form; observers get a reset.
+ * The instances already stored are checked against the new schemas: a property
+ * missing from an instance takes its default, and `data_minor_version` is
+ * bumped when one is backfilled. Throws `constraint_violation` for a module
+ * that is not local (a published module changes through a model upgrade) or a
+ * manifest that breaks the `module` schema; what `createModuleSet` throws for
+ * the new set of modules; and `incompatible_upgrade`, changing nothing, when a
+ * stored instance cannot take the change or its schema leaves the module.
+ */
+export async function setLocalModule(locator: string, manifest: ModuleManifest): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(locator);
+  const local = validateModuleManifest(manifest);
+  if (!isLocalModule(local.name)) {
+    throw modelError("constraint_violation", `"${local.name}" is a published module: only a local module, local:<name>, is edited in its dataset`);
+  }
+  await withLock(impl, rest, async () => {
+    const before = await readModuleManifests(impl, rest);
+    const index = before.findIndex((m) => m.name === local.name);
+    const after = index < 0 ? [...before, local] : before.map((m, i) => (i === index ? local : m));
+    const oldModel = await loadDatasetModel(impl, rest);
+    const newModel = buildDatasetModel(after);
+    const where = `changing "${local.name}" of "${locator}"`;
+
+    const datasetValue = await impl.getDataset(rest);
+    const ctx: TypeResolutionContext = {
+      resolveSchema: (n) => newModel.schemas.get(n),
+      resolveScalarType: (n) => newModel.scalarTypes.get(n),
+    };
+    const importNamespaces = (await listImports(impl, rest)).map((i) => i.namespace);
+    const changes: { schema: NormalizedSchema; key: string; instance: TransientObject }[] = [];
+    for (const [key, oldSchema] of oldModel?.schemas ?? []) {
+      if (oldModel?.set.resolveSchema(key)?.module.key !== local.name) continue;
+      const keyProp = keyPropertyName(oldSchema);
+      if (!keyProp) continue;
+      const stored = await impl.listInstances(rest, key, derivePropertyRoles(oldSchema));
+      if (stored.length === 0) continue;
+      const schema = newModel.schemas.get(key);
+      if (!schema) throw modelError("incompatible_upgrade", `${where}: schema "${key}" leaves the module but the dataset holds instances of it`);
+      for (const raw of stored) {
+        // The key of an imported instance carries the namespace of its import,
+        // which its own type does not allow for: it is checked without it.
+        const key = (raw as TransientObject)[keyProp] as string;
+        const ns = importNamespaceOf(key, importNamespaces) ?? "";
+        const bare = { ...(raw as TransientObject), [keyProp]: key.slice(ns.length) };
+        const reconciled = reconcileInstanceAgainstSchema(schema, bare, ctx, datasetValue, where);
+        if (reconciled) changes.push({ schema, key, instance: { ...reconciled, [keyProp]: key } });
+      }
+    }
+
+    await writeModules(impl, rest, after);
+    for (const change of changes) {
+      await impl.putInstance(rest, change.schema.name, change.key, change.instance, derivePropertyRoles(change.schema));
+    }
+    const patch: TransientObject = { updated_at: new Date().toISOString() };
+    if (changes.length > 0) {
+      const info = (await impl.getDataset(rest)) as TransientObject;
+      patch.data_minor_version = (typeof info.data_minor_version === "number" ? info.data_minor_version : 0) + 1;
+    }
+    await impl.updateDataset(rest, patch);
+  });
+  notifyObservable(locator, { kind: "reset" });
+  return datasetTransientForm(impl, rest);
+}
+
+// ---------------------------------------------------------------------------
+// Import — see `docs/datasets.md`, Imports
+// ---------------------------------------------------------------------------
+
+async function datasetRef(locator: string): Promise<DatasetRef> {
+  const { impl, rest } = resolveImpl(locator);
+  if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
+  return { impl, rest, locator };
+}
+
+/**
+ * Whether the dataset at `importedLocator` can be imported into the one at
+ * `locator`. `canImport` is false for a dataset imported into itself, a back
+ * loop, an import already there at other data versions, a nested import both
+ * datasets hold at other data versions, and modules that cannot join: two
+ * versions of one module, or a set that does not build. Throws
+ * `unknown_persistent_format` and `dataset_not_found`.
+ */
+export async function checkImport(locator: string, importedLocator: string): Promise<CheckImportResult> {
+  const importer = await datasetRef(locator);
+  const imported = await datasetRef(importedLocator);
+  return (await planImport(importer, imported)).result;
+}
+
+/**
+ * Imports the dataset at `importedLocator` into the one at `locator` and
+ * returns the new import, or the existing one when it is already imported at
+ * the same data versions. Its instances are copied under a new namespace, its
+ * modules join the dataset's and its imports are flattened. Bumps
+ * `data_minor_version`; observers get a reset. Throws
+ * `unknown_persistent_format`, `dataset_not_found`, and `cannot_import` when
+ * `checkImport` finds the import impossible.
+ */
+export async function createImport(locator: string, importedLocator: string): Promise<TransientValue> {
+  const importer = await datasetRef(locator);
+  const imported = await datasetRef(importedLocator);
+  const { record, changed } = await withLock(importer.impl, importer.rest, async () => {
+    const done = await performImport(importer, imported);
+    if (done.changed) await bumpVersion(importer.impl, importer.rest, "data_minor_version");
+    return done;
+  });
+  if (changed) notifyObservable(locator, { kind: "reset" });
+  return record;
+}
+
+/**
+ * Removes import `importKey` from the dataset at `locator`, with its
+ * instances, and returns it. A relation of the dataset's own instances to a
+ * removed instance is cleared. The modules it brought stay. Bumps
+ * `data_minor_version`; observers get a reset. Throws
+ * `unknown_persistent_format`, `dataset_not_found` and `key_not_found`.
+ */
+export async function removeImport(locator: string, importKey: Key): Promise<TransientValue> {
+  const ref = await datasetRef(locator);
+  const record = await withLock(ref.impl, ref.rest, async () => {
+    const removed = await performRemoveImport(ref, importKey);
+    await bumpVersion(ref.impl, ref.rest, "data_minor_version");
+    return removed;
+  });
+  notifyObservable(locator, { kind: "reset" });
+  return record;
+}
+
+/**
+ * Realigns import `importKey` of the dataset at `locator` with its dataset:
+ * new instances are copied, changed ones overwritten, removed ones deleted,
+ * and a relation of the dataset's own instances to a removed one is cleared,
+ * reported in `updated-before` and `updated-after`. The import records the
+ * data versions it reached. Bumps `data_minor_version` when anything changed;
+ * observers get a reset then. Throws `unknown_persistent_format`,
+ * `dataset_not_found`, `key_not_found`, and `import_not_upgraded` when the
+ * imported dataset uses another version of a module the dataset uses.
+ */
+export async function refreshImport(locator: string, importKey: Key): Promise<RefreshResult> {
+  const ref = await datasetRef(locator);
+  const resolveRef = (l: string): DatasetRef => ({ ...resolveImpl(l), locator: l });
+  const { result, changed } = await withLock(ref.impl, ref.rest, async () => {
+    const done = await performRefreshImport(ref, resolveRef, importKey);
+    if (done.changed) await bumpVersion(ref.impl, ref.rest, "data_minor_version");
+    return done;
+  });
+  if (changed) notifyObservable(locator, { kind: "reset" });
+  return result;
 }
 
 // ---------------------------------------------------------------------------
