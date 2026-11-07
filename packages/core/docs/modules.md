@@ -5,6 +5,11 @@ A module owns schemas, scalar types and actions. It is declared in a manifest,
 [Module](spec/meta-model.md#module), [Names](spec/meta-model.md#names) and
 [The Core Module](spec/meta-model.md#the-core-module). This page shows the API.
 
+The code of a module, its bundle, and `modules.load`, which reads a module from
+its folder, are in `@scfloworg/module` (see its
+[docs/module-packages.md](../../module/docs/module-packages.md)); the engine
+reads manifests only.
+
 A dataset uses modules and embeds them (see [datasets.md](datasets.md), Modules
 of a dataset). A module set also stands apart from any dataset.
 

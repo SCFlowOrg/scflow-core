@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build-schemas.mjs && tsc -b",
+    "build": "node scripts/build-schemas.mjs && tsc -b && tsc -p tsconfig.module.json && node scripts/build-module.mjs",
     "test": "node scripts/build-schemas.mjs && vitest run"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@scfloworg/core-plugin-core": "^0.1.0",
+    "@scfloworg/module": "^0.1.0",
     "@types/node": "^22.10.0",
     "js-yaml": "^5.4.2",
     "typescript": "^5.7.0",

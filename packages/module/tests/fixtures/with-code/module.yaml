@@ -1,0 +1,17 @@
+# A module whose action has its body in the bundle.
+name: acme:greet
+namespace: greet
+version: 1.2.0
+mcl: ^1.0
+schemas:
+  - name: greeting
+    properties:
+      - name: text
+        type: string
+actions:
+  - id: greet/say_hello
+    title: Say hello
+    description: Creates a greeting for a name.
+migrations:
+  - to: 1.2.0
+    # its body is in the bundle
