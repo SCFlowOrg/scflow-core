@@ -27,7 +27,7 @@ const dataset = await queryDataset("js:app"); // the dataset's name, versions an
 - [`docs/spec/`](docs/spec/README.md) is the normative specification of the
   meta-model and of MCL. The code follows it.
 - [`docs/mcl.md`](docs/mcl.md) introduces the language and indexes the usage
-  documents: formats, datasets, modules, model upgrade, sessions, commands, authoring,
+  documents: formats, datasets with their modules and imports, modules, model upgrade, sessions, commands, authoring,
   multilingual properties, observability, model actions and limitations.
 - The contract of each exported symbol, its errors included, is its doc comment.
   `ErrorCode` documents every error code.

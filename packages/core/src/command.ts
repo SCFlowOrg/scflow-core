@@ -6,6 +6,7 @@ import { checkFilter, checkFilterOnCandidates, matchFilter } from "./filter.js";
 import { isModelSchema, getUpgradeMarker, runSchemaCommand } from "./modelUpgrade.js";
 import { substitutePlaceholders } from "./placeholders.js";
 import { isPlainObject, resolveTextOperation } from "./textOperations.js";
+import { importNamespaceOf } from "./resolvers.js";
 import type { Resolvers } from "./resolvers.js";
 import { findProperty, isRoot, isSharedByName, keyPropertyName, ownerProperties } from "./schema.js";
 import { derivePropertyRoles, resolveType, scalarDefaultValue, scalarNullValue, NO_ROLES, SCHEMA_ROLES } from "./schemaProcessing.js";
@@ -1400,6 +1401,29 @@ async function executeCommand(
     }
   }
 
+  // `import` is constant: only the import API creates, refreshes or removes one.
+  if (command.schema === "import" && command.kind !== "query") {
+    if (command.kind === "create") {
+      throw modelError("import_cannot_be_created", `an import is created by createImport, never by a command`);
+    }
+    throw modelError("constraint_violation", `an import is constant: ${command.kind} it with refreshImport or removeImport`);
+  }
+  const namespace = command.namespace ?? "";
+  if (typeof namespace !== "string") throw modelError("constraint_violation", `the namespace of a command is a string`);
+  if (namespace !== "") {
+    if (command.kind !== "query") {
+      throw modelError("constraint_violation", `imported instances are read-only: a ${command.kind} reaches the dataset's own instances only, with no namespace`);
+    }
+    if (namespace !== "*" && !(resolvers.importNamespaces ?? []).includes(namespace)) {
+      throw modelError("constraint_violation", `"${namespace}" is the namespace of no import of the dataset`);
+    }
+  }
+  const inNamespace = (key: Key): boolean => {
+    if (namespace === "*") return true;
+    const of = importNamespaceOf(key, (resolvers.importNamespaces ?? []));
+    return namespace === "" ? of === undefined : of === namespace;
+  };
+
   const datasetValue = await impl.getDataset(rest);
   // command.kind !== "query" already ruled out isModelSchema(command.schema)
   // above (delegated to runSchemaCommand instead) — schema is always an
@@ -1444,7 +1468,8 @@ async function executeCommand(
       for (const raw of await impl.listInstances(rest, candidateSchema.name, candidateRoles)) {
         byKey.set(keyOf(candidateSchema, raw), raw);
       }
-      for (const raw of byKey.values()) {
+      for (const [rawKey, raw] of byKey) {
+        if (!inNamespace(rawKey)) continue;
         // Every virtual (generated) relation property is resolved before
         // filtering and before it's returned — per packages/core/docs/spec/meta-model.md#relations,
         // "every time a virtual relation is read, whether as a
@@ -1757,7 +1782,8 @@ async function buildDatasetTransientForm(impl: PersistenceInterface, rest: strin
     ...info,
     schemas: [...names(schemas), ...overlaySchemaNames],
     scalar_types: [...names(scalarTypes), ...overlayScalarTypeNames],
-    imports: [],
+    modules: Array.isArray(info.modules) ? info.modules : [],
+    imports: (await impl.listInstances(rest, "import", NO_ROLES)).map((i) => (i as TransientObject).name),
   };
 }
 
@@ -1784,6 +1810,8 @@ async function executeDatasetCommand(
     "model_only",
     "schemas",
     "scalar_types",
+    "modules",
+    "imports",
   ];
 
   switch (command.kind) {

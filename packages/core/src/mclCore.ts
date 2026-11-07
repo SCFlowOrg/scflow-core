@@ -156,8 +156,15 @@ const SCHEMAS: NormalizedSchema[] = [
   schema(
     "import",
     "a composition of the data of another dataset into this one",
-    [prop("name", "identifier"), prop("locator", "string"), prop("namespace", "string")],
-    { is_root: true, has_description: true },
+    [
+      prop("name", "identifier"),
+      prop("locator", "string"),
+      prop("namespace", "string"),
+      prop("data_major_version", "integer"),
+      prop("data_minor_version", "integer"),
+      prop("caching_policy", "string", { enum: ["full", "partial", "none"] }, "full"),
+    ],
+    { shared_by_name: true, is_root: true, has_description: true },
   ),
   schema(
     "module",

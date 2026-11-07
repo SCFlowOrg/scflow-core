@@ -18,7 +18,7 @@ A command is one operation on the instances of one schema: a `query` reads them,
 | --- | --- |
 | `kind` | `query`, `create`, `update` or `delete` |
 | `schema` | the target schema, by a name resolved as in [Names](meta-model.md#names); the command reaches its instances and those of every schema extending it, transitively |
-| `namespace` | the empty string (default): the dataset's own instances; a specific import's namespace, or `*` for every namespace: imported instances too, `query` only (see [Import](meta-model.md#import)) |
+| `namespace` | the empty string (default): the dataset's own instances; the namespace of an import: the instances of that import; `*`: every instance, own and imported. A namespace other than the empty string is for `query` only (see [Import](meta-model.md#import)) |
 | `filters` | a [Filter](#filter) selecting the instances to act on; absent: every instance |
 | `input` | an array of objects for `create` and `update`; a bare object is shorthand for a one-element array |
 | `cascade` | `delete` only: also removes the instances that reach a removed instance through an `on_delete: confirm` relation; false by default |

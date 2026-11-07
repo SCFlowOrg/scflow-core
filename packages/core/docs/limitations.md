@@ -1,7 +1,16 @@
 # Limitations
 
-- **No imports.** A dataset cannot reference the instances of another dataset. The
-  only overlay is the built-in dataset of its area, which is not a standing import.
+- **Imports are always `full`.** `createImport` gives every import the caching
+  policy `full`, and a dump writes every imported instance; `partial` and `none`
+  are kept when a flattened import carries them, but change nothing yet.
+- **No `import` relation on instances.** An imported instance is told by the
+  namespace that starts its key; the virtual relation of an instance to its
+  import is not generated yet.
+- **Refresh overwrites.** `refreshImport` applies every change of the imported
+  dataset and clears the relations of own instances to removed ones, mandatory
+  ones included; it leaves no review to the host before it writes.
+- **Published modules are not upgraded.** The modules of a dataset are set by
+  `initDataset`, a restore or an import; only a local module changes afterwards.
 - **Embedded schemas are not command targets.** An embedded schema is a data shape
   inside its owner; a command addressed to it fails with `unknown_schema`.
 - **Unknown input keys are ignored.** A key of a `create` or `update` `input` that

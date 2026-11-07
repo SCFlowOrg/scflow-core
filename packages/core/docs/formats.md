@@ -15,6 +15,12 @@ format decides (a file path, a connection string, an in-memory name).
   [datasets.md](datasets.md), Schemas and the built-in dataset).
 - `core` depends on no format. A format implements `PersistenceInterface`, and
   `core` runs the whole command language on top of it.
+- A format stores the modules of a dataset as it stores any instance: each
+  manifest as an instance of `module`, by module key, and their list as the
+  `modules` property that `updateDataset` gives it. The instances of a schema of
+  a module are stored under its qualified name, such as `scflow.actor`, and an
+  import as an instance of `import`. Imported instances are ordinary instances
+  whose keys start with the namespace of their import.
 - A format stores an instance under the key `core` gives it and generates no key
   itself: the `id` of an instance of a schema that is not `shared_by_name` is a uuid
   that `core` generates, or that the `create` supplies.

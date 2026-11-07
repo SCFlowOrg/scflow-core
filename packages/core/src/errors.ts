@@ -128,6 +128,14 @@ export const ErrorCode = {
   /** Two modules of one module set declare the same namespace, or a module declares `mcl`, the namespace of `mcl:core`. */
   namespace_conflict: "namespace_conflict",
 
+  // Import
+  /** A command creates an `import`: only `createImport` does. */
+  import_cannot_be_created: "import_cannot_be_created",
+  /** `createImport` meets one of the issues `checkImport` reports. */
+  cannot_import: "cannot_import",
+  /** `refreshImport` finds the imported dataset using a version of a module the dataset has not upgraded to. */
+  import_not_upgraded: "import_not_upgraded",
+
   // Filter
   /** A filter is not a mapping, an `and` or `or` is not an array, or a `not` is not a mapping. */
   invalid_filter: "invalid_filter",

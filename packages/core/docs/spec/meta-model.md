@@ -1171,6 +1171,7 @@ The schema for imports is the following, it is part of the meta-model, instances
 
 ```yaml
 name: import
+shared_by_name:
 is_root:
 description: a composition of the data of another dataset into this one
 has_description:
