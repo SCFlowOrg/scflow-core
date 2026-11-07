@@ -57,6 +57,14 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Schema Processing](model-command-language.md#schema-processing): Turning a schema authored with the properties/constraints convention into a clean schema definition for the interpreter
 - [Examples](model-command-language.md#examples): Worked examples of query, create, update and delete commands against a simple example model, plus a script chaining several of them
 
+## [The project file](project-file.md)
+
+- [Envelope](project-file.md#envelope): The keys every reader writes the same way
+- [Sections](project-file.md#sections): One owner per section, and a reader writes back what it does not know
+- [Shapes](project-file.md#shapes): A single JSON file for exchange and a folder for Git
+- [References to data](project-file.md#references-to-data): How a section tracks the data it points to
+- [Sample projects](project-file.md#sample-projects): Samples every implementation reads and writes back
+
 ## [Typescript reference implementation](typescript-reference-implementation.md)
 
 - [API Import](typescript-reference-implementation.md#api-import): Importing a dataset and refreshing an import through the TypeScript API

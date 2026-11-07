@@ -1,0 +1,10 @@
+{
+  "version": 7,
+  "payload": [
+    1,
+    {
+      "nested": true
+    },
+    null
+  ]
+}

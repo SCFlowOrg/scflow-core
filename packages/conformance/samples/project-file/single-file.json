@@ -1,0 +1,65 @@
+{
+  "format": "scflow-project",
+  "version": 1,
+  "type": "acme:tasks",
+  "title": "Demo project",
+  "modules": {
+    "acme:tasks": {
+      "version": "1.0.0",
+      "digest": "sha256:6f0303f7975961e1056498aaa25d1afadc14dca86bf620a0266b2824e3ca346f"
+    }
+  },
+  "model": {
+    "acme:tasks": {
+      "name": "acme:tasks",
+      "namespace": "tasks",
+      "version": "1.0.0",
+      "mcl": "^1.0",
+      "title": "Tasks",
+      "schemas": [
+        {
+          "name": "task",
+          "is_root": true,
+          "properties": [
+            {
+              "name": "title",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "data": {
+    "name": "demo",
+    "data_major_version": 1,
+    "data_minor_version": 2,
+    "instances": {
+      "tasks.task": [
+        {
+          "id": "0c1f4a52-7e3b-4d7a-9a55-2f6d1c8e4b10",
+          "title": "Write the sample"
+        }
+      ]
+    }
+  },
+  "ui": {
+    "version": 1,
+    "data_version": "1.2",
+    "views": [
+      {
+        "task": "0c1f4a52-7e3b-4d7a-9a55-2f6d1c8e4b10"
+      }
+    ]
+  },
+  "unknown-tool": {
+    "version": 7,
+    "payload": [
+      1,
+      {
+        "nested": true
+      },
+      null
+    ]
+  }
+}

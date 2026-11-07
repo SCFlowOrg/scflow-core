@@ -1,0 +1,6 @@
+{
+  "format": "scflow-project",
+  "version": 1,
+  "type": "acme:tasks",
+  "title": "Demo project"
+}

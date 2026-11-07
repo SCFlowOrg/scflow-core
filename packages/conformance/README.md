@@ -18,3 +18,7 @@ runConformanceSuite(createJsPersistenceInterface(), "js");
 A format that provides the optional `lock(rest)` of the persistence interface also runs a lock case: a second holder waits for the first, two sessions writing at once lose no version increment, and the lock is released after a failed command and after a rolled-back transaction. The case is skipped for a format without `lock`.
 
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.
+
+## Sample projects
+
+`samples/project-file` holds sample projects in both shapes of the [project file](../core/docs/spec/project-file.md), with unknown sections. Every implementation reads them and writes them back without loss.

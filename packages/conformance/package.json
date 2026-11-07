@@ -13,7 +13,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "samples"
   ],
   "scripts": {
     "build": "tsc -b",

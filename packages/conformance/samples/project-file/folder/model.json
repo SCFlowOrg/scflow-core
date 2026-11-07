@@ -1,0 +1,21 @@
+{
+  "acme:tasks": {
+    "name": "acme:tasks",
+    "namespace": "tasks",
+    "version": "1.0.0",
+    "mcl": "^1.0",
+    "title": "Tasks",
+    "schemas": [
+      {
+        "name": "task",
+        "is_root": true,
+        "properties": [
+          {
+            "name": "title",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+}
