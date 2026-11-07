@@ -21,6 +21,8 @@
   },
   "devDependencies": {
     "@scfloworg/core-plugin-core": "^0.1.0",
+    "@scfloworg/environment": "^0.1.0",
+    "@scfloworg/format-js": "^0.1.0",
     "@scfloworg/module": "^0.1.0",
     "@types/node": "^22.10.0",
     "js-yaml": "^5.4.2",

@@ -39,8 +39,10 @@ export default defineModule(manifest, {
   its body. `define_process` is the body of `scflow/define_process`.
 - `migrations` maps a version to the body of the migration that reaches it. It
   keeps every migration, because a dataset can be several versions behind.
-- A body is a function. Its signature, the context it receives, is the context
-  of actions, which the environment gives; `defineModule` does not call it.
+- A body is a function `(context, params) => result`, sync or async. The
+  context is the context of actions, which the environment gives (see
+  [`@scfloworg/environment`](../../environment/docs/environment.md), The
+  context of an action); `defineModule` does not call it.
 - `defineModule` checks nothing and imports nothing: it returns the manifest and
   the code, frozen. The host checks them when it loads the module.
 
@@ -151,6 +153,11 @@ A module is refused with `constraint_violation` of `@scfloworg/core` when:
   procedure and no bundle;
 - a migration of the code reaches a version that no migration of the manifest
   declares with `to`.
+
+`checkModuleCode(manifest, bundle)`, from `@scfloworg/module/code`, is this
+check alone, given the manifest and the default export of a bundle, or `null`
+for a module with no code. It reads no file, so an environment that installs a
+module given by `defineModule` runs it as `modules.load` does.
 
 A body is a function, and nothing else of it is checked: running it is the
 environment's.

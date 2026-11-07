@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
+import type { AuthoredCommand, AuthoredScript } from "@scfloworg/core";
 import { buildModule, checkBundle } from "@scfloworg/module/build";
 import { modules, type ModulePackage } from "@scfloworg/module/host";
 import { ACTIONS } from "../src/index.js";
@@ -39,10 +40,14 @@ describe("the bundle of scflow:core", () => {
   it("runs a body on the one engine the host gives", async () => {
     const doc = await setupActions();
     const createActorType = module.actions.get("scflow/create_actor_type")!;
-    const created = (await createActorType(doc.mcl, doc.locator, {
-      name: "Plant",
-      domains: ["physical"],
-    })) as { id: string };
+    // The context of an action, as an environment gives it, on the test document.
+    const context = {
+      locator: doc.locator,
+      action: "scflow/create_actor_type",
+      runCommand: (locator: string, command: AuthoredCommand) => doc.mcl.runCommand(locator, command),
+      runScript: (locator: string, script: AuthoredScript) => doc.mcl.runScript(locator, script),
+    };
+    const created = (await createActorType(context, { name: "Plant", domains: ["physical"] })) as { id: string };
     const [stored] = await doc.query("actor_type");
     expect(stored.id).toBe(created.id);
     expect(stored.display_name).toEqual({ en: "Plant" });

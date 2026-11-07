@@ -12,8 +12,9 @@ These packages are the source of truth. They are developed, versioned and publis
 | `repl` | The interactive REPL | `core`, `format-js` |
 | `repl-conformance` | The same kind of suite, through the REPL command-block parser | `core`, `repl` |
 | `core-plugin-core` | The runtime behind the `core-plugin` application plugin | `core`, `format-js` |
-| `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, `modules.load` | `core` (not its `defineModule` entry) |
-| `scflow-core` | The supply chain flow model: schemas and domain logic, the module `scflow:core` | `core`, `module` (at build) |
+| `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, the check of the code against the manifest, `modules.load` | `core` (not its `defineModule` entry) |
+| `environment` | The environment: the catalogue of modules with their code, formats given at creation, open datasets, the context of actions and the transaction of one action | `core`, `module` |
+| `scflow-core` | The supply chain flow model: schemas and domain logic, the module `scflow:core` | `core`, `module` (at build), `environment` (in tests) |
 
 Every package depends on `core`, so a change to `core` is built and tested on the whole repo.
 

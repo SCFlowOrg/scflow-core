@@ -1,0 +1,26 @@
+# The sample module of the acceptance of phase B (tests/phase-b.test.ts): a
+# facet on scflow.actor, with the actions that write and read it.
+name: acme:carbon
+namespace: carbon
+version: 1.0.0
+mcl: ^1.0
+title: Carbon footprint
+dependencies:
+  - module: scflow:core
+    version: ^1.0
+schemas:
+  - name: actor_emissions
+    description: The carbon footprint of an actor
+    facet_of: scflow.actor
+    properties:
+      - name: co2
+        type: number
+        minimum: 0
+actions:
+  - id: carbon/update_actor_emissions
+    title: Set the emissions of an actor
+    description: Sets the CO2 of an actor, in tonnes, and returns its emissions.
+  - id: carbon/get_actor_emissions
+    title: Read the emissions of an actor
+    description: Returns the emissions of an actor, empty when none is set.
+    kind: read

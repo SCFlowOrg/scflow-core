@@ -56,13 +56,34 @@ import type { ScriptSession } from "./script.js";
  * The modelling language's public surface; usage is in `docs/mcl.md`.
  * Every function takes `locator: string` as a plain argument — no session/handle object,
  * so the same Command/Script is replayable against any locator.
+ *
+ * Every function runs in an engine scope: its persistent formats and the
+ * listeners of its observable changes. `createEngine` (at the end of this
+ * file) gives an engine its own scope; the free functions share the global
+ * one, which `registerPersistentFormat` fills (see `docs/formats.md`).
  */
 
-const registry = new Map<string, PersistenceInterface>();
+/** What one engine holds: its formats by name and its observable listeners by locator. */
+interface EngineScope {
+  readonly formats: Map<string, PersistenceInterface>;
+  readonly listeners: Map<string, Set<ObservableListener>>;
+}
 
-/** Registers `impl` under `impl.name`, the prefix of the locators it serves; a later registration under the same name replaces the earlier one. */
+function newScope(formats: readonly PersistenceInterface[]): EngineScope {
+  const scope: EngineScope = { formats: new Map(), listeners: new Map() };
+  for (const impl of formats) {
+    if (scope.formats.has(impl.name)) throw modelError("duplicate_name", `two persistent formats are named "${impl.name}"`);
+    scope.formats.set(impl.name, impl);
+  }
+  return scope;
+}
+
+/** The scope of the free functions of the API. */
+const GLOBAL_SCOPE = newScope([]);
+
+/** Registers `impl` under `impl.name` for the free functions, the prefix of the locators it serves; a later registration under the same name replaces the earlier one. An engine made by `createEngine` does not see it. */
 export function registerPersistentFormat(impl: PersistenceInterface): void {
-  registry.set(impl.name, impl);
+  GLOBAL_SCOPE.formats.set(impl.name, impl);
 }
 
 function splitLocator(locator: string): { formatName: string; rest: string } {
@@ -73,9 +94,9 @@ function splitLocator(locator: string): { formatName: string; rest: string } {
   return { formatName: locator.slice(0, i), rest: locator.slice(i + 1) };
 }
 
-function resolveImpl(locator: string): { impl: PersistenceInterface; rest: string } {
+function resolveImpl(scope: EngineScope, locator: string): { impl: PersistenceInterface; rest: string } {
   const { formatName, rest } = splitLocator(locator);
-  const impl = registry.get(formatName);
+  const impl = scope.formats.get(formatName);
   if (!impl) throw modelError("unknown_persistent_format", `no persistent format registered for "${formatName}"`);
   return { impl, rest };
 }
@@ -351,13 +372,13 @@ export interface InitDatasetOptions {
  * `constraint_violation` for a manifest that breaks the `module` schema. See
  * `docs/datasets.md`.
  */
-export async function initDataset(locator: string, name: string, options: InitDatasetOptions = {}): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(locator);
+async function initDatasetIn(scope: EngineScope, locator: string, name: string, options: InitDatasetOptions = {}): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const manifests = (options.modules ?? []).map((m) => validateModuleManifest(m));
   if (manifests.length > 0) buildDatasetModel(manifests);
   await impl.createDataset(rest, name);
   if (manifests.length > 0) await writeModules(impl, rest, manifests);
-  notifyObservable(locator, { kind: "reset" });
+  notifyObservable(scope, locator, { kind: "reset" });
   return datasetTransientForm(impl, rest);
 }
 
@@ -395,8 +416,8 @@ async function datasetTransientForm(impl: PersistenceInterface, rest: string): P
 }
 
 /** Returns the transient form of the dataset at `locator`, or `null` when none exists. Throws `unknown_persistent_format`. */
-export async function queryDataset(locator: string): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(locator);
+async function queryDatasetIn(scope: EngineScope, locator: string): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
   if (!(await impl.datasetExists(rest))) return null;
   return datasetTransientForm(impl, rest);
 }
@@ -405,8 +426,8 @@ export async function queryDataset(locator: string): Promise<TransientValue> {
  * Bumps model_major_version and/or data_major_version by 1, resetting that
  * part's minor version to 0 (semver-style).
  */
-export async function bumpMajorVersions(locator: string, bumpModel: boolean, bumpPdata: boolean): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(locator);
+async function bumpMajorVersionsIn(scope: EngineScope, locator: string, bumpModel: boolean, bumpPdata: boolean): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const dataset = (await impl.getDataset(rest)) as TransientObject;
   const patch: TransientObject = { updated_at: new Date().toISOString() };
   if (bumpModel) {
@@ -427,11 +448,11 @@ export async function bumpMajorVersions(locator: string, bumpModel: boolean, bum
  * Removes the dataset at `locator` and returns its transient form as it was before removal; observers get a reset.
  * Throws `unknown_persistent_format` and `dataset_not_found`.
  */
-export async function deleteDataset(locator: string): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(locator);
+async function deleteDatasetIn(scope: EngineScope, locator: string): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const before = await datasetTransientForm(impl, rest); // throws dataset_not_found if missing
   await impl.deleteDataset(rest);
-  notifyObservable(locator, { kind: "reset" });
+  notifyObservable(scope, locator, { kind: "reset" });
   return before;
 }
 
@@ -507,8 +528,8 @@ function validateDumpShape(
  * reasoning; worth revisiting once the dataset's own auto-relation-per-root-
  * schema mechanism (packages/core/docs/spec/meta-model.md#dataset) is implemented.
  */
-export async function dumpDataset(locator: string, format: DumpFormat): Promise<string> {
-  const { impl, rest } = resolveImpl(locator);
+async function dumpDatasetIn(scope: EngineScope, locator: string, format: DumpFormat): Promise<string> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const info = (await impl.getDataset(rest)) as TransientObject; // throws dataset_not_found if missing
 
   const [schemaInstances, scalarTypeInstances, importInstances] = await Promise.all([
@@ -608,8 +629,8 @@ export async function dumpDataset(locator: string, format: DumpFormat): Promise<
  * policy still needing manual realignment; the built-in never appears in it,
  * and `createImport` makes every import `full`, so it is always `[]`.
  */
-export async function restoreDataset(locator: string, dump: string, format: DumpFormat): Promise<RestoreResult> {
-  const { impl, rest } = resolveImpl(locator);
+async function restoreDatasetIn(scope: EngineScope, locator: string, dump: string, format: DumpFormat): Promise<RestoreResult> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const parsed = deserialize(dump, format);
   validateDumpShape(parsed);
 
@@ -621,7 +642,7 @@ export async function restoreDataset(locator: string, dump: string, format: Dump
     throw err;
   }
 
-  notifyObservable(locator, { kind: "reset" });
+  notifyObservable(scope, locator, { kind: "reset" });
 
   return { dataset: await datasetTransientForm(impl, rest), pendingRealignment: [] };
 }
@@ -734,8 +755,8 @@ async function restoredModules(modules: TransientObject, model: TransientObject)
  * the new set of modules; and `incompatible_upgrade`, changing nothing, when a
  * stored instance cannot take the change or its schema leaves the module.
  */
-export async function setLocalModule(locator: string, manifest: ModuleManifest): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(locator);
+async function setLocalModuleIn(scope: EngineScope, locator: string, manifest: ModuleManifest): Promise<TransientValue> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const local = validateModuleManifest(manifest);
   if (!isLocalModule(local.name)) {
     throw modelError("constraint_violation", `"${local.name}" is a published module: only a local module, local:<name>, is edited in its dataset`);
@@ -785,7 +806,7 @@ export async function setLocalModule(locator: string, manifest: ModuleManifest):
     }
     await impl.updateDataset(rest, patch);
   });
-  notifyObservable(locator, { kind: "reset" });
+  notifyObservable(scope, locator, { kind: "reset" });
   return datasetTransientForm(impl, rest);
 }
 
@@ -793,8 +814,8 @@ export async function setLocalModule(locator: string, manifest: ModuleManifest):
 // Import — see `docs/datasets.md`, Imports
 // ---------------------------------------------------------------------------
 
-async function datasetRef(locator: string): Promise<DatasetRef> {
-  const { impl, rest } = resolveImpl(locator);
+async function datasetRef(scope: EngineScope, locator: string): Promise<DatasetRef> {
+  const { impl, rest } = resolveImpl(scope, locator);
   if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
   return { impl, rest, locator };
 }
@@ -807,9 +828,9 @@ async function datasetRef(locator: string): Promise<DatasetRef> {
  * versions of one module, or a set that does not build. Throws
  * `unknown_persistent_format` and `dataset_not_found`.
  */
-export async function checkImport(locator: string, importedLocator: string): Promise<CheckImportResult> {
-  const importer = await datasetRef(locator);
-  const imported = await datasetRef(importedLocator);
+async function checkImportIn(scope: EngineScope, locator: string, importedLocator: string): Promise<CheckImportResult> {
+  const importer = await datasetRef(scope, locator);
+  const imported = await datasetRef(scope, importedLocator);
   return (await planImport(importer, imported)).result;
 }
 
@@ -822,15 +843,15 @@ export async function checkImport(locator: string, importedLocator: string): Pro
  * `unknown_persistent_format`, `dataset_not_found`, and `cannot_import` when
  * `checkImport` finds the import impossible.
  */
-export async function createImport(locator: string, importedLocator: string): Promise<TransientValue> {
-  const importer = await datasetRef(locator);
-  const imported = await datasetRef(importedLocator);
+async function createImportIn(scope: EngineScope, locator: string, importedLocator: string): Promise<TransientValue> {
+  const importer = await datasetRef(scope, locator);
+  const imported = await datasetRef(scope, importedLocator);
   const { record, changed } = await withLock(importer.impl, importer.rest, async () => {
     const done = await performImport(importer, imported);
     if (done.changed) await bumpVersion(importer.impl, importer.rest, "data_minor_version");
     return done;
   });
-  if (changed) notifyObservable(locator, { kind: "reset" });
+  if (changed) notifyObservable(scope, locator, { kind: "reset" });
   return record;
 }
 
@@ -841,14 +862,14 @@ export async function createImport(locator: string, importedLocator: string): Pr
  * `data_minor_version`; observers get a reset. Throws
  * `unknown_persistent_format`, `dataset_not_found` and `key_not_found`.
  */
-export async function removeImport(locator: string, importKey: Key): Promise<TransientValue> {
-  const ref = await datasetRef(locator);
+async function removeImportIn(scope: EngineScope, locator: string, importKey: Key): Promise<TransientValue> {
+  const ref = await datasetRef(scope, locator);
   const record = await withLock(ref.impl, ref.rest, async () => {
     const removed = await performRemoveImport(ref, importKey);
     await bumpVersion(ref.impl, ref.rest, "data_minor_version");
     return removed;
   });
-  notifyObservable(locator, { kind: "reset" });
+  notifyObservable(scope, locator, { kind: "reset" });
   return record;
 }
 
@@ -862,15 +883,15 @@ export async function removeImport(locator: string, importKey: Key): Promise<Tra
  * `dataset_not_found`, `key_not_found`, and `import_not_upgraded` when the
  * imported dataset uses another version of a module the dataset uses.
  */
-export async function refreshImport(locator: string, importKey: Key): Promise<RefreshResult> {
-  const ref = await datasetRef(locator);
-  const resolveRef = (l: string): DatasetRef => ({ ...resolveImpl(l), locator: l });
+async function refreshImportIn(scope: EngineScope, locator: string, importKey: Key): Promise<RefreshResult> {
+  const ref = await datasetRef(scope, locator);
+  const resolveRef = (l: string): DatasetRef => ({ ...resolveImpl(scope, l), locator: l });
   const { result, changed } = await withLock(ref.impl, ref.rest, async () => {
     const done = await performRefreshImport(ref, resolveRef, importKey);
     if (done.changed) await bumpVersion(ref.impl, ref.rest, "data_minor_version");
     return done;
   });
-  if (changed) notifyObservable(locator, { kind: "reset" });
+  if (changed) notifyObservable(scope, locator, { kind: "reset" });
   return result;
 }
 
@@ -897,8 +918,8 @@ function newUpgradeRest(rest: string): string {
  * `runCommand`/`runScript` — never against `locator` itself, see
  * command.ts's `not_upgrade_locator` gating.
  */
-export async function createUpgradeLocator(locator: string): Promise<string> {
-  const { impl, rest } = resolveImpl(locator);
+async function createUpgradeLocatorIn(scope: EngineScope, locator: string): Promise<string> {
+  const { impl, rest } = resolveImpl(scope, locator);
   if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
   const info = (await impl.getDataset(rest)) as TransientObject;
 
@@ -927,8 +948,8 @@ export async function createUpgradeLocator(locator: string): Promise<string> {
   return `${formatName}:${upgradeRest}`;
 }
 
-async function requireUpgradeLocator(upgradeLocator: string): Promise<{ impl: PersistenceInterface; rest: string; marker: { source_locator: string; namespace: string } }> {
-  const { impl, rest } = resolveImpl(upgradeLocator);
+async function requireUpgradeLocator(scope: EngineScope, upgradeLocator: string): Promise<{ impl: PersistenceInterface; rest: string; marker: { source_locator: string; namespace: string } }> {
+  const { impl, rest } = resolveImpl(scope, upgradeLocator);
   if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${upgradeLocator}"`);
   const marker = await getUpgradeMarker(impl, rest);
   if (!marker) throw modelError("not_upgrade_locator", `"${upgradeLocator}" is not an upgrade locator`);
@@ -951,8 +972,8 @@ async function requireUpgradeLocator(upgradeLocator: string): Promise<{ impl: Pe
  * process, say — recovers that dataset from here rather than having to
  * remember it from the `createUpgradeLocator` call.
  */
-export async function queryUpgradeLocator(upgradeLocator: string): Promise<{ source_locator: string; namespace: string; commandResult: CommandResult }> {
-  const { impl, rest, marker } = await requireUpgradeLocator(upgradeLocator);
+async function queryUpgradeLocatorIn(scope: EngineScope, upgradeLocator: string): Promise<{ source_locator: string; namespace: string; commandResult: CommandResult }> {
+  const { impl, rest, marker } = await requireUpgradeLocator(scope, upgradeLocator);
   const diff = await computeModelDiff(impl, rest);
 
   const before: TransientValue[] = [];
@@ -1134,10 +1155,10 @@ function classifySchemaInstances(
  * held in `upgradeLocator`. See `classifySchemaInstances` above for what
  * counts as automatic.
  */
-export async function checkUpgrade(locator: string, upgradeLocator: string): Promise<CheckUpgradeResult> {
-  const { impl, rest } = resolveImpl(locator);
+async function checkUpgradeIn(scope: EngineScope, locator: string, upgradeLocator: string): Promise<CheckUpgradeResult> {
+  const { impl, rest } = resolveImpl(scope, locator);
   if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
-  const { impl: upgradeImpl, rest: upgradeRest } = await requireUpgradeLocator(upgradeLocator);
+  const { impl: upgradeImpl, rest: upgradeRest } = await requireUpgradeLocator(scope, upgradeLocator);
 
   const diff = await computeModelDiff(upgradeImpl, upgradeRest);
   // Resolve property types against the upgrade dataset's model, not the real
@@ -1211,15 +1232,15 @@ function backfillInstance(
  * incompatible, it is rejected." See `docs/model-upgrade.md` and the
  * `incompatible_upgrade` doc comment of `ErrorCode`.
  */
-export async function upgradeDataset(locator: string, upgradeLocator: string): Promise<CommandResult> {
-  const { impl, rest } = resolveImpl(locator);
+async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLocator: string): Promise<CommandResult> {
+  const { impl, rest } = resolveImpl(scope, locator);
   if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
-  const { impl: upgradeImpl, rest: upgradeRest, marker } = await requireUpgradeLocator(upgradeLocator);
+  const { impl: upgradeImpl, rest: upgradeRest, marker } = await requireUpgradeLocator(scope, upgradeLocator);
   if (marker.source_locator !== locator) {
     throw modelError("not_upgrade_locator", `"${upgradeLocator}" was not created for "${locator}"`);
   }
 
-  const check = await checkUpgrade(locator, upgradeLocator);
+  const check = await checkUpgradeIn(scope, locator, upgradeLocator);
   if (check.modifiedSchema.length > 0 || check.lostSchema.length > 0) {
     throw modelError(
       "incompatible_upgrade",
@@ -1307,8 +1328,8 @@ function isNoopDatasetRename(command: { kind: string; schema: string }, result: 
  * Throws `unknown_persistent_format`, `dataset_not_found`, `not_upgrade_locator`, `upgrade_locator`, and any Command or Filter exception.
  * See `docs/commands.md`.
  */
-export async function runCommand(locator: string, command: AuthoredCommand): Promise<CommandResult> {
-  const { impl, rest } = resolveImpl(locator);
+async function runCommandIn(scope: EngineScope, locator: string, command: AuthoredCommand): Promise<CommandResult> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const resolved = resolveCommandForm(command) as unknown as Command;
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
@@ -1322,8 +1343,8 @@ export async function runCommand(locator: string, command: AuthoredCommand): Pro
  * Runs the commands of `script` in order against the dataset at `locator` and returns the result of the last one;
  * a command names its result with `as` for later placeholders. Throws what `runCommand` throws, and `unknown_reference`.
  */
-export async function runScript(locator: string, script: AuthoredScript): Promise<CommandResult> {
-  const { impl, rest } = resolveImpl(locator);
+async function runScriptIn(scope: EngineScope, locator: string, script: AuthoredScript): Promise<CommandResult> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const resolvedCommands = script.commands.map((c) => resolveCommandForm(c) as unknown as ScriptCommand);
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
@@ -1349,8 +1370,8 @@ export async function runScript(locator: string, script: AuthoredScript): Promis
  * here bumps `data_minor_version` on its own if it wasn't a `query` — every
  * separately-typed command is its own change, not a batch.
  */
-export async function createScriptSession(locator: string): Promise<ScriptSession> {
-  const { impl, rest } = resolveImpl(locator);
+async function createScriptSessionIn(scope: EngineScope, locator: string): Promise<ScriptSession> {
+  const { impl, rest } = resolveImpl(scope, locator);
   const resolvers = await loadResolvers(impl, rest);
   const session = await createScriptSessionEngine(impl, rest, async () => resolvers);
   return {
@@ -1366,36 +1387,34 @@ export async function createScriptSession(locator: string): Promise<ScriptSessio
 }
 
 // ---------------------------------------------------------------------------
-// Observable notifications — module-level registry, independent of
+// Observable notifications — kept by the engine scope, independent of
 // any ApiSession. Keyed by locator alone; a listener may register before a
 // dataset exists at that locator, or after one has been deleted, and stays
 // registered. Survives restoreDataset (an Open), not just set up after one.
 // ---------------------------------------------------------------------------
 
-const observableListeners = new Map<string, Set<ObservableListener>>();
-
 /**
  * Registers `listener` for the changes of `observable` schemas at `locator`, independent of any session, and returns the function that unregisters it.
  * The registration may precede the dataset. See `docs/observability.md`.
  */
-export function subscribeObservable(locator: string, listener: ObservableListener): () => void {
-  let listeners = observableListeners.get(locator);
+function subscribeObservableIn(scope: EngineScope, locator: string, listener: ObservableListener): () => void {
+  let listeners = scope.listeners.get(locator);
   if (!listeners) {
     listeners = new Set();
-    observableListeners.set(locator, listeners);
+    scope.listeners.set(locator, listeners);
   }
   listeners.add(listener);
   return () => {
-    const current = observableListeners.get(locator);
+    const current = scope.listeners.get(locator);
     if (current) {
       current.delete(listener);
-      if (current.size === 0) observableListeners.delete(locator);
+      if (current.size === 0) scope.listeners.delete(locator);
     }
   };
 }
 
-function notifyObservable(locator: string, change: ObservableChange): void {
-  const listeners = observableListeners.get(locator);
+function notifyObservable(scope: EngineScope, locator: string, change: ObservableChange): void {
+  const listeners = scope.listeners.get(locator);
   if (!listeners || listeners.size === 0) return;
   for (const listener of listeners) {
     try {
@@ -1977,7 +1996,7 @@ function decodeDelta(delta: Delta): { versions: DatasetVersions; entries: DeltaE
  * `deleteDataset`, which would otherwise read or act on an intermediate
  * state.
  */
-export function createApiSession(): ApiSession {
+function createApiSessionIn(scope: EngineScope): ApiSession {
   const resolversCache = new Map<string, Promise<CachedModel>>();
   const openTx = new Map<string, OpenTransaction>();
   const pending = new Map<string, Promise<void>>();
@@ -2113,7 +2132,7 @@ export function createApiSession(): ApiSession {
     runCommand(locator: string, command: AuthoredCommand): Promise<CommandResult> {
       return serialize(locator, async () => {
         refuseIfPrepared(locator);
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         return withWriteLock(locator, impl, rest, async () => {
           await revalidateModel(impl, rest, locator);
           const resolvers = await getResolvers(impl, rest, locator);
@@ -2129,7 +2148,7 @@ export function createApiSession(): ApiSession {
     runScript(locator: string, script: AuthoredScript): Promise<CommandResult> {
       return serialize(locator, async () => {
         refuseIfPrepared(locator);
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         const resolvedCommands = script.commands.map((c) => resolveCommandForm(c) as unknown as ScriptCommand);
         return withWriteLock(locator, impl, rest, async () => {
           await revalidateModel(impl, rest, locator);
@@ -2144,7 +2163,7 @@ export function createApiSession(): ApiSession {
 
     async createScriptSession(locator: string): Promise<ScriptSession> {
       refuseIfPrepared(locator);
-      const { impl, rest } = resolveImpl(locator);
+      const { impl, rest } = resolveImpl(scope, locator);
       const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
       const session = await createScriptSessionEngine(deltaImpl, rest, () => getResolvers(impl, rest, locator));
       return {
@@ -2169,7 +2188,7 @@ export function createApiSession(): ApiSession {
       openTx.delete(locator);
       if (!state) return;
       void serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         try {
           await rollbackState(locator, impl, rest, state);
         } finally {
@@ -2183,14 +2202,14 @@ export function createApiSession(): ApiSession {
     },
 
     async supportsTransactions(locator: string): Promise<boolean> {
-      const { impl, rest } = resolveImpl(locator);
+      const { impl, rest } = resolveImpl(scope, locator);
       await requireDataset(impl, rest, locator);
       return impl.supportsTransactions === true;
     },
 
     beginTransaction(locator: string, label?: string): Promise<TransactionId> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         await requireDataset(impl, rest, locator);
         requireTransactionCapability(impl, locator);
         const existing = openTx.get(locator);
@@ -2223,7 +2242,7 @@ export function createApiSession(): ApiSession {
 
     prepareTransaction(locator: string, transactionId: TransactionId): Promise<PreparedTransaction> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         await requireDataset(impl, rest, locator);
         requireTransactionCapability(impl, locator);
         const state = requireOpenTransaction(locator, transactionId);
@@ -2237,7 +2256,7 @@ export function createApiSession(): ApiSession {
 
     commitTransaction(locator: string, transactionId: TransactionId): Promise<void> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         // A prepared transaction's finalize cannot fail: no storage I/O
         // from here on, only the caller-error checks below.
         if (!openTx.get(locator)?.prepared) await requireDataset(impl, rest, locator);
@@ -2257,7 +2276,7 @@ export function createApiSession(): ApiSession {
           await releaseTransactionLock(state);
         } finally {
           if (prepared.observableDelta.length > 0) {
-            notifyObservable(locator, { kind: "delta", changes: prepared.observableDelta });
+            notifyObservable(scope, locator, { kind: "delta", changes: prepared.observableDelta });
           }
         }
       });
@@ -2265,7 +2284,7 @@ export function createApiSession(): ApiSession {
 
     rollbackTransaction(locator: string, transactionId: TransactionId): Promise<void> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         await requireDataset(impl, rest, locator);
         requireTransactionCapability(impl, locator);
         const state = requireOpenTransaction(locator, transactionId);
@@ -2284,7 +2303,7 @@ export function createApiSession(): ApiSession {
 
     revert(locator: string, delta: Delta): Promise<void> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         await requireDataset(impl, rest, locator);
         requireTransactionCapability(impl, locator);
         if (!openTx.has(locator)) throw modelError("no_transaction_in_progress", `no transaction is open on "${locator}"`);
@@ -2307,16 +2326,16 @@ export function createApiSession(): ApiSession {
     // creates no binding of its own name.
 
     queryDataset(locator: string): Promise<TransientValue> {
-      return serialize(locator, () => queryDataset(locator));
+      return serialize(locator, () => queryDatasetIn(scope, locator));
     },
 
     dumpDataset(locator: string, format: "json" | "yaml"): Promise<string> {
-      return serialize(locator, () => dumpDataset(locator, format));
+      return serialize(locator, () => dumpDatasetIn(scope, locator, format));
     },
 
     deleteDataset(locator: string): Promise<TransientValue> {
       return serialize(locator, async () => {
-        const { impl, rest } = resolveImpl(locator);
+        const { impl, rest } = resolveImpl(scope, locator);
         const state = openTx.get(locator);
         openTx.delete(locator);
         if (state) {
@@ -2327,8 +2346,114 @@ export function createApiSession(): ApiSession {
           }
         }
         resolversCache.delete(locator);
-        return deleteDataset(locator);
+        return deleteDatasetIn(scope, locator);
       });
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Engines
+// ---------------------------------------------------------------------------
+
+/** What `createEngine` takes. */
+export interface EngineOptions {
+  /** The persistent formats of the engine, by their `name`; two formats with one name fail with `duplicate_name`. */
+  formats?: readonly PersistenceInterface[];
+}
+
+/**
+ * One instance of the engine: the functions of the API, bound to the formats
+ * the engine was created with and to its own observable listeners. Each
+ * function behaves as the free function of the same name (see each one), and
+ * a locator whose format the engine does not hold fails with
+ * `unknown_persistent_format`. Two engines share nothing, and none sees the
+ * formats of `registerPersistentFormat`. See `docs/formats.md`.
+ */
+export interface Engine {
+  /** The formats of the engine, in the order given. */
+  readonly formats: readonly PersistenceInterface[];
+  initDataset(locator: string, name: string, options?: InitDatasetOptions): Promise<TransientValue>;
+  queryDataset(locator: string): Promise<TransientValue>;
+  bumpMajorVersions(locator: string, bumpModel: boolean, bumpData: boolean): Promise<TransientValue>;
+  deleteDataset(locator: string): Promise<TransientValue>;
+  dumpDataset(locator: string, format: DumpFormat): Promise<string>;
+  restoreDataset(locator: string, dump: string, format: DumpFormat): Promise<RestoreResult>;
+  setLocalModule(locator: string, manifest: ModuleManifest): Promise<TransientValue>;
+  checkImport(locator: string, importedLocator: string): Promise<CheckImportResult>;
+  createImport(locator: string, importedLocator: string): Promise<TransientValue>;
+  removeImport(locator: string, importKey: Key): Promise<TransientValue>;
+  refreshImport(locator: string, importKey: Key): Promise<RefreshResult>;
+  createUpgradeLocator(locator: string): Promise<string>;
+  queryUpgradeLocator(upgradeLocator: string): Promise<{ source_locator: string; namespace: string; commandResult: CommandResult }>;
+  checkUpgrade(locator: string, upgradeLocator: string): Promise<CheckUpgradeResult>;
+  upgradeDataset(locator: string, upgradeLocator: string): Promise<CommandResult>;
+  runCommand(locator: string, command: AuthoredCommand): Promise<CommandResult>;
+  runScript(locator: string, script: AuthoredScript): Promise<CommandResult>;
+  createScriptSession(locator: string): Promise<ScriptSession>;
+  createApiSession(): ApiSession;
+  subscribeObservable(locator: string, listener: ObservableListener): () => void;
+}
+
+function engineOf(scope: EngineScope): Engine {
+  return Object.freeze({
+    formats: Object.freeze([...scope.formats.values()]),
+    initDataset: (locator: string, name: string, options?: InitDatasetOptions) => initDatasetIn(scope, locator, name, options),
+    queryDataset: (locator: string) => queryDatasetIn(scope, locator),
+    bumpMajorVersions: (locator: string, bumpModel: boolean, bumpData: boolean) => bumpMajorVersionsIn(scope, locator, bumpModel, bumpData),
+    deleteDataset: (locator: string) => deleteDatasetIn(scope, locator),
+    dumpDataset: (locator: string, format: DumpFormat) => dumpDatasetIn(scope, locator, format),
+    restoreDataset: (locator: string, dump: string, format: DumpFormat) => restoreDatasetIn(scope, locator, dump, format),
+    setLocalModule: (locator: string, manifest: ModuleManifest) => setLocalModuleIn(scope, locator, manifest),
+    checkImport: (locator: string, importedLocator: string) => checkImportIn(scope, locator, importedLocator),
+    createImport: (locator: string, importedLocator: string) => createImportIn(scope, locator, importedLocator),
+    removeImport: (locator: string, importKey: Key) => removeImportIn(scope, locator, importKey),
+    refreshImport: (locator: string, importKey: Key) => refreshImportIn(scope, locator, importKey),
+    createUpgradeLocator: (locator: string) => createUpgradeLocatorIn(scope, locator),
+    queryUpgradeLocator: (upgradeLocator: string) => queryUpgradeLocatorIn(scope, upgradeLocator),
+    checkUpgrade: (locator: string, upgradeLocator: string) => checkUpgradeIn(scope, locator, upgradeLocator),
+    upgradeDataset: (locator: string, upgradeLocator: string) => upgradeDatasetIn(scope, locator, upgradeLocator),
+    runCommand: (locator: string, command: AuthoredCommand) => runCommandIn(scope, locator, command),
+    runScript: (locator: string, script: AuthoredScript) => runScriptIn(scope, locator, script),
+    createScriptSession: (locator: string) => createScriptSessionIn(scope, locator),
+    createApiSession: () => createApiSessionIn(scope),
+    subscribeObservable: (locator: string, listener: ObservableListener) => subscribeObservableIn(scope, locator, listener),
+  });
+}
+
+/**
+ * Creates an engine with its own formats, given here and fixed for its life.
+ * Fails with `duplicate_name` when two formats have one name. See
+ * `docs/formats.md`.
+ */
+export function createEngine(options: EngineOptions = {}): Engine {
+  return engineOf(newScope(options.formats ?? []));
+}
+
+/**
+ * The free functions: the engine of the global scope, whose formats
+ * `registerPersistentFormat` registers. Each is documented on its
+ * implementation above (`initDatasetIn` for `initDataset`, and so on).
+ */
+export const {
+  initDataset,
+  queryDataset,
+  bumpMajorVersions,
+  deleteDataset,
+  dumpDataset,
+  restoreDataset,
+  setLocalModule,
+  checkImport,
+  createImport,
+  removeImport,
+  refreshImport,
+  createUpgradeLocator,
+  queryUpgradeLocator,
+  checkUpgrade,
+  upgradeDataset,
+  runCommand,
+  runScript,
+  createScriptSession,
+  createApiSession,
+  subscribeObservable,
+} = engineOf(GLOBAL_SCOPE);
