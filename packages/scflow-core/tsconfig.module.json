@@ -1,0 +1,15 @@
+// Type-checks src/module.ts, the entry of the bundle, which tsconfig.json
+// leaves out because it imports module.yaml. The bundle is built by
+// scripts/build-module.mjs.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true
+  },
+  "include": ["src/module.ts"]
+}

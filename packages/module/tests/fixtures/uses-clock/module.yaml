@@ -1,0 +1,10 @@
+# A module with no code: schemas only, so it has no bundle.
+name: acme:plain
+namespace: plain
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: site
+    properties:
+      - name: code
+        type: string

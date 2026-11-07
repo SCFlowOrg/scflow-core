@@ -10,6 +10,14 @@ its identity, its scalar types, its schemas and the declarations of its actions,
 `readModuleManifest` of `@scfloworg/core`. Its `version` is always the `version` of
 `package.json`, and its actions agree with `ACTIONS`: `tests/module.test.ts` checks both.
 
+Its code is one bundle, `dist/module.js`, built from `src/module.ts` by `buildModule` of
+`@scfloworg/module` (see its [docs](../module/docs/module-packages.md)): the default export
+`defineModule(manifest, { actions })` gives the `execute` of each action of `ACTIONS` as its body.
+The package imports only types from `@scfloworg/core`, so the bundle holds no copy of the
+engine. A host loads the module with `modules.load(folder)` of `@scfloworg/module/host`;
+`tests/bundle.test.ts` builds, checks and loads the bundle. `tsc -b` leaves `src/module.ts` out,
+since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
+
 ## Exports
 
 - `SCHEMAS`: the scalar types and schemas, compiled from `module.yaml`.
