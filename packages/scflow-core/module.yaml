@@ -1,0 +1,527 @@
+# The manifest of the module scflow:core: its identity, its scalar types, its
+# schemas and the declarations of its actions (docs/spec/implementation.md,
+# Schemas Package). The schemas follow docs/spec/schemas.md; the actions are
+# implemented by src/actions and must agree with ACTIONS. The scalar types and
+# the schemas are compiled to src/schemas.generated.ts by scripts/build-schemas.mjs.
+
+name: scflow:core
+namespace: scflow
+# always the version of package.json
+version: 1.0.0
+mcl: ^1.0
+title: Supply chain flow
+
+scalar_types:
+  - name: flow_domain
+    extends: string
+    enum: [physical, information, financial, service]
+
+  - name: transformation_role
+    extends: string
+    enum: [consumed, produced]
+
+  - name: tag
+    extends: string
+
+  - name: latitude
+    extends: number
+    minimum: -90
+    maximum: 90
+
+  - name: longitude
+    extends: number
+    minimum: -180
+    maximum: 180
+
+  - name: country_code
+    extends: string
+    pattern: ^([A-Z]{2})?$
+
+  - name: un_locode
+    extends: string
+    pattern: ^([A-Z]{2}[A-Z2-9]{3})?$
+
+schemas:
+  - name: annotable
+    description: The base schema of every entity that carries notes and tags
+    is_root: true
+    properties:
+      - name: tags
+        type: tag
+        is_array: true
+        is_unique: true
+
+  - name: note
+    description: A free-form annotation of one entity, written in one or more languages
+    properties:
+      - name: annotated
+        type: annotable
+        owner: true
+        inverse_name: notes
+        inverse_is_array: true
+      - name: content
+        type: localized_markdown
+        min_length: 1
+
+  - name: actor_type
+    description: A type of actor, with the flow domains it belongs to
+    extends: annotable
+    is_root: true
+    has_description: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: domains
+        type: flow_domain
+        is_set: true
+        min_length: 1
+      - name: default_scope
+        type: scope
+
+  - name: item_type
+    description: A type of item, with the one flow domain it belongs to
+    extends: annotable
+    is_root: true
+    has_description: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: domain
+        type: flow_domain
+
+  - name: actor
+    description: A place in the network where items are held, consumed, produced or queued
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: type
+        type: actor_type
+        mandatory: true
+        inverse_name: actors
+        inverse_is_array: true
+      - name: scope
+        type: scope
+        inverse_name: actors
+        inverse_is_array: true
+      - name: location
+        type: location
+        inverse_name: actors
+        inverse_is_array: true
+      - name: parent_actor
+        type: actor
+        inverse_name: child_actors
+        inverse_is_array: true
+
+  - name: flow
+    description: A connection moving one optional item from a source actor to a destination actor
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+      - name: description
+        type: localized_markdown
+      - name: source
+        type: actor
+        mandatory: true
+        inverse_name: outgoing_flows
+        inverse_is_array: true
+      - name: destination
+        type: actor
+        mandatory: true
+        inverse_name: incoming_flows
+        inverse_is_array: true
+      - name: item
+        type: item
+        inverse_name: carried_on
+        inverse_is_array: true
+      - name: bidirectional
+        type: boolean
+
+  - name: item
+    description: A family of things the network moves and holds
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: type
+        type: item_type
+        mandatory: true
+        inverse_name: items
+        inverse_is_array: true
+
+  - name: item_at_actor
+    description: An item held at an actor
+    extends: annotable
+    properties:
+      - name: actor
+        type: actor
+        owner: true
+        inverse_name: held_items
+        inverse_is_array: true
+      - name: item
+        type: item
+        mandatory: true
+        constant: true
+        inverse_name: held_at
+        inverse_is_array: true
+
+  - name: transformation_type
+    description: A type of transformation
+    extends: annotable
+    is_root: true
+    has_description: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+
+  - name: transformation
+    description: A transformation of consumed items into produced items at an actor
+    extends: annotable
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: type
+        type: transformation_type
+        mandatory: true
+        constant: true
+        inverse_name: transformations
+        inverse_is_array: true
+      - name: actor
+        type: actor
+        owner: true
+        inverse_name: transformations
+        inverse_is_array: true
+
+  - name: transformation_line
+    description: One item consumed or produced by a transformation
+    extends: annotable
+    properties:
+      - name: transformation
+        type: transformation
+        owner: true
+        inverse_name: lines
+        inverse_is_array: true
+      - name: role
+        type: transformation_role
+      - name: held_item
+        type: item_at_actor
+        mandatory: true
+        inverse_name: transformation_lines
+        inverse_is_array: true
+
+  - name: conversion
+    description: A conversion of one item into another item at an actor
+    extends: annotable
+    properties:
+      - name: display_name
+        type: localized_string
+      - name: description
+        type: localized_markdown
+      - name: actor
+        type: actor
+        owner: true
+        inverse_name: conversions
+        inverse_is_array: true
+      - name: from_item
+        type: item
+        mandatory: true
+        constant: true
+      - name: to_item
+        type: item
+        mandatory: true
+        constant: true
+
+  - name: scope
+    description: A flat grouping of actors, a swim lane of the graph
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+
+  - name: location
+    description: A geographic place or site where actors operate
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: latitude
+        type: latitude
+      - name: longitude
+        type: longitude
+      - name: address
+        type: string
+      - name: postal_code
+        type: string
+      - name: city
+        type: string
+      - name: country_code
+        type: country_code
+      - name: un_locode
+        type: un_locode
+      - name: timezone
+        type: string
+
+actions:
+  - id: scflow/create_actor
+    title: Create an actor
+    description: >-
+      Creates an actor of a given type in the network, optionally in a scope, at a location and
+      inside a parent actor, and returns it. The scope defaults to the default scope of the type;
+      the location has no default.
+    kind: action
+  - id: scflow/update_actor
+    title: Update an actor
+    description: >-
+      Changes the name, description, type, scope, location, parent or tags of an actor and returns
+      it. Only the given properties change; scope, location and parent_actor accept null to clear
+      the relation. Changing the type does not check the held items, the flows and the parent of the
+      actor: the network check reports the ones whose domain no longer fits.
+    kind: action
+  - id: scflow/delete_actor
+    title: Delete an actor
+    description: >-
+      Deletes an actor. It is refused while child actors, flows, held items, transformations or
+      conversions reference the actor, unless cascade is true, which deletes the child actors
+      recursively, the flows incident to the actor and its descendants, the items they hold, their
+      transformations and conversions and the notes of every deleted entity.
+    kind: action
+  - id: scflow/delete_actor_type
+    title: Delete an actor type
+    description: >-
+      Deletes an actor type. It is refused while actors have this type, unless cascade is true,
+      which deletes those actors first, each with the cascade of scflow/delete_actor.
+    kind: action
+  - id: scflow/delete_scope
+    title: Delete a scope
+    description: >-
+      Deletes a scope. It is refused while actors are assigned to it, unless cascade is true, which
+      deletes those actors first, each with the cascade of scflow/delete_actor. The default scope of
+      an actor type that names the scope is cleared.
+    kind: action
+  - id: scflow/create_actor_type
+    title: Create an actor type
+    description: >-
+      Creates an actor type with the flow domains its actors can exchange, and an optional default
+      scope, and returns it.
+    kind: action
+  - id: scflow/create_scope
+    title: Create a scope
+    description: >-
+      Creates a scope, a lane that groups actors (for example SOURCE, MAKE, DELIVER or a region),
+      and returns it.
+    kind: action
+  - id: scflow/create_flow
+    title: Create a flow
+    description: >-
+      Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to
+      true so that the flow carries items in both directions; it is one-way otherwise. Give name to
+      name the flow; it has no name otherwise. A flow carries at most one item, given by item. A
+      flow between an actor and one of its child actors, in either direction, must carry an item,
+      otherwise the action fails. The domain of the item must be among the domains of both actors,
+      and the actors that do not hold the item yet hold it afterwards.
+    kind: action
+  - id: scflow/update_flow
+    title: Update a flow
+    description: >-
+      Changes the name, the bidirectional flag, the description or the tags of a flow and returns
+      it. Only the given properties change; null removes the name. The source and the destination of
+      a flow never change: delete the flow and create it again.
+    kind: action
+  - id: scflow/set_flow_item
+    title: Set the item of a flow
+    description: >-
+      Sets the item carried by a flow that carries none, and returns the flow. The item of a flow
+      never changes and is never removed: the action fails when the flow carries another item, and
+      changes nothing when it already carries this one. The domain of the item must be among the
+      domains of both the source and the destination, and the actors that do not hold the item yet
+      hold it afterwards. A flow has no name: give its id.
+    kind: action
+  - id: scflow/delete_flow
+    title: Delete a flow
+    description: >-
+      Deletes a flow and returns its id. The items held by its ends are kept. A flow has no name:
+      give its id.
+    kind: action
+  - id: scflow/create_item_type
+    title: Create an item type
+    description: >-
+      Creates an item type, a category of items bound to one flow domain (physical, information,
+      financial or service), and returns it.
+    kind: action
+  - id: scflow/create_item
+    title: Create an item
+    description: >-
+      Creates an item, a family of things the network moves and holds, of a given item type, and
+      returns it.
+    kind: action
+  - id: scflow/update_item
+    title: Update an item
+    description: >-
+      Changes the name, description or type of an item and returns it. Only the given properties
+      change. Changing the type does not check the held records of the item and the flows that carry
+      it: the network check reports the ones whose domain no longer fits.
+    kind: action
+  - id: scflow/hold_item
+    title: Hold an item at an actor
+    description: >-
+      Makes an actor hold an item (inventory, queue, cash or backlog) and returns the record. The
+      domain of the item must be among the domains of the actor. When the actor already holds the
+      item, the existing record is returned.
+    kind: action
+  - id: scflow/release_held_item
+    title: Release a held item
+    description: >-
+      Removes an item from the actor that holds it, and returns the id of the removed record. It is
+      refused while a transformation line uses the record. Give the id of the record returned by
+      hold_item.
+    kind: action
+  - id: scflow/delete_item
+    title: Delete an item
+    description: >-
+      Deletes an item. It is refused while actors hold it, flows carry it or conversions reference
+      it, unless cascade is true, which deletes the held records, the flows that carry it and the
+      conversions first, with the transformation lines that use the held records and the notes of
+      every deleted entity.
+    kind: action
+  - id: scflow/delete_item_type
+    title: Delete an item type
+    description: >-
+      Deletes an item type. It is refused while items have this type, unless cascade is true, which
+      deletes those items first, each with the cascade of scflow/delete_item.
+    kind: action
+  - id: scflow/create_transformation_type
+    title: Create a transformation type
+    description: >-
+      Creates a transformation type, a kind of operation such as assembly, machining, packaging or
+      inspection, and returns it.
+    kind: action
+  - id: scflow/create_transformation
+    title: Create a transformation
+    description: >-
+      Creates a transformation of a given type inside an actor, with no line yet, and returns it.
+      The transformation is named after its type when no name is given.
+    kind: action
+  - id: scflow/connect_transformation_line
+    title: Connect a transformation line
+    description: >-
+      Connects an item held by the actor of a transformation to that transformation, as an input
+      (consumed) or an output (produced), and returns the line. When the same line exists, it is
+      returned. Give the id of the held-item record.
+    kind: action
+  - id: scflow/define_process
+    title: Define a process
+    description: >-
+      Creates a transformation of a given type at an actor, makes the actor hold the consumed and
+      produced items that it does not hold yet, and attaches a line for each of them, in one step.
+      Every item must be in a domain of the actor. Returns the transformation and its lines.
+    kind: action
+  - id: scflow/delete_transformation
+    title: Delete a transformation
+    description: >-
+      Deletes a transformation with its lines and notes, and returns its id. The held items that its
+      lines used are kept. The cascade parameter is accepted for consistency with the other delete
+      actions and changes nothing.
+    kind: action
+  - id: scflow/delete_transformation_type
+    title: Delete a transformation type
+    description: >-
+      Deletes a transformation type. It is refused while transformations have this type, unless
+      cascade is true, which deletes those transformations first, with their lines and notes.
+    kind: action
+  - id: scflow/create_conversion
+    title: Create a conversion
+    description: >-
+      Creates a conversion, which turns one item into another item at an actor, and returns it. The
+      two items must be in the same flow domain, and they cannot change afterwards. The name, the
+      description and the tags are optional.
+    kind: action
+  - id: scflow/update_conversion
+    title: Update a conversion
+    description: >-
+      Changes the name, the description or the tags of a conversion and returns it. Only the given
+      properties change; null clears a name or a description, and tags replaces the whole list. The
+      actor and the two items of a conversion never change: to change them, delete the conversion
+      and create another.
+    kind: action
+  - id: scflow/delete_conversion
+    title: Delete a conversion
+    description: >-
+      Deletes a conversion with its notes, and returns its id. The actor and the items are kept. The
+      cascade parameter is accepted for consistency with the other delete actions and changes
+      nothing.
+    kind: action
+  - id: scflow/add_note
+    title: Add a note
+    description: >-
+      Adds a Markdown note to an entity of the model (actor, flow, item, scope, type,
+      transformation...) and returns it. The entity is given by its id. A plain string is stored as
+      English text; give a map of language to string for other languages.
+    kind: action
+  - id: scflow/update_note
+    title: Update a note
+    description: >-
+      Changes the content of a note and returns it. Each given language replaces the text of the
+      same language, the other languages are kept. The note stays on its entity.
+    kind: action
+  - id: scflow/remove_note
+    title: Remove a note
+    description: Deletes a note and returns its id. The entity it annotated is not changed.
+    kind: action
+  - id: scflow/find_notes
+    title: Find the notes of an entity
+    description: >-
+      Lists the notes of an entity, given by its id: [{ id, entity, content }]. An entity without a
+      note gives an empty list. It changes nothing.
+    kind: read
+  - id: scflow/add_tags
+    title: Add tags
+    description: >-
+      Appends tags to an entity of the model (actor, flow, item, scope, type, transformation,
+      conversion...) without removing its existing tags, and returns { id, tags }. Tags that the
+      entity already carries are skipped. The entity is given by its id.
+    kind: action
+  - id: scflow/remove_tags
+    title: Remove tags
+    description: >-
+      Removes the given tags from an entity of the model (actor, flow, item, scope, type,
+      transformation, conversion...) and returns { id, tags }. Tags that the entity does not carry
+      are ignored. The entity is given by its id.
+    kind: action
+  - id: scflow/inspect_delete_impact
+    title: Inspect the impact of a delete
+    description: >-
+      Lists what deleting the given entities with cascade true would remove besides the entities
+      themselves: actors, flows, items, held items, transformations, transformation lines,
+      conversions and notes, with counts. An entity reached from several targets is counted once. It
+      changes nothing.
+    kind: read

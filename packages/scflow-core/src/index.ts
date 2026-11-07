@@ -56,7 +56,7 @@ export type {
 } from "./actions/index.js";
 
 /**
- * The SCFLOW scalar types and schemas, compiled from `schemas.yaml`.
+ * The SCFLOW scalar types and schemas, compiled from the manifest `module.yaml`.
  * Structurally a `SchemaPackage` of core-plugin, without importing it.
  */
 export const SCHEMAS: {

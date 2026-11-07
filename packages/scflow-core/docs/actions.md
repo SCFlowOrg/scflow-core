@@ -9,7 +9,7 @@ These actions serve as high-level semantic building blocks shared across:
 
 Each action encapsulates referential integrity checks, domain default values, and executes inside an atomic, undoable transaction.
 
-The package exports them as `ACTIONS`, an array of `ModelActionDefinition` values (contract: `@scfloworg/core`, `docs/actions.md`). The host registers them.
+The package exports them as `ACTIONS`, an array of `ModelActionDefinition` values (contract: `@scfloworg/core`, `docs/actions.md`). The host registers them. The manifest `module.yaml` declares each of them with its `id`, `title`, `description` and `kind`, so a tool knows them without running code; a test checks that the declarations and `ACTIONS` agree, so adding or changing an action changes both.
 
 ---
 
