@@ -2483,3 +2483,13 @@ schemas:
   datasetModuleCases(formatPrefix, newLocator);
   facetCases(formatPrefix, newLocator);
 }
+
+export { runActionConformanceSuite } from "./actions.js";
+export type {
+  ActionImplementation,
+  ConformanceAction,
+  ConformanceRefMatches,
+  ConformanceRegistry,
+  ConformanceRunHost,
+  ConformanceRunTrace,
+} from "./actions.js";

@@ -1,0 +1,35 @@
+{
+  "name": "@scfloworg/actions",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "description": "The neutral action package: the action type aligned on MCP tools, parameters checked by a JSON Schema validator, a registry, batches of calls, the export to AI tools and the run log. No SCFlow dependency. See README.md.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "@scfloworg/conformance": "^0.1.0",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  }
+}

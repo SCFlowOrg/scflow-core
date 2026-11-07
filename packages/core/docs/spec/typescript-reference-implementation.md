@@ -124,3 +124,35 @@ A format provides:
 - optionally a write `lock` and support for transactions.
 
 The contract is stated by the doc comments of `PersistenceInterface` in `@scfloworg/core` (`src/types.ts`), and the rules of locators by its `docs/formats.md`.
+
+## Action Package
+
+*Definition.*
+
+`@scfloworg/actions` holds the part of the [action](meta-model.md#action) contract that does not need the engine: the action type, the check of parameters, a registry, the batches made only of calls, the export to AI tools and the run log. It is neutral: it depends on no other package of SCFlow and knows no model, so a host that is not MCL, such as an application framework, uses it as it is. Its only dependency is the standard JSON Schema validator Ajv.
+
+**The engine keeps what needs a dataset.** The package does not read instances and does not evaluate filters, so two parts of the contract are given to it by the engine, which plugs them in:
+
+| Part | In the package | Given by the engine |
+| --- | --- | --- |
+| `ref` in `parameters` | Accepted as a keyword; applies the rule of resolution: an id wins over a name that equals it, and no instance or several are refused with `invalid_parameters` | A resolver that, for a schema and a value, gives the key of the instance whose id is the value, and the keys of the instances whose `display_name` is the value in any language |
+| Body context | Records each command of a body, with its result, and each nested call, as the steps of the run entry | The context a body receives, which emits the commands |
+| Batch | Runs a batch whose steps are `call` steps with `with` and `as`, resolving `${name.path}` from the results named so far | `when`, `each` and `fail`, run by the script runner of the engine, like a command step of a procedure |
+| Transaction | Nothing: a batch is a sequence of calls | The one transaction of an action or of a batch, and its rollback when a call is refused |
+
+A step of a batch given to the package that is not a `call` with `with` and `as` is refused with `invalid_script_step`; the engine runs such a batch through its script runner instead. In a batch run by the package, a placeholder `${name.path}` whose first segment is not an `as` name already set is refused with `unknown_reference`; a placeholder that is not a path, such as `${now()}`, is passed on unchanged to the called action.
+
+**Export.** The export of an action to an AI tool maps its `id` to the tool name, with the slash replaced by a hyphen (`scflow/create_actor` gives `scflow-create_actor`), because AI clients accept only letters, digits, `_` and `-` in a tool name, and a hyphen never appears in an identifier, so the mapping goes back. `title`, `description` and `parameters` are kept as they are, `kind: read` gives `readOnlyHint` and `destructive` gives `destructiveHint`. An action whose `exposure` is `hidden` is not exported.
+
+**Run log.** The run entries follow the [run log](meta-model.md#action): `parameters` and `result` are in the canonical form of JSON, and the `error` of a refused call is the code of its exception. A call refused by its parameters is recorded too, with the parameters it was given.
+
+*Exceptions.*
+
+| exception | thrown when |
+| --- | --- |
+| `invalid_parameters` | the parameters break the JSON Schema of the action, or a `ref` matches no instance or several |
+| `unknown_action` | an id names no action of the registry |
+| `duplicate_name` | an action is registered with the id of another one |
+| `constraint_violation` | an action is registered with an id that is not a namespace, a slash and a name, both identifiers, or with `parameters` that are not a valid JSON Schema object |
+| `invalid_script_step` | a step of a batch is not a `call` with only `with` and `as`, or a batch has `parameters` |
+| `unknown_reference` | a placeholder of a batch names an `as` name that is not set yet |
