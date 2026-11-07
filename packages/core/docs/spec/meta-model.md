@@ -954,7 +954,7 @@ properties:
 
 The prefix of an action id is the namespace of its module.
 
-**Actions are the API that writes.** Every write to a model goes through an action: user interfaces, scripts, AI assistants, MCP and the CLI call actions, and low-level commands are kept for action bodies. Queries need no action. One action, or one batch of actions, is one transaction that can be undone, and a batch refers to earlier results with `${name.path}`.
+**Actions are the API that writes.** Every write to a model goes through an action: user interfaces, scripts, AI assistants, MCP and the CLI call actions, and low-level commands are kept for action bodies. Queries need no action. One action, or one batch of actions, is one transaction that can be undone. A batch is a [script](model-command-language.md#script) whose steps call actions, and it refers to earlier results with `${name.path}`.
 
 A write command outside an action is refused with `write_outside_action`, because write access to a dataset exists only in the context an action receives. Some writes stay below actions, run by the engine: loading and saving a dataset, model upgrade, the definition of schemas by a model author, the creation of singleton instances with a dataset, and the removal of the owned instances and facets of a deleted instance.
 
@@ -1013,6 +1013,51 @@ An action that takes the place of a CRUD operation follows the CRUD parameters, 
 - **Effects:** MCL commands, and calls to other actions by id.
 - **Time and ids come from MCL:** `${now()}` and the keys of the engine, so a body reads no clock and no random source.
 - **The recorded trace is the contract:** with the same parameters and command results, a body emits the same commands. A body rewritten in another language passes the same replay.
+
+**Run log.** The engine records one entry per action call, generated actions included, and a nested call is a step of the entry that makes it. The run log gives the replay of a body and the reproduction of a bug.
+
+```yaml
+name: run_entry
+embedded:
+description: one call of an action, as the engine ran it
+properties:
+  - name: action
+    type: string
+    description: the id of the action
+  - name: parameters
+    type: string
+    description: the parameters as JSON, after validation, with each ref resolved to its key
+  - name: steps
+    type: "[run_step]"
+    description: what the body emitted, in order
+  - name: outcome
+    type: string
+    enum: [done, refused]
+  - name: error
+    type: string
+    description: the exception of a refused call
+  - name: result
+    type: string
+    description: the result of the action as JSON
+```
+
+```yaml
+name: run_step
+embedded:
+description: one effect of a body
+properties:
+  - name: command
+    type: command
+    description: a command as the body emitted it, before its placeholders are resolved
+  - name: result
+    type: string
+    description: the result of the command as JSON
+  - name: call
+    type: run_entry
+    description: a call to another action
+```
+
+A step holds either a `command` with its `result`, or a `call`. A command is recorded as the body emitted it, so `${now()}` and the keys of the engine stay placeholders there, and a replay compares what the body decided, not what the engine resolved. To replay an entry, the body runs with its `parameters`, each command receives its recorded `result`, and the body must emit the same steps, compared in the canonical form of JSON: the keys of every object sorted and no white space.
 
 ## Names
 

@@ -261,6 +261,17 @@ Naming is only needed when the value isn't already known ahead of time — a gen
 
 **Errors.** `fail` refuses the whole script with `procedure_failed` and its message, and the transaction is rolled back. Its message may hold placeholders.
 
+**Batches.** A batch is a script whose steps are `call` steps, with no `parameters`: a user interface, an AI assistant, MCP or the CLI runs it to make several actions one transaction, which can be undone as one. Its `as` names and `${name.path}` references work as in any script. Its steps may also hold `when`, `each` and `fail`, and its writes go through the actions it calls only, so a command step in a batch run outside an action is refused with `write_outside_action`.
+
+```yaml
+commands:
+  - call: scflow/create_actor
+    with: { display_name: Plant, type: plant }
+    as: plant
+  - call: carbon/update_actor_emissions
+    with: { id: "${plant.id}", co2: 12 }
+```
+
 **Purity.** A procedure follows the [contract of a body](meta-model.md#action): it reads no clock and no random source outside `${now()}` and the keys of the engine, so it can be replayed.
 
 **Processing.** Steps execute in array order. Before each step runs, its `input`, `filters` and `with` are resolved for placeholders against the usual context (see [Placeholders](meta-model.md#placeholders)) plus `params` and the results named so far in the script. A `${this...}` in `filters` is left as it is, since it is resolved per instance (see [Filter](#filter)).
