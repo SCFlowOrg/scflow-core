@@ -1,0 +1,192 @@
+# The environment
+
+An environment holds what the engine does not: the catalogue of modules with
+their code, the formats, the open datasets, the context an action receives and
+the transaction of one action. It is an API of the implementation, not a
+definition of MCL: the rules of modules, datasets and actions are in the
+specification ([Module](../../core/docs/spec/meta-model.md#module),
+[Dataset](../../core/docs/spec/meta-model.md#dataset),
+[Action](../../core/docs/spec/meta-model.md#action) and
+[Model Upgrade](../../core/docs/spec/meta-model.md#model-upgrade)). This page
+gives the rules of the environment itself.
+
+```ts
+import { createEnvironment } from "@scfloworg/environment";
+import { createJsPersistenceInterface } from "@scfloworg/format-js";
+
+const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
+env.modules.install(scflowModule);             // a defineModule result
+await env.modules.load("packages/carbon");      // a module package on disk
+
+const dataset = await env.datasets.create({ modules: ["acme:carbon"] });
+const { result } = await dataset.run("carbon/set_actor_emissions", { actor, co2: 12 });
+```
+
+Two environments share nothing: each has its own engine, made by
+`createEngine` of `@scfloworg/core` with the formats it is given, its own
+catalogue and its own open datasets, so a test gets an isolated environment.
+The global format registry, the area and the built-in dataset of the engine
+stay for the hosts that do not use an environment yet; an environment never
+reaches them.
+
+## Formats
+
+`createEnvironment({ formats })` takes the persistent formats of the
+environment, fixed for its life. A locator whose format it does not hold fails
+with `unknown_persistent_format`, and two formats with one name fail with
+`duplicate_name`. `env.formats` lists them.
+
+## The catalogue
+
+`env.modules` holds **one active version of each module**, with its code,
+because the bodies of actions exist in one version in a process.
+
+```ts
+env.modules.install(module: ModuleDefinition): InstalledModule
+env.modules.load(path: string): Promise<InstalledModule>
+env.modules.get(key: string): InstalledModule | undefined
+env.modules.list(): readonly InstalledModule[]
+```
+
+- `install` takes the result of `defineModule` of `@scfloworg/module`, as a
+  plugin imports it. It validates the manifest as an instance of `module` and
+  checks the code against it, as `modules.load` does (`checkModuleCode` of
+  `@scfloworg/module/code`).
+- `load` reads the module of a folder with `modules.load` of
+  `@scfloworg/module/host`, bundle check included, then installs it. It is for
+  a host that reads modules from disk, such as the CLI or the MCP server.
+- An `InstalledModule` gives the validated `manifest`, its `key` and
+  `version`, the body of each action by id in `actions`, and the body of
+  each migration by version in `migrations`.
+- Installing a module again with the same manifest, in canonical form, returns
+  the module already installed. Another version, or the same version with
+  another manifest, so another digest, fails
+  with `duplicate_name`: an environment keeps one version for its life, and a
+  new version needs a new environment.
+- Two installed modules cannot declare one namespace: `namespace_conflict`.
+  `mcl:core` is embedded in the engine and fails with `duplicate_name`, and a
+  local module, which no catalogue holds, fails with `constraint_violation`.
+- Dependencies are not checked at install, so modules install in any order.
+  They are checked when a dataset uses the modules.
+
+## Datasets
+
+`env.datasets` creates, opens and restores datasets, and keeps those it has
+open.
+
+```ts
+env.datasets.create({ modules, locator?, name? }): Promise<OpenDataset>
+env.datasets.open(locator): Promise<OpenDataset>
+env.datasets.restore(locator, dump, format): Promise<OpenDataset>
+env.datasets.get(locator): OpenDataset | undefined
+env.datasets.list(): readonly OpenDataset[]
+```
+
+- `create` creates an empty dataset that uses the installed modules named by
+  key in `modules`, with their dependencies: a dependency not listed is added
+  before the module that needs it. A module that is not installed fails with
+  `key_not_found`. `mcl:core` is always there, so naming it changes nothing.
+  The modules are embedded with the dataset (see `initDataset` in
+  `@scfloworg/core`'s `docs/datasets.md`).
+- Without a `locator`, `create` takes the first format of the environment and
+  the first free rest of `dataset-1`, `dataset-2`, and so on. `name` defaults
+  to `dataset`.
+- `open` opens an existing dataset and compares each module it embeds with the
+  catalogue. `restore` restores a dump, as `restoreDataset` does, then opens
+  it. Opening a dataset already open returns the same `OpenDataset`.
+- The ranges of versions of `dependencies` and `mcl` are not checked yet: the
+  specification does not yet say what a range accepts.
+
+### Opening a dataset
+
+Each module of an open dataset has a state, from its embedded version and the
+installed one. The installed module wins over the embedded snapshot, so a
+dataset whose modules are not all installed at their version is read only.
+
+| State | Embedded and installed | Dataset |
+| --- | --- | --- |
+| `current` | The same version and digest | Writable |
+| `local` | A local module, embedded and editable | Writable |
+| `missing` | The module is not installed | Read only |
+| `outdated` | The installed version is newer | Read only, until a model upgrade |
+| `ahead` | The installed version is older than the file | Read only |
+| `changed` | The same version with another digest | Read only |
+
+`OpenDataset.modules` lists `{ module, version, installed, state }` for each,
+where `installed` is the installed version or `null`, and `readOnly` is `true`
+when one module is not `current` or `local`. A read-only dataset runs `read`
+actions, answers queries and dumps; an action that writes fails with
+`read_only_dataset`. The upgrade of an `outdated` dataset is a later piece.
+
+## Running an action
+
+```ts
+dataset.run(id: string, params?: unknown): Promise<ActionOutcome>
+// ActionOutcome = { result, changed, delta }
+```
+
+- The action is found by the namespace of its id among the modules of the
+  dataset that are installed, and its declaration is the one of the installed
+  manifest. An id that matches no declared action fails with `unknown_action`.
+- **An action run on a dataset is one transaction**, which the environment
+  opens: it begins a transaction labelled with the `title` of the action, runs
+  the body, prepares and commits it, and returns the `result` of the body,
+  whether the dataset `changed`, and the `delta` of the transaction (see
+  `@scfloworg/core`'s `docs/sessions.md`), which a host keeps to undo it. When
+  the body throws, the transaction is rolled back and the error is thrown as
+  is.
+- A `read` action runs in no transaction, and its `delta` is `null`. On a
+  format that does not support transactions, every command of the body commits
+  on its own, `delta` is `null`, and `changed` tells whether the data versions
+  moved.
+- The runs of one dataset take turns: a run begins when the one before it has
+  settled, so two actions never share a transaction.
+- A body whose declaration has a `body` procedure and no code fails with
+  `unknown_action`: procedures run with the action package.
+- The parameters are given to the body as they are. Their validation against
+  `parameters` and the run log come with the action package.
+
+## The context of an action
+
+A body is a function `(context, params) => result`, sync or async. The
+`ActionContext` it receives is the only way it reaches the engine, and it
+carries the write access to its dataset.
+
+```ts
+interface ActionContext extends MclAccess {
+  readonly locator: string;   // the dataset the action runs on
+  readonly action: string;    // the id of the running action
+  runCommand(locator, command): Promise<CommandResult>;
+  runScript(locator, script): Promise<CommandResult>;
+  call(id: string, params?: unknown): Promise<unknown>;
+}
+```
+
+- It is an `MclAccess` (see `@scfloworg/core`'s `docs/sessions.md`) limited to
+  one dataset: a command or a script on another locator fails with
+  `dataset_not_found`. Its commands run in the transaction of the action.
+- `call` runs another action by id in the same transaction and returns its
+  result. An action calls only the actions of its own module and of its
+  dependencies; any other id fails with `unknown_action`.
+- Time and ids come from MCL: a body uses `${now()}` and the keys of the
+  engine, and reads no clock (see the contract of a body in the
+  specification).
+- A write outside an action is not refused yet; `query` below runs any
+  command.
+
+## Queries and saving
+
+```ts
+dataset.query(command): Promise<CommandResult>
+dataset.info(): Promise<TransientValue>       // the dataset, as queryDataset gives it
+dataset.dump(format: "json" | "yaml"): Promise<string>
+dataset.close(): Promise<void>
+```
+
+- `query` runs a command outside any action, for a read. A query needs no
+  action. A write through it is not refused yet; it will be with
+  `write_outside_action` once the engine checks write access.
+- `dump` writes the dataset with its modules embedded, as `dumpDataset` does,
+  and `restore` reads it back in this environment or in another one.
+- `close` forgets the dataset: a later `open` reads it again. It does not
+  delete it.

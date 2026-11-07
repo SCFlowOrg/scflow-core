@@ -18,6 +18,10 @@
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
     },
+    "./code": {
+      "types": "./dist/code.d.ts",
+      "default": "./dist/code.js"
+    },
     "./host": {
       "types": "./dist/host.d.ts",
       "default": "./dist/host.js"

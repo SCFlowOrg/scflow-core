@@ -12,7 +12,7 @@ import {
 } from "@scfloworg/core";
 import { jsFormat } from "@scfloworg/format-js/browser"; // in-memory format
 
-registerPersistentFormat(jsFormat);              // once, before any locator is used
+registerPersistentFormat(jsFormat);              // once, before any locator is used; createEngine gives formats of its own
 
 await initDataset("js:app", "builtin");          // built-in dataset of the area "app"
 await initDataset("js:app/doc1", "doc1");        // a dataset of that area
@@ -45,7 +45,7 @@ Each rule is stated in the file named in brackets; read it before relying on the
 
 - [spec/](spec/README.md): the normative specification of the meta-model and of MCL.
 
-- [formats.md](formats.md): locators, persistent formats, the `js` format.
+- [formats.md](formats.md): locators, persistent formats, engines with formats of their own, the `js` format.
 - [datasets.md](datasets.md): datasets, the `dataset` instance, lifecycle, the built-in dataset, the modules of a dataset, local modules, imports.
 - [modules.md](modules.md): module manifests, module sets, namespaces, short and qualified names, facets, `mcl:core`.
 - [model-upgrade.md](model-upgrade.md): changing a model through an upgrade locator.

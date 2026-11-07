@@ -8,6 +8,7 @@ package, the bundle check, and `modules.load`. The rules are in
 | --- | --- | --- |
 | `@scfloworg/module` | `defineModule(manifest, { actions, migrations })` and its types. No runtime dependency: a bundle inlines it | A bundle |
 | `@scfloworg/module/build` | `buildModule(folder)`, which builds `src/module.ts` to `dist/module.js`, and `checkBundle(code)` | Node, at build |
+| `@scfloworg/module/code` | `checkModuleCode(manifest, bundle)`, which checks the code of a module against its manifest. It reads no file | A host, Node or browser |
 | `@scfloworg/module/host` | `modules.load(path)`, which reads `module.yaml`, validates it, checks and imports the bundle when there is one | Node, in a host |
 | `@scfloworg/module/yaml` | The type of a `.yaml` import, for the type checker | Types only |
 
@@ -32,5 +33,6 @@ const module = await modules.load(packageFolder);
 ```
 
 The bundle holds no copy of the engine: the code of a module imports only types
-from `@scfloworg/core`, and the host gives the one instance. The environment and
-its catalogue, `modules.install` and the context of actions are not here.
+from `@scfloworg/core`, and the host gives the one instance. The environment, with
+its catalogue, `modules.install` and the context of actions, is
+[`@scfloworg/environment`](../environment/README.md).

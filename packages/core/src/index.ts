@@ -22,8 +22,9 @@ export {
   createImport,
   removeImport,
   refreshImport,
+  createEngine,
 } from "./api.js";
-export type { InitDatasetOptions } from "./api.js";
+export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
 export type { CheckImportResult, RefreshResult } from "./imports.js";
 export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
 export type { DatasetModule } from "./datasetModules.js";

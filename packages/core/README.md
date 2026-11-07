@@ -22,6 +22,10 @@ await initDataset("js:app", "app");
 const dataset = await queryDataset("js:app"); // the dataset's name, versions and schemas
 ```
 
+`createEngine({ formats })` gives the same functions bound to formats of their
+own, with no global registration: two engines share nothing (see
+[`docs/formats.md`](docs/formats.md), Engines).
+
 ## Documentation
 
 - [`docs/spec/`](docs/spec/README.md) is the normative specification of the
