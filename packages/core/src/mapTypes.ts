@@ -21,7 +21,8 @@ export interface MapTypeParts {
   value: string;
 }
 
-const TYPE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** The name of a scalar type: short, or qualified by the namespace of its module (see the Names part of the meta-model). */
+const TYPE_NAME = /^([A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * Reads a property `type` as a map type: the `{K: V}` notation, or the name of

@@ -290,6 +290,13 @@ export type ResolvedType =
 export interface TypeResolutionContext {
   resolveSchema(name: string): NormalizedSchema | undefined;
   resolveScalarType(name: string): NormalizedScalarType | undefined;
+  /**
+   * Whether `resolveType` falls back on `BUILTIN_SCALAR_TYPES` for a name the
+   * context does not resolve. `true` when absent. A module set (modules.ts)
+   * sets it to `false`: it resolves the standard types of `mcl:core` itself, and
+   * a definition of a module that shadows one of them must win.
+   */
+  builtinScalarTypes?: boolean;
 }
 
 /**
@@ -300,8 +307,9 @@ export interface TypeResolutionContext {
  * or by its format's built-in overlay (`ctx.resolveScalarType`) takes
  * precedence over the placeholder of `BUILTIN_SCALAR_TYPES`, which serves only
  * when none is declared: the pattern of the format's `identifier` governs, not
- * the placeholder's empty pattern. A name that is neither a scalar type nor a
- * schema throws `unknown_scalar_type`.
+ * the placeholder's empty pattern. A context that sets `builtinScalarTypes` to
+ * `false` gets no placeholder at all. A name that is neither a scalar type nor
+ * a schema throws `unknown_scalar_type`.
  */
 export function resolveType(typeName: string, ctx: TypeResolutionContext): ResolvedType {
   const mapParts = parseMapType(typeName);
@@ -319,7 +327,8 @@ export function resolveType(typeName: string, ctx: TypeResolutionContext): Resol
   if (isBaseScalarType(typeName)) {
     return { kind: "scalar", base: typeName, constraints: {} };
   }
-  const builtin = BUILTIN_SCALAR_TYPES[typeName];
+  const builtins = ctx.builtinScalarTypes !== false;
+  const builtin = builtins ? BUILTIN_SCALAR_TYPES[typeName] : undefined;
   const scalarType = ctx.resolveScalarType(typeName) ?? builtin;
   if (scalarType) {
     // walk the extends chain to the base, merging constraints child-over-parent
@@ -333,7 +342,7 @@ export function resolveType(typeName: string, ctx: TypeResolutionContext): Resol
         for (const st of chain) constraints = { ...constraints, ...st.constraints };
         return { kind: "scalar", base: current.extends, constraints };
       }
-      current = BUILTIN_SCALAR_TYPES[current.extends] ?? ctx.resolveScalarType(current.extends);
+      current = (builtins ? BUILTIN_SCALAR_TYPES[current.extends] : undefined) ?? ctx.resolveScalarType(current.extends);
     }
     for (const st of chain) constraints = { ...constraints, ...st.constraints };
     // reached the end without hitting a base type name explicitly (shouldn't

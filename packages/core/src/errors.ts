@@ -14,7 +14,7 @@ export const ErrorCode = {
   dataset_not_found: "dataset_not_found",
   /** A `schema` or a `scalar_type` is created under a name the model already uses. */
   duplicate_name: "duplicate_name",
-  /** A storage operation names a key that no instance holds. */
+  /** A storage operation names a key that no instance holds, or a module set is asked for a module it does not hold. */
   key_not_found: "key_not_found",
   /** A dump does not parse, or lacks the structure `dumpDataset` writes. */
   invalid_dump: "invalid_dump",
@@ -26,7 +26,12 @@ export const ErrorCode = {
   ambiguous_command_kind: "ambiguous_command_kind",
   /** A command carries a key other than `kind`, `schema`, `namespace`, `filters`, `input`, `result` and `as`. */
   unknown_command_property: "unknown_command_property",
-  /** `schema` of a command names no schema of the model, or an embedded schema, which is not queryable. */
+  /**
+   * `schema` of a command names no schema of the model, or an embedded schema,
+   * which is not queryable. In a module set, a name that does not resolve where
+   * it is written (`ModuleSet.requireSchema`): a short name is never searched
+   * for across modules.
+   */
   unknown_schema: "unknown_schema",
   /** An `update` carries no `input`. */
   empty_input: "empty_input",
@@ -113,6 +118,15 @@ export const ErrorCode = {
   inverse_name_conflict: "inverse_name_conflict",
   /** A property `type` is neither a known scalar type nor a schema. */
   unknown_scalar_type: "unknown_scalar_type",
+
+  // Modules
+  /**
+   * A schema or a scalar type of a module refers, by a qualified name, to a
+   * module that is neither its own, nor a dependency, nor `mcl:core`.
+   */
+  reference_outside_module: "reference_outside_module",
+  /** Two modules of one module set declare the same namespace, or a module declares `mcl`, the namespace of `mcl:core`. */
+  namespace_conflict: "namespace_conflict",
 
   // Filter
   /** A filter is not a mapping, an `and` or `or` is not an array, or a `not` is not a mapping. */

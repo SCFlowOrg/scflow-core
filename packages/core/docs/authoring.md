@@ -140,7 +140,8 @@ the order given.
 
 A property typed `{K: V}` holds a map: unordered entries, each key of the
 string-based scalar type `K` unique, each value of the scalar type `V`. In YAML
-the type is a quoted string, so it is not read as a mapping.
+the type is a quoted string, so it is not read as a mapping. `K` and `V` may be
+qualified names, such as `{scflow.code: number}` (see [modules.md](modules.md)).
 
 ```ts
 { name: "synonyms", type: "{language_code: string}" }

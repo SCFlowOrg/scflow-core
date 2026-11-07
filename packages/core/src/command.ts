@@ -1886,4 +1886,4 @@ async function executeDatasetCommand(
   }
 }
 
-export { emptyResult, keyOf, clone, validateScalarValue, assertDistinct, requiresDistinct, validateMapValue, computePropertyValue };
+export { emptyResult, keyOf, clone, coerceScalar, validateScalarValue, assertDistinct, requiresDistinct, validateMapValue, computePropertyValue };
