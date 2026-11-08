@@ -85,6 +85,9 @@ not changed by schema commands: a module is replaced by another version.
 - A published module is replaced with `upgradeModule` of an `ApiSession`, below.
   The host decides when: `@scfloworg/environment` calls it when it opens a
   dataset (see its `docs/environment.md`).
+- `upgradeDataset` also checks every declared rule once the new model applies,
+  and refuses the upgrade with `rule_violation` when one breaks (see
+  [rules.md](rules.md)).
 - `refreshImport` fails with `import_not_upgraded` while the imported dataset
   uses another version of a module than the dataset (see
   [datasets.md](datasets.md#imports)).
@@ -115,15 +118,32 @@ module `manifest.name` to `manifest`, as Model Upgrade in
   and only when the version changes. Each is handed to `migrate`, which runs the
   code the host has for it, through the same session so that its commands join
   the transaction, and returns `true`; `false` lets the engine apply the
-  declared form of the migration. The declared forms (`rename_property`,
-  `rename_schema`, `delete_property`) are not applied yet: such a migration
-  fails with `incompatible_upgrade`.
+  declared form of the migration: `rename_schema`, `rename_property` and
+  `delete_property` rewrite the stored values directly, by name, whatever schema
+  declares them. Their names are short names of the module, or qualified. A
+  relation to a schema `rename_schema` renames keeps its values. A
+  migration with more than one form, or an operand without its names, fails with
+  `constraint_violation`; a `body`, or an entry with no form, that `migrate`
+  does not run fails with `incompatible_upgrade`.
+
+  ```yaml
+  migrations:
+    - to: 2.0.0
+      rename_schema: { from: site, to: place }
+    - to: 2.0.0
+      rename_property: { schema: place, from: label, to: title }
+    - to: 2.0.0
+      delete_property: { schema: place, property: legacy }
+  ```
 - **The check at the end.** Every instance of the schemas of the module, old
   and new, is then checked against the new schemas: a missing property takes
   its default, a property the schema no longer declares is dropped, a value
   that breaks a constraint or no longer fits a changed type, and an instance of
   a schema that leaves the module, fail with `incompatible_upgrade`. A
   migration that converted a value lets it pass.
+- **Rules.** Every declared rule is then checked on every instance, the data
+  the upgrade did not write included: a breach fails with `rule_violation`,
+  listing the instances at fault in `details.violations`.
 - **Atomic.** A refusal, or an error a migration throws, rolls everything back:
   the instances, the versions and the embedded manifest. Otherwise the
   transaction commits; `data_minor_version` moves when an instance changed,

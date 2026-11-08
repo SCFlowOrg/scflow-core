@@ -56,7 +56,9 @@ function scalarSchema(resolved: ResolvedScalar, prop: NormalizedProperty): JsonS
 /** The value of a `default_value`, or `undefined` when it holds a placeholder, which the engine resolves. */
 function defaultOf(prop: NormalizedProperty, resolved: ResolvedScalar): TransientValue | undefined {
   const raw = prop.default_value;
-  if (raw === null || raw.includes("${") || prop.constraints.is_array === true) return undefined;
+  if (raw === null || prop.constraints.is_array === true) return undefined;
+  if (typeof raw !== "string") return raw;
+  if (raw.includes("${")) return undefined;
   if (resolved.base === "number" || resolved.base === "integer") return Number(raw);
   if (resolved.base === "boolean") return raw === "true";
   return raw;

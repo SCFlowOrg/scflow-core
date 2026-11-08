@@ -97,6 +97,8 @@ export interface Command {
   namespace?: string;
   filters?: Filter;
   input?: TransientValue[];
+  /** `delete` only: also removes the instances that reach a removed one through an `on_delete: confirm` relation. False by default. */
+  cascade?: boolean;
   result?: ResultOptions;
 }
 
@@ -326,8 +328,12 @@ export interface NormalizedProperty {
   name: string;
   /** A scalar type name or a schema name. Never carries "[]" sugar — see `constraints.is_array`. */
   type: string;
-  /** Raw, unresolved (may contain ${...} placeholders). Null if not authored. */
-  default_value: string | null;
+  /**
+   * Raw, unresolved (may contain ${...} placeholders). Null if not authored.
+   * A string for a scalar or a relation; an array or a map may also hold its
+   * default as the list or the mapping itself.
+   */
+  default_value: string | TransientValue[] | TransientObject | null;
   /** Raw, unresolved. Null if not authored (falls back to the type's null value). */
   null_value: string | null;
   constraints: Record<string, TransientValue>;

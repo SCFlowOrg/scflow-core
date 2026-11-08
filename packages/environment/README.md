@@ -39,5 +39,5 @@ An action body is a function `(context, params) => result`. Its
 the only way a body reaches the engine. The body imports only types from
 `@scfloworg/core` and this package.
 
-Not here yet: declared procedures, the declared forms of migrations and the check of rules after an upgrade, the refusal of writes outside an action
+Not here yet: the declared forms of migrations and the check of rules after an upgrade, the refusal of writes outside an action
 (piece 1.8 of the engine), and documents, files and undo (the workspace).

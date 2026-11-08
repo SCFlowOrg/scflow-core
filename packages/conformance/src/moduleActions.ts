@@ -96,6 +96,12 @@ schemas:
       - name: site
         type: site
         on_delete: cascade
+  - name: booking
+    is_root:
+    properties:
+      - name: site
+        type: site
+        on_delete: confirm
   - name: kiosk
     is_root:
     crud:
@@ -117,6 +123,50 @@ actions:
     writes: [site]
   - id: shop/write_foreign_facet
     writes: [site]
+  - id: shop/open_and_close
+    parameters:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+    body:
+      commands:
+        - call: shop/create_site
+          with:
+            display_name: \${params.name}
+          as: site
+        - call: shop/update_site
+          with:
+            id: \${site.id}
+            status: closed
+      result: \${site.id}
+  - id: shop/create_then_fail
+    writes: [site]
+    body:
+      commands:
+        - create: shop.site
+          input:
+            - display_name: doomed
+        - fail: refused
+  - id: shop/procedure_undeclared
+    body:
+      commands:
+        - create: shop.kiosk
+          input:
+            - label: k
+  - id: shop/procedure_bad_call
+    body:
+      commands:
+        - call: shop/create_site
+          with:
+            nope: 1
+  - id: shop/procedure_out_of_reach
+    body:
+      commands:
+        - call: green/get_footprint
+          with:
+            id: x
 `;
 
 const GREEN = `
@@ -366,6 +416,63 @@ ${extra}
         expect((await ds.run("green/get_footprint", { id })).result).toEqual({ co2: 7 });
         const kind = ds.actions().find((a) => a.id === "green/get_footprint")?.kind;
         expect(kind).toBe("read");
+      });
+    });
+
+    describe("procedures", () => {
+      it("runs a declared procedure, its calls in one transaction", async () => {
+        const ds = await dataset();
+        const { result } = await ds.run("shop/open_and_close", { name: "Lille" });
+        const { after } = await ds.query({ query: "shop.site" });
+        expect(after).toMatchObject([{ id: result, display_name: "Lille", status: "closed" }]);
+      });
+
+      it("checks the parameters of a procedure", async () => {
+        const ds = await dataset();
+        expect(await codeOf(ds.run("shop/open_and_close", {}))).toBe("invalid_parameters");
+      });
+
+      it("rolls back when a fail step runs", async () => {
+        const ds = await dataset();
+        expect(await codeOf(ds.run("shop/create_then_fail"))).toBe("procedure_failed");
+        expect((await ds.query({ query: "shop.site" })).after).toEqual([]);
+      });
+
+      it("holds a procedure to the write limit", async () => {
+        const ds = await dataset();
+        expect(await codeOf(ds.run("shop/procedure_undeclared"))).toBe("write_not_declared");
+      });
+
+      it("sends a call step through the checks of an action", async () => {
+        const ds = await dataset();
+        expect(await codeOf(ds.run("shop/procedure_bad_call"))).toBe("invalid_parameters");
+      });
+
+      it("calls only its own module and its dependencies", async () => {
+        const ds = await dataset();
+        expect(await codeOf(ds.run("shop/procedure_out_of_reach"))).toBe("unknown_action");
+      });
+    });
+
+    describe("cascade of a delete", () => {
+      it("asks for consent on a confirm relation, and cascade gives it", async () => {
+        const ds = await dataset();
+        const id = await created(ds);
+        await ds.run("shop/create_booking", { site: id });
+        expect(await codeOf(ds.run("shop/delete_site", { id }))).toBe("constraint_violation");
+        expect((await ds.query({ query: "shop.booking" })).after).toHaveLength(1);
+        await ds.run("shop/delete_site", { id, cascade: true });
+        expect((await ds.query({ query: "shop.site" })).after).toEqual([]);
+        expect((await ds.query({ query: "shop.booking" })).after).toEqual([]);
+      });
+
+      it("counts a confirm relation in the impact, unblocked", async () => {
+        const ds = await dataset();
+        const id = await created(ds);
+        const booking = ((await ds.run("shop/create_booking", { site: id })).result as Row).id;
+        const impact = (await ds.deleteImpact("shop.site", { id })) as { removed: Row[]; blocked: Row[] };
+        expect(impact.blocked).toEqual([]);
+        expect(impact.removed).toEqual(expect.arrayContaining([{ schema: "shop.booking", key: booking }]));
       });
     });
 

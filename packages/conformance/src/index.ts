@@ -25,6 +25,8 @@ import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@sc
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
 import { moduleUpgradeCases } from "./moduleUpgrade.js";
+import { procedureCases } from "./procedures.js";
+import { ruleCases } from "./rules.js";
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -2484,6 +2486,8 @@ schemas:
   datasetModuleCases(formatPrefix, newLocator);
   facetCases(formatPrefix, newLocator);
   moduleUpgradeCases(impl, formatPrefix, newLocator);
+  ruleCases(formatPrefix, newLocator);
+  procedureCases(formatPrefix, newLocator);
 }
 
 export { runActionConformanceSuite } from "./actions.js";

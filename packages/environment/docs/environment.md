@@ -188,8 +188,10 @@ dataset.run(id: string, params?: unknown): Promise<ActionOutcome>
   moved.
 - The runs of one dataset take turns: a run begins when the one before it has
   settled, so two actions never share a transaction.
-- A body whose declaration has a `body` procedure and no code fails with
-  `unknown_action`: procedures run with the action package.
+- A declaration with a `body` procedure and no code runs that procedure with
+  `runProcedure` of `@scfloworg/core`. Its commands are held to the write limit
+  of the action, and each `call` step goes through the registry, so its
+  parameters are checked and it reaches only the module and its dependencies.
 - The parameters are checked against `parameters` by `@scfloworg/actions`
   before the body runs, and each `ref` is resolved to a key: a breach fails with
   `invalid_parameters`. An action that declares no `parameters` receives what it

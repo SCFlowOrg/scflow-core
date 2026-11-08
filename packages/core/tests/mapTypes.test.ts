@@ -65,7 +65,7 @@ describe("resolveType on a map type", () => {
 describe("a property of a map type in a schema", () => {
   it.each([
     ["is_array", { is_array: true }],
-    ["a default_value", { default_value: "x" }],
+    ["a default_value that is not a mapping", { default_value: "x" }],
     ["a null_value", { null_value: "x" }],
     ["is_content", { is_content: true }],
     ["is_folder", { is_folder: true }],

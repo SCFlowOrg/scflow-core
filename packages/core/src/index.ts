@@ -25,6 +25,10 @@ export {
   createEngine,
 } from "./api.js";
 export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
+export { runProcedure } from "./procedure.js";
+export type { Procedure, ProcedureHost } from "./procedure.js";
+export type { RuleViolation } from "./rules.js";
+export type { CheckRule, UniqueGroup } from "./ruleDeclarations.js";
 export type { CheckImportResult, RefreshResult } from "./imports.js";
 export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
 export type { DatasetModel, DatasetModule } from "./datasetModules.js";
@@ -55,7 +59,7 @@ export {
   SCHEMA_ROLES,
 } from "./schemaProcessing.js";
 export { substitutePlaceholders } from "./placeholders.js";
-export { checkFilter, matchFilter } from "./filter.js";
+export { checkFilter, matchFilter, matchValueFilter } from "./filter.js";
 export { isModelSchema } from "./modelUpgrade.js";
 export type { UpgradeMarker, ModelDiff, ModelDiffEntry } from "./modelUpgrade.js";
 export { createLogger, isLogLevel, noopLogger } from "./logging.js";

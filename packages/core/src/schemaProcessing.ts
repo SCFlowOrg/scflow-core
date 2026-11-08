@@ -4,6 +4,7 @@ import { parseMapType } from "./mapTypes.js";
 import { modelError } from "./errors.js";
 import { validateExtensionSchema } from "./extensions.js";
 import { validateFacetSchema } from "./facets.js";
+import { processRuleDeclarations } from "./ruleDeclarations.js";
 import type {
   NormalizedProperty,
   NormalizedScalarType,
@@ -96,6 +97,18 @@ function normalizeValueField(propName: string, field: "default_value" | "null_va
 }
 
 /**
+ * A `default_value` as stored: what `normalizeValueField` keeps, or, for an
+ * array or a map, the list or the mapping as written (see Property). Whether
+ * it suits the type is checked once the type resolves, in
+ * `validateMapProperties`.
+ */
+function normalizeDefaultValue(propName: string, value: TransientValue): NormalizedProperty["default_value"] {
+  if (Array.isArray(value)) return value;
+  if (value !== null && typeof value === "object") return value as TransientObject;
+  return normalizeValueField(propName, "default_value", value);
+}
+
+/**
  * Normalizes an authored property: the `[type]` sugar becomes `is_array`, and
  * every key the meta-model does not declare becomes a constraint. `inherited`
  * is the property of the same name on the parent schema: its type, default
@@ -130,7 +143,7 @@ export function processPropertyDescription(raw: TransientValue, inherited?: Norm
   return {
     name: obj.name,
     type,
-    default_value: "default_value" in obj ? normalizeValueField(obj.name, "default_value", obj.default_value) : (inherited?.default_value ?? null),
+    default_value: "default_value" in obj ? normalizeDefaultValue(obj.name, obj.default_value) : (inherited?.default_value ?? null),
     null_value: "null_value" in obj ? normalizeValueField(obj.name, "null_value", obj.null_value) : (inherited?.null_value ?? null),
     constraints: inherited ? { ...inherited.constraints, ...constraints } : constraints,
   };
@@ -216,6 +229,11 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
     // each schema states these for itself: `crud` belongs to its module, and the child of an abstract schema has instances
     for (const own of ["crud", "abstract"]) if (!(own in ownConstraints)) delete constraints[own];
   }
+  // the rules of the parent are kept, and the schema adds its own (see Rules)
+  const rules = processRuleDeclarations(obj.name, ownConstraints, parent?.constraints, properties);
+  delete constraints.checks;
+  delete constraints.unique;
+  Object.assign(constraints, rules);
 
   // Inherited properties count toward "at most one per role" too — a subclass
   // can't add a second is_content/is_folder property just because its own
@@ -551,17 +569,19 @@ export const NO_ROLES: Record<string, string> = Object.freeze({});
 export const SCHEMA_ROLES: Record<string, string> = Object.freeze(derivePropertyRoles(META_SCHEMAS.schema));
 
 /** The values of the `on_delete` relation constraint. */
-export const ON_DELETE_VALUES = ["restrict", "cascade", "set_null"] as const;
+export const ON_DELETE_VALUES = ["restrict", "cascade", "set_null", "confirm"] as const;
 
 /** What the deletion of the target of a relation does to the declaring instance. */
 export type OnDelete = (typeof ON_DELETE_VALUES)[number];
 
 /**
  * `on_delete` says what the deletion of the target of a relation does to the
- * instance declaring it: `restrict`, `cascade` or `set_null`. It is valid on a
- * relation only, never on an `owner` or `extension` relation (the owner already
- * removes the instance with it), and `set_null` is refused on a `mandatory`
- * relation, which cannot be null. Each breach is a `constraint_violation`.
+ * instance declaring it: `restrict`, `cascade`, `set_null` or `confirm`. It is
+ * valid on a relation only; on an `owner` relation `confirm` is the only value
+ * allowed (the owner otherwise removes the instance with it silently), it is
+ * never valid on an `extension` relation, and `set_null` is refused on a
+ * `mandatory` relation, which cannot be null. Each breach is a
+ * `constraint_violation`.
  */
 function validateOnDeleteConstraints(schemaName: string, properties: NormalizedProperty[], ctx: TypeResolutionContext): void {
   for (const prop of properties) {
@@ -576,10 +596,10 @@ function validateOnDeleteConstraints(schemaName: string, properties: NormalizedP
     if (resolveType(prop.type, ctx).kind !== "relation") {
       throw modelError("constraint_violation", `"${prop.name}" on schema "${schemaName}" has "on_delete" but is not a relation`);
     }
-    if (prop.constraints.owner === true || prop.constraints.extension === true) {
+    if (prop.constraints.extension === true || (prop.constraints.owner === true && value !== "confirm")) {
       throw modelError(
         "constraint_violation",
-        `"${prop.name}" on schema "${schemaName}" has "on_delete" but is an owner or extension relation — its owner already removes the instance with it`,
+        `"${prop.name}" on schema "${schemaName}" has "on_delete: ${value}" but is an owner or extension relation — its owner already removes the instance with it, and only "confirm" asks for consent on an owner relation`,
       );
     }
     if (value === "set_null" && prop.constraints.mandatory === true) {
@@ -643,16 +663,34 @@ function validateUniqueProperties(schemaName: string, properties: NormalizedProp
  */
 function validateMapProperties(schemaName: string, properties: NormalizedProperty[], ctx: TypeResolutionContext): void {
   for (const prop of properties) {
-    if (parseMapType(prop.type) === null) continue;
+    const isMap = parseMapType(prop.type) !== null;
+    // a default written as a list belongs to an array, and one written as a mapping to a map
+    if (Array.isArray(prop.default_value) && (isMap || prop.constraints.is_array !== true)) {
+      throw modelError("constraint_violation", `"${prop.name}" on schema "${schemaName}" has a list as "default_value" but is not an array`);
+    }
+    if (isPlainMapping(prop.default_value) && !isMap) {
+      throw modelError("constraint_violation", `"${prop.name}" on schema "${schemaName}" has a mapping as "default_value" but is not a map`);
+    }
+    if (!isMap) continue;
     resolveType(prop.type, ctx);
     if (prop.constraints.is_array === true) {
       throw modelError("constraint_violation", `"${prop.name}" on schema "${schemaName}" is a map but has "is_array" — a map is single-valued`);
     }
-    if (prop.default_value !== null || prop.null_value !== null) {
+    if (prop.null_value !== null) {
       throw modelError(
         "constraint_violation",
-        `"${prop.name}" on schema "${schemaName}" is a map and takes neither "default_value" nor "null_value" — its default and null value are {}`,
+        `"${prop.name}" on schema "${schemaName}" is a map and takes no "null_value" — its null value is {}`,
+      );
+    }
+    if (typeof prop.default_value === "string" && !/^\$\{[^}]*\}$/.test(prop.default_value.trim())) {
+      throw modelError(
+        "constraint_violation",
+        `"${prop.name}" on schema "${schemaName}" is a map: its "default_value" is a mapping, or one placeholder giving one`,
       );
     }
   }
+}
+
+function isPlainMapping(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

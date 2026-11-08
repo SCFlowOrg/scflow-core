@@ -553,6 +553,14 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
     const authored: TransientObject = { ...raw };
     if (typeof raw.extends === "string") authored.extends = canonical(raw.extends, entry);
     if (typeof raw.facet_of === "string") authored.facet_of = canonical(raw.facet_of, entry);
+    // the schema an `exists` rule names is written in the module, like a property type
+    if (Array.isArray(raw.checks)) {
+      authored.checks = raw.checks.map((check) =>
+        isPlainObject(check) && isPlainObject(check.exists) && typeof check.exists.schema === "string"
+          ? { ...check, exists: { ...check.exists, schema: canonical(check.exists.schema, entry) } }
+          : check,
+      );
+    }
     if (Array.isArray(raw.properties)) {
       authored.properties = raw.properties.map((p) =>
         isPlainObject(p) && typeof p.type === "string"

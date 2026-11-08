@@ -13,6 +13,7 @@ import {
   checkActionWrite,
   createRefResolver,
   generatedActions,
+  runProcedure,
   type ApiSession,
   type AuthoredCommand,
   type AuthoredScript,
@@ -26,6 +27,7 @@ import {
   type MigrationStep,
   type ModuleManifest,
   type PersistenceInterface,
+  type Procedure,
   type TransientObject,
   type TransientValue,
 } from "@scfloworg/core";
@@ -487,11 +489,22 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
   return Object.freeze({ formats: engine.formats, modules, datasets });
 }
 
+/** The `body` of a declaration when it is a procedure: a mapping with a list of commands. */
+function procedureOf(body: unknown): Procedure | undefined {
+  return body !== null &&
+    typeof body === "object" &&
+    Array.isArray((body as { commands?: unknown }).commands)
+    ? (body as Procedure)
+    : undefined;
+}
+
 /**
  * The registry of a dataset: the actions its modules declare with a body the
  * environment holds, and the actions generated from their schemas. A declared
- * action takes the place of a generated one of the same id. A procedure, which
- * has no code to run yet, is not registered.
+ * action takes the place of a generated one of the same id. A declared action
+ * runs its code, else its procedure, whose commands and calls go through the
+ * context of the action: they keep its write limit, and each call goes through
+ * the registry. A module the environment does not have runs no procedure.
  */
 function buildRegistry(
   modules: ModuleCatalogue,
@@ -507,18 +520,20 @@ function buildRegistry(
     );
   for (const loaded of model.set.modules) {
     if (loaded.key === MCL_CORE_KEY) continue;
+    const state = states.find((s) => s.module === loaded.key)?.state;
     const installed = states.some((s) => s.module === loaded.key && s.installed !== null)
       ? modules.get(loaded.key)
       : undefined;
     for (const declaration of loaded.actions.values()) {
       const id = declaration.id as string;
       const body = installed?.actions.get(id) as ActionBody | undefined;
-      if (!body) continue;
+      const procedure = state === "missing" ? undefined : procedureOf(declaration.body);
+      if (!body && !procedure) continue;
       const writes = canonicalWrites(loaded.key, declaration.writes);
       const kind = declaration.kind === "read" ? "read" : "action";
       const title =
         typeof declaration.title === "string" && declaration.title !== "" ? declaration.title : id;
-      const parameters = declaration.parameters;
+      const parameters = declaration.parameters ?? procedure?.parameters;
       registry.register({
         id,
         title,
@@ -531,12 +546,17 @@ function buildRegistry(
         ...(parameters === undefined || parameters === null || parameters === ""
           ? {}
           : { parameters: canonicalParameters(model, loaded.key, id, parameters) as JsonSchema }),
-        run: (params, context) => body(context, params),
+        run: (params, context) =>
+          body
+            ? body(context, params)
+            : runProcedure(procedure as Procedure, params, {
+                runCommand: (command) => context.runCommand(context.locator, command),
+                call: (called, calledParams) => context.call(called, calledParams),
+              }),
       });
       limits.set(id, { module: loaded.key, writes: new Set(kind === "read" ? [] : writes), title });
     }
     // a module the dataset embeds but the environment does not have stays out, as its declared actions do
-    const state = states.find((s) => s.module === loaded.key)?.state;
     if (state === "missing" || state === "ahead") continue;
     for (const generated of generatedActions(model, loaded)) {
       if (loaded.actions.has(generated.id)) continue;
