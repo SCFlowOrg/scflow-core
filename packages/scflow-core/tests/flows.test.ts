@@ -120,12 +120,12 @@ describe("createFlow with an item", () => {
   });
 
   it("refuses an item whose domain is not among the domains of an end, and creates nothing", async () => {
-    const { mcl, locator } = await setup();
+    const { mcl, locator, run } = await setup();
     const source = await createActor(mcl, locator, ["physical"]);
     const destination = await createActor(mcl, locator, ["service"]);
     const item = await createItem(mcl, locator, "physical");
 
-    await expect(createFlow(mcl, locator, { source, destination, item })).rejects.toThrow(/domain/);
+    await expect(run("scflow/create_flow", { source, destination, item })).rejects.toMatchObject({ code: "rule_violation" });
 
     expect(await queryFlows(mcl, locator)).toHaveLength(0);
     expect(await heldPairs(mcl, locator)).toEqual([]);
@@ -213,19 +213,19 @@ describe("setFlowItem", () => {
     const nut = await createItem(mcl, locator, "physical", "Nut");
     const created = await createFlow(mcl, locator, { source, destination, item: bolt });
 
-    await expect(setFlowItem(mcl, locator, { flow: created.id as string, item: nut })).rejects.toThrow(/already/);
+    await expect(setFlowItem(mcl, locator, { flow: created.id as string, item: nut })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect((await queryFlows(mcl, locator))[0]).toMatchObject({ item: bolt });
   });
 
   it("refuses an item whose domain is not among the domains of an end, and changes nothing", async () => {
-    const { mcl, locator } = await setup();
+    const { mcl, locator, run } = await setup();
     const source = await createActor(mcl, locator, ["physical"]);
     const destination = await createActor(mcl, locator, ["service"]);
     const item = await createItem(mcl, locator, "physical");
     const created = await createFlow(mcl, locator, { source, destination });
 
-    await expect(setFlowItem(mcl, locator, { flow: created.id as string, item })).rejects.toThrow(/domain/);
+    await expect(run("scflow/set_flow_item", { id: created.id, item })).rejects.toMatchObject({ code: "rule_violation" });
 
     expect((await queryFlows(mcl, locator))[0].item ?? null).toBeNull();
     expect(await heldPairs(mcl, locator)).toEqual([]);

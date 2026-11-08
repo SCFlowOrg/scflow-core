@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createTestDocument } from "@scfloworg/core-plugin-core/testing";
 import { SCHEMAS } from "../src/index.js";
+import { setupActions } from "./actions-helpers.js";
 
 async function setup() {
-  return createTestDocument(SCHEMAS);
+  return setupActions();
 }
 
 describe("SCFLOW schemas", () => {
@@ -68,6 +68,9 @@ describe("SCFLOW schemas", () => {
       schema: "flow",
       input: { source: a.after[0].id, destination: b.after[0].id },
     });
+    for (const actor of [a.after[0].id, b.after[0].id]) {
+      await mcl.runCommand(locator, { kind: "create", schema: "item_at_actor", input: { actor, item: item.after[0].id } });
+    }
     const carrying = await mcl.runCommand(locator, {
       kind: "create",
       schema: "flow",
@@ -414,7 +417,7 @@ describe("SCFLOW schemas", () => {
       input: { actor: actor.after[0].id, item: item.after[0].id },
     });
 
-    const deleted = await mcl.runCommand(locator, { kind: "delete", schema: "actor", filters: { id: actor.after[0].id } });
+    const deleted = await mcl.runCommand(locator, { kind: "delete", schema: "actor", filters: { id: actor.after[0].id }, cascade: true });
     expect(deleted["cascade-deleted"]).toHaveLength(1);
     expect((await mcl.runCommand(locator, { kind: "query", schema: "item_at_actor" })).after).toEqual([]);
     expect((await mcl.runCommand(locator, { kind: "query", schema: "item" })).after).toHaveLength(1);
@@ -1065,7 +1068,7 @@ describe("SCFLOW schemas", () => {
     await addNote(transformation);
     await addNote(line);
 
-    await mcl.runCommand(locator, { kind: "delete", schema: "actor", filters: { id: actor } });
+    await mcl.runCommand(locator, { kind: "delete", schema: "actor", filters: { id: actor }, cascade: true });
 
     const left = await mcl.runCommand(locator, { kind: "query", schema: "note" });
     expect(left.after.map((n: { id: string }) => n.id)).toEqual([kept]);

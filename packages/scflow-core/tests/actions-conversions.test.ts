@@ -188,8 +188,8 @@ describe("deletions that reach conversions", () => {
   it("scflow/delete_item is refused while a conversion references the item, and counts it", async () => {
     const { run, query } = await converted();
 
-    await expect(run("scflow/delete_item", { id: "Bolt" })).rejects.toThrow(/1 conversion\(s\)/);
-    await expect(run("scflow/delete_item", { id: "Nut" })).rejects.toThrow(/1 conversion\(s\)/);
+    await expect(run("scflow/delete_item", { id: "Bolt" })).rejects.toMatchObject({ code: "constraint_violation" });
+    await expect(run("scflow/delete_item", { id: "Nut" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("conversion")).toHaveLength(1);
   });
@@ -206,7 +206,7 @@ describe("deletions that reach conversions", () => {
   it("scflow/delete_actor is refused while the actor owns a conversion, and counts it", async () => {
     const { run, query } = await converted();
 
-    await expect(run("scflow/delete_actor", { id: "Depot" })).rejects.toThrow(/1 conversion\(s\)/);
+    await expect(run("scflow/delete_actor", { id: "Depot" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("conversion")).toHaveLength(1);
   });

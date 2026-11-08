@@ -12,10 +12,10 @@ async function withUsages() {
   const bolt = await create("item", { display_name: { en: "Bolt" }, type: partType });
   const nut = await create("item", { display_name: { en: "Nut" }, type: partType });
   const drill = await create("item", { display_name: { en: "Drill" }, type: toolType });
-  const flowBolt = await create("flow", { source: a.id, destination: b.id, item: bolt });
-  const flowNut = await create("flow", { source: a.id, destination: b.id, item: nut });
   const heldBolt = await create("item_at_actor", { actor: a.id, item: bolt });
   const heldNut = await create("item_at_actor", { actor: a.id, item: nut });
+  const flowBolt = await create("flow", { source: a.id, destination: a.id, item: bolt });
+  const flowNut = await create("flow", { source: a.id, destination: a.id, item: nut });
   const heldDrill = await create("item_at_actor", { actor: a.id, item: drill });
   const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
   const transformation = await create("transformation", {
@@ -60,7 +60,7 @@ describe("scflow/delete_item", () => {
   it("refuses an item that is held or carried by a flow without cascade, and removes nothing", async () => {
     const { run, query } = await withUsages();
 
-    await expect(run("scflow/delete_item", { id: "Bolt" })).rejects.toThrow(/held item.*flow/);
+    await expect(run("scflow/delete_item", { id: "Bolt" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("item")).toHaveLength(3);
     expect(await query("item_at_actor")).toHaveLength(3);
@@ -103,7 +103,7 @@ describe("scflow/delete_item_type", () => {
   it("refuses a type that items use without cascade, and removes nothing", async () => {
     const { run, query } = await withUsages();
 
-    await expect(run("scflow/delete_item_type", { id: "Part" })).rejects.toThrow(/item/);
+    await expect(run("scflow/delete_item_type", { id: "Part" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("item_type")).toHaveLength(2);
     expect(await query("item")).toHaveLength(3);

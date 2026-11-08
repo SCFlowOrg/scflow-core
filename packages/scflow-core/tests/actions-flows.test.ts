@@ -93,7 +93,7 @@ describe("scflow/create_flow", () => {
 
     await expect(
       run("scflow/create_flow", { source: "Source", destination: "Target", item: "Bolt" }),
-    ).rejects.toThrow(/item.*physical.*destination/);
+    ).rejects.toMatchObject({ code: "rule_violation" });
 
     expect(await query("flow")).toHaveLength(0);
     expect(await query("item_at_actor")).toHaveLength(0);

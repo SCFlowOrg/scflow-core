@@ -214,6 +214,12 @@ Each schema names the business action that takes the place of a generated CRUD o
 
 The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item of a flow is set once and never changes.
 
+## Deletion
+
+*Rule.*
+
+Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type` and the `location` of an `actor` have no `on_delete`, so they are cleared when their target is deleted.
+
 ## annotable
 
 *Schema.*
@@ -308,6 +314,10 @@ name: actor
 extends: annotable
 description: A place in the network where items are held, consumed, produced or queued
 is_root:
+checks:
+  - name: parent_actor_domains
+    when: { parent_actor: { exists: true } }
+    require: { type.domains: { subset_of: "${this.parent_actor.type.domains}" } }
 properties:
   - name: display_name
     type: localized_string
@@ -316,11 +326,14 @@ properties:
     type: localized_markdown
   - name: type
     type: actor_type
+    on_delete: confirm
     mandatory:
     inverse_name: actors
     inverse_is_array:
   - name: scope
     type: scope
+    on_delete: confirm
+    default_value: "${this.type.default_scope}"
     inverse_name: actors
     inverse_is_array:
   - name: location
@@ -329,11 +342,13 @@ properties:
     inverse_is_array:
   - name: parent_actor
     type: actor
+    on_delete: confirm
+    acyclic:
     inverse_name: child_actors
     inverse_is_array:
 ```
 
-Per [Actor](flow-model.md#actor). Generated relations: `outgoing_flows` and `incoming_flows` from `flow`, `held_items` from `item_at_actor`, `transformations` from `transformation`, `child_actors` from `actor`'s `parent_actor`. `location` is optional and can change; several actors can share one location, and the `location` schema declares no relation to actors. `parent_actor` is optional and can change; the network rules `parent_actor_domains` and `parent_actor_acyclic` constrain it.
+Per [Actor](flow-model.md#actor). Generated relations: `outgoing_flows` and `incoming_flows` from `flow`, `held_items` from `item_at_actor`, `transformations` from `transformation`, `child_actors` from `actor`'s `parent_actor`. `location` is optional and can change; several actors can share one location, and the `location` schema declares no relation to actors. `parent_actor` is optional and can change; the network rules `parent_actor_domains` and `parent_actor_acyclic` constrain it. `scope` defaults to the `default_scope` of the `type` when none is given, per [Actor Creation](implementation.md#actor-creation).
 
 ## flow
 
@@ -344,6 +359,23 @@ name: flow
 extends: annotable
 description: A connection moving one optional item from a source actor to a destination actor
 is_root:
+checks:
+  - name: internal_flow_item
+    when:
+      or:
+        - source.parent_actor: { eq: "${this.destination}" }
+        - destination.parent_actor: { eq: "${this.source}" }
+    require: { item: { exists: true } }
+  - name: carried_item_domain
+    when: { item: { exists: true } }
+    require:
+      and:
+        - item.type.domain: { in: "${this.source.type.domains}" }
+        - item.type.domain: { in: "${this.destination.type.domains}" }
+  - name: flow_ends_hold_item
+    when: { item: { exists: true } }
+    each: ["${this.source}", "${this.destination}"]
+    exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
 properties:
   - name: display_name
     type: localized_string
@@ -351,23 +383,27 @@ properties:
     type: localized_markdown
   - name: source
     type: actor
+    on_delete: confirm
     mandatory:
     inverse_name: outgoing_flows
     inverse_is_array:
   - name: destination
     type: actor
+    on_delete: confirm
     mandatory:
     inverse_name: incoming_flows
     inverse_is_array:
   - name: item
     type: item
+    on_delete: confirm
+    set_once:
     inverse_name: carried_on
     inverse_is_array:
   - name: bidirectional
     type: boolean
 ```
 
-Per [Flow](flow-model.md#flow). `display_name` and `item` are optional. `item` carries no `constant` constraint, which would forbid setting it after creation: the actions set it once and refuse any later change.
+Per [Flow](flow-model.md#flow). `display_name` and `item` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The three `checks` are the [network rules](implementation.md#network-rules) of a flow.
 
 ## item
 
@@ -386,6 +422,7 @@ properties:
     type: localized_markdown
   - name: type
     type: item_type
+    on_delete: confirm
     mandatory:
     inverse_name: items
     inverse_is_array:
@@ -401,21 +438,29 @@ Per [Item](flow-model.md#item). Generated relations: `held_at` from `item_at_act
 name: item_at_actor
 extends: annotable
 description: An item held at an actor
+checks:
+  - name: held_item_domain
+    require: { item.type.domain: { in: "${this.actor.type.domains}" } }
+unique:
+  - name: held_item_unique
+    properties: [actor, item]
 properties:
   - name: actor
     type: actor
+    on_delete: confirm
     owner:
     inverse_name: held_items
     inverse_is_array:
   - name: item
     type: item
+    on_delete: confirm
     mandatory:
     constant:
     inverse_name: held_at
     inverse_is_array:
 ```
 
-Per [Item At Actor](flow-model.md#item-at-actor). Shared with an id key. `transformation_lines` is generated from `transformation_line`.
+Per [Item At Actor](flow-model.md#item-at-actor). Shared with an id key. `transformation_lines` is generated from `transformation_line`. `checks` and `unique` state the [network rules](implementation.md#network-rules) `held_item_domain` and `held_item_unique`.
 
 ## transformation_type
 
@@ -448,23 +493,26 @@ description: A transformation of consumed items into produced items at an actor
 properties:
   - name: display_name
     type: localized_string
+    default_value: "${this.type.display_name}"
     min_length: 1
   - name: description
     type: localized_markdown
   - name: type
     type: transformation_type
+    on_delete: confirm
     mandatory:
     constant:
     inverse_name: transformations
     inverse_is_array:
   - name: actor
     type: actor
+    on_delete: confirm
     owner:
     inverse_name: transformations
     inverse_is_array:
 ```
 
-Per [Transformation](flow-model.md#transformation). `lines` is generated from `transformation_line`. `type` is per [Typing](flow-model.md#typing).
+Per [Transformation](flow-model.md#transformation). `lines` is generated from `transformation_line`. `type` is per [Typing](flow-model.md#typing). `display_name` defaults to the name of the `type`.
 
 ## transformation_line
 
@@ -474,6 +522,12 @@ Per [Transformation](flow-model.md#transformation). `lines` is generated from `t
 name: transformation_line
 extends: annotable
 description: One item consumed or produced by a transformation
+checks:
+  - name: transformation_line_actor
+    require: { held_item.actor: { eq: "${this.transformation.actor}" } }
+unique:
+  - name: transformation_line_unique
+    properties: [transformation, held_item, role]
 properties:
   - name: transformation
     type: transformation
@@ -484,12 +538,13 @@ properties:
     type: transformation_role
   - name: held_item
     type: item_at_actor
+    on_delete: confirm
     mandatory:
     inverse_name: transformation_lines
     inverse_is_array:
 ```
 
-Per [Transformation](flow-model.md#transformation). Shared with an id key. `held_item` references the item at actor of the transformation's own actor.
+Per [Transformation](flow-model.md#transformation). Shared with an id key. `held_item` references the item at actor of the transformation's own actor, per the rule `transformation_line_actor`, and `transformation_line_unique` gives a transformation at most one line for a held item and a role.
 
 ## conversion
 
@@ -499,6 +554,9 @@ Per [Transformation](flow-model.md#transformation). Shared with an id key. `held
 name: conversion
 extends: annotable
 description: A conversion of one item into another item at an actor
+checks:
+  - name: conversion_item_domain
+    require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
 properties:
   - name: display_name
     type: localized_string
@@ -506,15 +564,18 @@ properties:
     type: localized_markdown
   - name: actor
     type: actor
+    on_delete: confirm
     owner:
     inverse_name: conversions
     inverse_is_array:
   - name: from_item
     type: item
+    on_delete: confirm
     mandatory:
     constant:
   - name: to_item
     type: item
+    on_delete: confirm
     mandatory:
     constant:
 ```

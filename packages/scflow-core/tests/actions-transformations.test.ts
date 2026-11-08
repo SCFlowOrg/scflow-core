@@ -170,7 +170,7 @@ describe("scflow/connect_transformation_line", () => {
         held_item: heldAtAnnex.id,
         role: "consumed",
       }),
-    ).rejects.toThrow(/held_item.*Plant/);
+    ).rejects.toMatchObject({ code: "rule_violation", details: { rule: "transformation_line_actor" } });
 
     expect(await query("transformation_line")).toHaveLength(0);
   });
@@ -301,7 +301,7 @@ describe("scflow/define_process", () => {
         consumed_items: ["Bolt"],
         produced_items: ["Euro"],
       }),
-    ).rejects.toThrow(/produced_items.*financial/);
+    ).rejects.toMatchObject({ code: "rule_violation", details: { rule: "held_item_domain" } });
 
     expect(await query("transformation")).toHaveLength(0);
     expect(await query("item_at_actor")).toHaveLength(0);

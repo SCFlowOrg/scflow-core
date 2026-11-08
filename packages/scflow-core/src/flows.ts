@@ -1,7 +1,7 @@
 import type { MclAccess } from "@scfloworg/core";
 import type { ActionAccess } from "./actions/params.js";
-import { assertCarryable, holdItem } from "./actions/items.js";
-import { labelOf, type Instance } from "./actions/refs.js";
+import { holdItem } from "./actions/items.js";
+import { type Instance } from "./actions/refs.js";
 
 /** The two actors a flow connects, by id. */
 export interface FlowEndsInput {
@@ -65,21 +65,16 @@ export async function getCommonFlowDomains(
  *
  * The flow takes `input.bidirectional` as its `bidirectional` flag, and
  * `input.display_name`, `input.description` and `input.tags` when they are
- * given. The domains of the two actors are not checked. Flows already linking
- * the two actors are neither reused nor reported: the flow is always created.
+ * given. Flows already linking the two actors are neither reused nor reported:
+ * the flow is always created.
  *
- * A flow between an actor and one of its child actors, in either direction, is
- * a transport inside the actor and must carry an item (rule
- * `internal_flow_item`). When `input.item` is given, its domain must be among
- * the domains of both actors (rule `carried_item_domain`), and the flow makes
- * the source and the destination hold it (rule `flow_ends_hold_item`): an
- * `item_at_actor` is created for each end that lacks one. Everything is checked
- * before anything is written.
+ * When `input.item` is given, an `item_at_actor` is created for each end that
+ * lacks one, as the rule `flow_ends_hold_item` requires. The engine refuses a
+ * breach of the rules of a flow, such as `internal_flow_item` and
+ * `carried_item_domain`.
  *
  * @returns The created flow.
- * @throws When an actor or the item does not exist, when a flow between an actor
- *   and its child gives no item, or when the domain of the item is not among
- *   the domains of an end.
+ * @throws When an actor or the item does not exist, or when a rule is broken.
  */
 export async function createFlow(
   mcl: MclAccess,
@@ -88,17 +83,9 @@ export async function createFlow(
 ): Promise<Record<string, unknown>> {
   const { source, destination, item, bidirectional = false, display_name, description, tags } = input;
 
-  const sourceActor = await loadInstance(mcl, locator, "scflow.actor", source);
-  const destinationActor = await loadInstance(mcl, locator, "scflow.actor", destination);
-
-  if (item === undefined && isParentChild(sourceActor, destinationActor)) {
-    throw new Error(
-      `a flow between "${labelOf(sourceActor)}" and "${labelOf(destinationActor)}", one being the parent of the other, must carry an item`,
-    );
-  }
-  const itemInstance = item === undefined ? undefined : await loadInstance(mcl, locator, "scflow.item", item);
-  if (itemInstance !== undefined) {
-    await assertCarryable(onDataset(mcl, locator), sourceActor, destinationActor, itemInstance);
+  if (item !== undefined) {
+    await holdItem(onDataset(mcl, locator), source, item);
+    await holdItem(onDataset(mcl, locator), destination, item);
   }
 
   const { after } = await mcl.runCommand(locator, {
@@ -114,25 +101,19 @@ export async function createFlow(
       ...(tags === undefined ? {} : { tags: [...tags] }),
     },
   });
-  if (itemInstance !== undefined) {
-    await holdItem(onDataset(mcl, locator), sourceActor, itemInstance);
-    await holdItem(onDataset(mcl, locator), destinationActor, itemInstance);
-  }
   return after[0] as unknown as Record<string, unknown>;
 }
 
 /**
- * Sets the item of a flow that carries none.
+ * Sets the item of a flow.
  *
- * The item of a flow never changes and is never removed, so the call throws
- * when the flow carries another item, and changes nothing when it already
- * carries `input.item`. The domain of the item must be among the domains of both
- * ends of the flow (rule `carried_item_domain`), and an `item_at_actor` is
- * created for each end that lacks one (rule `flow_ends_hold_item`).
+ * An `item_at_actor` is created for each end that lacks one, as the rule
+ * `flow_ends_hold_item` requires. The `item` of a flow is `set_once`, so another
+ * item is refused and the same item changes nothing. The engine refuses a breach
+ * of the rule `carried_item_domain`.
  *
  * @returns The flow.
- * @throws When the flow or the item does not exist, when the flow carries another
- *   item, or when the domain of the item is not among the domains of an end.
+ * @throws When the flow or the item does not exist, or when a rule is broken.
  */
 export async function setFlowItem(
   mcl: MclAccess,
@@ -140,39 +121,21 @@ export async function setFlowItem(
   input: SetFlowItemInput,
 ): Promise<Record<string, unknown>> {
   const flow = await loadInstance(mcl, locator, "scflow.flow", input.flow);
-  const item = await loadInstance(mcl, locator, "scflow.item", input.item);
-
-  const current = flow.item as string | undefined | null;
-  if (current === item.id) {
-    return flow;
-  }
-  if (current) {
-    throw new Error(`flow "${flow.id}" already carries an item: the item of a flow never changes and is never removed`);
-  }
-
-  const source = await loadInstance(mcl, locator, "scflow.actor", flow.source as string);
-  const destination = await loadInstance(mcl, locator, "scflow.actor", flow.destination as string);
-  await assertCarryable(onDataset(mcl, locator), source, destination, item);
+  await holdItem(onDataset(mcl, locator), flow.source as string, input.item);
+  await holdItem(onDataset(mcl, locator), flow.destination as string, input.item);
 
   const { after } = await mcl.runCommand(locator, {
     kind: "update",
     schema: "scflow.flow",
     filters: { id: flow.id },
-    input: { item: item.id },
+    input: { item: input.item },
   });
-  await holdItem(onDataset(mcl, locator), source, item);
-  await holdItem(onDataset(mcl, locator), destination, item);
   return after[0] as unknown as Record<string, unknown>;
 }
 
 /** The access of the actions on the dataset `locator`. */
 function onDataset(mcl: MclAccess, locator: string): ActionAccess {
   return { locator, runCommand: (at, command) => mcl.runCommand(at, command), runScript: (at, script) => mcl.runScript(at, script) };
-}
-
-/** True when one actor is the parent of the other. */
-function isParentChild(first: Instance, second: Instance): boolean {
-  return first.parent_actor === second.id || second.parent_actor === first.id;
 }
 
 /** Reads one instance by id; the id of a missing instance is quoted in the error. */

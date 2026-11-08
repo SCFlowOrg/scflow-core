@@ -141,14 +141,14 @@ describe("scflow/update_item", () => {
     await expect(run("scflow/update_item", { id: "Bolt", type: "Ghost" })).rejects.toThrow(/names no instance/);
   });
 
-  it("does not check the records of the item when the type changes", async () => {
+  it("refuses a change of type that a held record of the item no longer fits", async () => {
     const { run, query, bolt } = await world();
     await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
 
-    await run("scflow/update_item", { id: "Bolt", type: "Money" });
+    await expect(run("scflow/update_item", { id: "Bolt", type: "Money" })).rejects.toMatchObject({ code: "rule_violation", details: { rule: "held_item_domain" } });
 
     expect(await query("item_at_actor")).toHaveLength(1);
-    expect((await query("item", { id: bolt.id }))[0].type).not.toBe(bolt.type);
+    expect((await query("item", { id: bolt.id }))[0].type).toBe(bolt.type);
   });
 
   it("refuses a call that gives no property to change, and an unknown or missing item", async () => {
@@ -193,8 +193,8 @@ describe("scflow/hold_item", () => {
   it("refuses an item whose domain is not among the domains of the actor, and writes nothing", async () => {
     const { run, query } = await world();
 
-    await expect(run("scflow/hold_item", { actor: "Depot", item: "Euro" })).rejects.toThrow(/item.*financial/);
-    await expect(run("scflow/hold_item", { actor: "Bank", item: "Bolt" })).rejects.toThrow(/item.*physical/);
+    await expect(run("scflow/hold_item", { actor: "Depot", item: "Euro" })).rejects.toMatchObject({ code: "rule_violation", details: { rule: "held_item_domain" } });
+    await expect(run("scflow/hold_item", { actor: "Bank", item: "Bolt" })).rejects.toMatchObject({ code: "rule_violation", details: { rule: "held_item_domain" } });
 
     expect(await query("item_at_actor")).toHaveLength(0);
   });
@@ -232,7 +232,7 @@ describe("scflow/release_held_item", () => {
     });
     await create("transformation_line", { transformation, role: "consumed", held_item: held.id });
 
-    await expect(run("scflow/release_held_item", { id: held.id })).rejects.toThrow(/transformation/);
+    await expect(run("scflow/release_held_item", { id: held.id })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("item_at_actor")).toHaveLength(1);
     expect(await query("transformation_line")).toHaveLength(1);
@@ -242,10 +242,10 @@ describe("scflow/release_held_item", () => {
     const { run, query, create, depot, bolt } = await world();
     const held = await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
     const type = await create("transformation_type", { display_name: { en: "Assembly" } });
-    const transformation = await create("transformation", { display_name: { en: "Assemble" }, type, actor: depot });
+    const transformation = await create("transformation", { display_name: { en: "Assemble" }, type, actor: depot.id });
     await create("transformation_line", { transformation, held_item: held.id, role: "consumed" });
 
-    await expect(run("scflow/release_held_item", { id: held.id })).rejects.toThrow(/cascade/);
+    await expect(run("scflow/release_held_item", { id: held.id })).rejects.toMatchObject({ code: "constraint_violation" });
     await run("scflow/release_held_item", { id: held.id, cascade: true });
 
     expect(await query("transformation_line")).toHaveLength(0);
@@ -304,7 +304,7 @@ describe("scflow/set_flow_item", () => {
     const type = await create("item_type", { display_name: { en: "Tool" }, domain: "physical" });
     await create("item", { display_name: { en: "Drill" }, type });
 
-    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Drill" })).rejects.toThrow(/already/);
+    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Drill" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect((await query("flow", { id: physical.id }))[0].item).toBe(bolt.id);
   });
@@ -312,15 +312,9 @@ describe("scflow/set_flow_item", () => {
   it("refuses an item whose domain is not among the domains of the source or of the destination, and writes nothing", async () => {
     const { run, query, physical, toBank } = await withFlows();
 
-    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Euro" })).rejects.toThrow(
-      /item.*financial.*source/,
-    );
-    await expect(run("scflow/set_flow_item", { id: toBank.id, item: "Euro" })).rejects.toThrow(
-      /item.*financial.*source/,
-    );
-    await expect(run("scflow/set_flow_item", { id: toBank.id, item: "Bolt" })).rejects.toThrow(
-      /item.*physical.*destination/,
-    );
+    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Euro" })).rejects.toMatchObject({ code: "rule_violation" });
+    await expect(run("scflow/set_flow_item", { id: toBank.id, item: "Euro" })).rejects.toMatchObject({ code: "rule_violation" });
+    await expect(run("scflow/set_flow_item", { id: toBank.id, item: "Bolt" })).rejects.toMatchObject({ code: "rule_violation" });
 
     expect((await query("flow", { id: toBank.id }))[0].item ?? null).toBeNull();
     expect(await query("item_at_actor")).toHaveLength(0);

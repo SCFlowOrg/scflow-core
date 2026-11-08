@@ -360,7 +360,7 @@ describe("scflow/delete_actor", () => {
   it("refuses to delete an actor with an incident flow, and removes nothing", async () => {
     const { run, query } = await withNetwork();
 
-    await expect(run("scflow/delete_actor", { id: "B" })).rejects.toThrow(/flow/);
+    await expect(run("scflow/delete_actor", { id: "B" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("actor")).toHaveLength(2);
     expect(await query("flow")).toHaveLength(1);
@@ -374,7 +374,7 @@ describe("scflow/delete_actor", () => {
     const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
     await create("item_at_actor", { actor: actor.id, item });
 
-    await expect(run("scflow/delete_actor", { id: "Depot" })).rejects.toThrow(/held item/);
+    await expect(run("scflow/delete_actor", { id: "Depot" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("actor")).toHaveLength(1);
     expect(await query("item_at_actor")).toHaveLength(1);
@@ -387,7 +387,7 @@ describe("scflow/delete_actor", () => {
     const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
     await create("transformation", { display_name: { en: "Assemble" }, type: transformationType, actor: actor.id });
 
-    await expect(run("scflow/delete_actor", { id: "Plant" })).rejects.toThrow(/transformation/);
+    await expect(run("scflow/delete_actor", { id: "Plant" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("actor")).toHaveLength(1);
     expect(await query("transformation")).toHaveLength(1);
@@ -413,7 +413,7 @@ describe("scflow/delete_actor", () => {
     await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
     await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
 
-    await expect(run("scflow/delete_actor", { id: "Campus" })).rejects.toThrow(/child/);
+    await expect(run("scflow/delete_actor", { id: "Campus" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("actor")).toHaveLength(2);
   });
@@ -429,18 +429,18 @@ describe("scflow/delete_actor", () => {
       const outside = await run("scflow/create_actor", { display_name: "Outside", type: "Site" });
       const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
       const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+      const heldDock = await create("item_at_actor", { actor: dock.id, item });
+      const heldOutside = await create("item_at_actor", { actor: outside.id, item });
+      const heldBay = await create("item_at_actor", { actor: bay.id, item });
       await create("flow", { source: outside.id, destination: bay.id, item });
       await create("flow", { source: dock.id, destination: outside.id });
       const flowOther = await create("flow", { source: outside.id, destination: outside.id });
-      const heldDock = await create("item_at_actor", { actor: dock.id, item });
-      const heldOutside = await create("item_at_actor", { actor: outside.id, item });
       const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
       const transformation = await create("transformation", {
         display_name: { en: "Assemble" },
         type: transformationType,
         actor: bay.id,
       });
-      const heldBay = await create("item_at_actor", { actor: bay.id, item });
       await create("transformation_line", { transformation, role: "consumed", held_item: heldBay });
       await create("note", { annotated: bay.id, content: { en: "Bay note" } });
       await create("note", { annotated: heldDock, content: { en: "Held note" } });
@@ -478,7 +478,7 @@ describe("scflow/delete_actor", () => {
     it("refuses a parent actor without cascade and removes nothing", async () => {
       const { run, query } = await withTree();
 
-      await expect(run("scflow/delete_actor", { id: "Campus" })).rejects.toThrow(/child/);
+      await expect(run("scflow/delete_actor", { id: "Campus" })).rejects.toMatchObject({ code: "constraint_violation" });
 
       expect(await query("actor")).toHaveLength(4);
       expect(await query("flow")).toHaveLength(3);
@@ -501,10 +501,11 @@ describe("scflow/delete_actor_type", () => {
     const campus = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
     const dock = await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
     const truck = await run("scflow/create_actor", { display_name: "Truck", type: "Carrier" });
-    await create("flow", { source: campus.id, destination: dock.id });
     const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
     const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
     await create("item_at_actor", { actor: dock.id, item });
+    await create("item_at_actor", { actor: campus.id, item });
+    await create("flow", { source: campus.id, destination: dock.id, item });
     await create("note", { annotated: dock.id, content: { en: "Dock note" } });
     return { ...ctx, site, carrier, campus, dock, truck };
   }
@@ -522,7 +523,7 @@ describe("scflow/delete_actor_type", () => {
   it("refuses a type that actors use without cascade, and removes nothing", async () => {
     const { run, query } = await withTypes();
 
-    await expect(run("scflow/delete_actor_type", { id: "Site" })).rejects.toThrow(/actor/);
+    await expect(run("scflow/delete_actor_type", { id: "Site" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("actor_type")).toHaveLength(2);
     expect(await query("actor")).toHaveLength(3);
@@ -579,7 +580,7 @@ describe("scflow/delete_scope", () => {
   it("refuses a scope that actors use without cascade, and removes nothing", async () => {
     const { run, query } = await withScopes();
 
-    await expect(run("scflow/delete_scope", { id: "Make" })).rejects.toThrow(/actor/);
+    await expect(run("scflow/delete_scope", { id: "Make" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("scope")).toHaveLength(2);
     expect(await query("actor")).toHaveLength(4);

@@ -1,7 +1,7 @@
-import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { type Instance } from "./refs.js";
 import { cascadeParam, unique, tagsParam, type ActionAccess, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
-import { deleteTransformations, loadSnapshot } from "./delete-impact.js";
-import { assertHoldable, holdItem } from "./items.js";
+import { deleteById } from "./delete-impact.js";
+import { holdItem } from "./items.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -135,9 +135,7 @@ export const createTransformationAction: ScflowActionDefinition<CreateTransforma
     additionalProperties: false,
   },
   async run(params, context) {
-    const actor = await loadInstance(context, "scflow.actor", params.actor);
-    const type = await loadInstance(context, "scflow.transformation_type", params.type);
-    return insertTransformation(context, actor, type, {
+    return insertTransformation(context, params.actor, params.type, {
       ...(params.display_name === undefined ? {} : { display_name: toLocalized(params.display_name) }),
       ...(params.description === undefined ? {} : { description: toLocalized(params.description) }),
       ...(params.tags === undefined ? {} : { tags: unique(params.tags) }),
@@ -168,18 +166,7 @@ export const connectTransformationLineAction: ScflowActionDefinition<
     additionalProperties: false,
   },
   async run(params, context) {
-    const transformation = await loadInstance(context, "scflow.transformation", params.transformation);
-    const held = await loadInstance(context, "scflow.item_at_actor", params.held_item);
-    const role = params.role;
-
-    if (held.actor !== transformation.actor) {
-      const owner = await loadInstance(context, "scflow.actor", held.actor);
-      const executor = await loadInstance(context, "scflow.actor", transformation.actor);
-      throw new Error(
-        `parameter "held_item": the record is held by "${labelOf(owner)}", not by "${labelOf(executor)}", the actor of the transformation`,
-      );
-    }
-    return summarizeLine(await insertLine(context, transformation.id, held.id, role, unique(params.tags)));
+    return summarizeLine(await insertLine(context, params.transformation, params.held_item, params.role, unique(params.tags)));
   },
 };
 
@@ -212,28 +199,16 @@ export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, De
     additionalProperties: false,
   },
   async run(params, context) {
-    const actor = await loadInstance(context, "scflow.actor", params.actor);
-    const type = await loadInstance(context, "scflow.transformation_type", params.transformation_type);
-    const consumed = await loadItems(context, params.consumed_items);
-    const produced = await loadItems(context, params.produced_items);
-
-    for (const [param, items] of [
-      ["consumed_items", consumed],
-      ["produced_items", produced],
-    ] as const) {
-      for (const item of items) {
-        await assertHoldable(context, actor, item, param);
-      }
-    }
-
-    const transformation = await insertTransformation(context, actor, type, {});
+    const transformation = await insertTransformation(context, params.actor, params.transformation_type, {});
+    const consumed = unique(params.consumed_items) ?? [];
+    const produced = unique(params.produced_items) ?? [];
     const lines: TransformationLineSummary[] = [];
     for (const [role, items] of [
       ["consumed", consumed],
       ["produced", produced],
     ] as const) {
       for (const item of items) {
-        const held = await holdItem(context, actor, item);
+        const held = await holdItem(context, params.actor, item);
         lines.push(summarizeLine(await insertLine(context, transformation.id, held.id, role)));
       }
     }
@@ -260,11 +235,8 @@ export const deleteTransformationAction: ScflowActionDefinition<DeleteTransforma
     additionalProperties: false,
   },
   async run(params, context) {
-    const transformation = await loadInstance(context, "scflow.transformation", params.id);
-    const snapshot = await loadSnapshot(context);
-
-    await deleteTransformations(context, snapshot, [transformation.id]);
-    return { id: transformation.id };
+    await deleteById(context, "scflow.transformation", params.id);
+    return { id: params.id };
   },
 };
 
@@ -287,19 +259,8 @@ export const deleteTransformationTypeAction: ScflowActionDefinition<DeleteTransf
     additionalProperties: false,
   },
   async run(params, context) {
-    const type = await loadInstance(context, "scflow.transformation_type", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-    const transformations = snapshot.transformations.filter((transformation) => transformation.type === type.id);
-
-    if (transformations.length > 0 && !cascade) {
-      throw new Error(
-        `parameter "id": "${labelOf(type)}" is used by ${transformations.length} transformation(s); use cascade: true to delete them`,
-      );
-    }
-    await deleteTransformations(context, snapshot, transformations.map((transformation) => transformation.id));
-    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.transformation_type", filters: { id: type.id } });
-    return { id: type.id };
+    await deleteById(context, "scflow.transformation_type", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -313,17 +274,17 @@ export const TRANSFORMATION_ACTIONS = [
   deleteTransformationTypeAction,
 ] as const;
 
-/** Creates a transformation, named after its type unless a name is given. */
+/** Creates a transformation; the schema names it after its type unless a name is given. */
 async function insertTransformation(
   context: ActionAccess,
-  actor: Instance,
-  type: Instance,
+  actor: string,
+  type: string,
   extra: Record<string, unknown>,
 ): Promise<TransformationSummary> {
   const { after } = await context.runCommand(context.locator, {
     kind: "create",
     schema: "scflow.transformation",
-    input: { display_name: { ...(type.display_name as Record<string, string>) }, ...extra, type: type.id, actor: actor.id },
+    input: { ...extra, type, actor },
   });
   const transformation = after[0] as unknown as Instance;
   return {
@@ -356,15 +317,6 @@ async function insertLine(
     input: { transformation, held_item: heldItem, role, ...(tags === undefined ? {} : { tags }) },
   });
   return after[0] as unknown as Instance;
-}
-
-/** Reads the given items, each once, in the order given. */
-async function loadItems(context: ActionAccess, ids: string[] | undefined): Promise<Instance[]> {
-  const items: Instance[] = [];
-  for (const id of unique(ids) ?? []) {
-    items.push(await loadInstance(context, "scflow.item", id));
-  }
-  return items;
 }
 
 function summarizeLine(line: Instance): TransformationLineSummary {

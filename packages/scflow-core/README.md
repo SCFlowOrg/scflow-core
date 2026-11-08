@@ -31,13 +31,11 @@ since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
   drop: an empty list refuses it. It throws when an actor does not exist.
 - `createFlow(mcl, locator, { source, destination, item?, bidirectional?, display_name?, description?, tags? })`:
   creates one flow from `source` to `destination` and returns it. A flow has no domain, so
-  it does not check the domains of the actors. A flow between an actor and one of its child actors
-  must carry an `item`. A given `item` must have a domain among the domains of both actors, and
-  the call creates the `item_at_actor` that the source and the destination lack. It throws when an
-  actor or the item does not exist, or when one of these rules fails.
-- `setFlowItem(mcl, locator, { flow, item })`: sets the item of a flow that carries none, with the same
-  checks and holdings as `createFlow`. The item of a flow never changes and is never removed: it throws when
-  the flow carries another item, and changes nothing when it already carries `item`.
+  it does not check the domains of the actors. With an `item`, the call creates the `item_at_actor`
+  that the source and the destination lack. It throws when an actor or the item does not exist, or
+  when a rule of the network is broken.
+- `setFlowItem(mcl, locator, { flow, item })`: sets the item of a flow, with the same holdings as
+  `createFlow`. The item of a flow is `set_once`: another item is refused, and the same item changes nothing.
 - `ACTIONS`: the model actions of the package, each with its declaration and its body
   `run(params, context)`, for UIs, AI assistants and macros. An environment runs them through
   the module. The package exports
@@ -62,6 +60,10 @@ five characters, such as `FRLEH`. The actions `create_actor` and `update_actor` 
 given by id or display name; the package ships no action that creates or changes a location.
 
 ## Actions
+
+The rules of the network are declared on the schemas of `module.yaml` (`docs/spec/implementation.md`,
+Network Rules): the engine refuses a breach at the end of any transaction with `rule_violation`, and a
+body only writes what a rule cannot, such as the holdings of the ends of a flow.
 
 An action takes the id or the display name of every entity it references, and a plain string
 or a map of language to string for every text. It declares its parameters as JSON Schema, which

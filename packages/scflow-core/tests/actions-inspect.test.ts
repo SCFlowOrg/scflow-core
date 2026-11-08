@@ -14,11 +14,12 @@ async function withNetwork() {
   const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
   const bolt = await create("item", { display_name: { en: "Bolt" }, type: itemType });
   const nut = await create("item", { display_name: { en: "Nut" }, type: itemType });
+  const heldDock = await create("item_at_actor", { actor: dock.id, item: bolt });
+  const heldBay = await create("item_at_actor", { actor: bay.id, item: bolt });
+  const heldOutside = await create("item_at_actor", { actor: outside.id, item: bolt });
   const flowIn = await create("flow", { source: outside.id, destination: bay.id, item: bolt });
   const flowOut = await create("flow", { source: dock.id, destination: outside.id });
   await create("flow", { source: hub.id, destination: outside.id });
-  const heldDock = await create("item_at_actor", { actor: dock.id, item: bolt });
-  const heldBay = await create("item_at_actor", { actor: bay.id, item: bolt });
   const heldNut = await create("item_at_actor", { actor: outside.id, item: nut });
   const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
   const assemble = await create("transformation", { display_name: { en: "Assemble" }, type: transformationType, actor: bay.id });
@@ -29,7 +30,7 @@ async function withNetwork() {
   await create("note", { annotated: flowIn, content: { en: "Flow note" } });
   await create("note", { annotated: line, content: { en: "Line note" } });
   await create("note", { annotated: outside.id, content: { en: "Outside note" } });
-  return { ...ctx, campus, dock, bay, outside, hub, bolt, nut, flowIn, flowOut, heldDock, heldBay, heldNut };
+  return { ...ctx, campus, dock, bay, outside, hub, bolt, nut, flowIn, flowOut, heldOutside, heldDock, heldBay, heldNut };
 }
 
 const names = (entries: { label: string }[]) => entries.map((entry) => entry.label).sort();
@@ -119,13 +120,13 @@ describe("scflow/inspect_delete_impact", () => {
   });
 
   it("reports the usages of an item, the flows that carry it included", async () => {
-    const { run, heldDock, heldBay, flowIn } = await withNetwork();
+    const { run, heldDock, heldBay, heldOutside, flowIn } = await withNetwork();
 
     const impact = await run<any>("scflow/inspect_delete_impact", { targets: [{ schema: "item", ref: "Bolt" }] });
 
-    expect(impact.cascaded.heldItems.map((held: any) => held.id).sort()).toEqual([heldDock, heldBay].sort());
+    expect(impact.cascaded.heldItems.map((held: any) => held.id).sort()).toEqual([heldDock, heldBay, heldOutside].sort());
     expect(impact.cascaded.flows.map((flow: any) => flow.id)).toEqual([flowIn]);
-    expect(impact.counts).toMatchObject({ actors: 0, flows: 1, heldItems: 2, transformationLines: 1, notes: 3, total: 7 });
+    expect(impact.counts).toMatchObject({ actors: 0, flows: 1, heldItems: 3, transformationLines: 1, notes: 3, total: 8 });
   });
 
   it("reports what a flow, a transformation type and a scope would remove", async () => {

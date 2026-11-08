@@ -84,7 +84,7 @@ describe("scflow/delete_transformation_type", () => {
   it("refuses a type that transformations use without cascade, and removes nothing", async () => {
     const { run, query } = await withTransformations();
 
-    await expect(run("scflow/delete_transformation_type", { id: "Assembly" })).rejects.toThrow(/transformation/);
+    await expect(run("scflow/delete_transformation_type", { id: "Assembly" })).rejects.toMatchObject({ code: "constraint_violation" });
 
     expect(await query("transformation_type")).toHaveLength(2);
     expect(await query("transformation")).toHaveLength(3);
