@@ -2,6 +2,7 @@ import { MCL_CORE } from "./mclCore.js";
 import type { ModuleManifest } from "./mclCore.js";
 import { modelError } from "./errors.js";
 import { assembleFacets, generatedInverseName } from "./facets.js";
+import { validateRules } from "./ruleValidation.js";
 import { createModuleSet, validateModuleManifest } from "./modules.js";
 import type { ModuleSet } from "./modules.js";
 import { NO_ROLES } from "./schemaProcessing.js";
@@ -145,6 +146,8 @@ export function buildDatasetModel(manifests: readonly ModuleManifest[]): Dataset
   }
   generateInverseRelations(schemas);
   assembleFacets(schemas);
+  // the rules need every schema: their paths cross relations, an `exists` names another schema
+  validateRules(schemas, { resolveSchema: (n) => schemas.get(n), resolveScalarType: (n) => scalarTypes.get(n) });
   return { set, schemas, scalarTypes };
 }
 

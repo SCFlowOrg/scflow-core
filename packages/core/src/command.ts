@@ -13,7 +13,7 @@ import {
   writeFacetValues,
 } from "./facets.js";
 import { resolveCreateId } from "./ids.js";
-import { checkFilter, checkFilterOnCandidates, matchFilter } from "./filter.js";
+import { checkFilter, checkFilterOnCandidates, matchFilter, valueOnPath } from "./filter.js";
 import { isModelSchema, getUpgradeMarker, runSchemaCommand } from "./modelUpgrade.js";
 import { substitutePlaceholders } from "./placeholders.js";
 import { isPlainObject, resolveTextOperation } from "./textOperations.js";
@@ -136,7 +136,7 @@ function shapeResult(
  * a plain (non-script) command; an `as` outside a script is harmless, just
  * unused.
  */
-const ALLOWED_COMMAND_KEYS = new Set(["kind", "schema", "namespace", "filters", "input", "result", "as"]);
+const ALLOWED_COMMAND_KEYS = new Set(["kind", "schema", "namespace", "filters", "input", "cascade", "result", "as"]);
 
 /** The only keys `result` may carry — packages/core/docs/spec/model-command-language.md#command's "Result shaping". */
 const ALLOWED_RESULT_KEYS = new Set(["properties", "before"]);
@@ -217,8 +217,12 @@ export function resolveCommandForm(raw: unknown): Record<string, unknown> {
   if (unknownKeys.length > 0) {
     throw modelError(
       "unknown_command_property",
-      `unrecognized command propert${unknownKeys.length === 1 ? "y" : "ies"} ${unknownKeys.map((k) => `"${k}"`).join(", ")} — expected one of kind, schema, namespace, filters, input, result, as`,
+      `unrecognized command propert${unknownKeys.length === 1 ? "y" : "ies"} ${unknownKeys.map((k) => `"${k}"`).join(", ")} — expected one of kind, schema, namespace, filters, input, cascade, result, as`,
     );
+  }
+  if (obj.cascade !== undefined) {
+    if (obj.kind !== "delete") throw modelError("constraint_violation", `"cascade" belongs to a delete, not to a ${String(obj.kind)}`);
+    if (typeof obj.cascade !== "boolean") throw modelError("constraint_violation", `"cascade" is a boolean`);
   }
 
   validateResultOptions(obj.result);
@@ -391,6 +395,11 @@ function computePropertyValue(
 ): TransientValue {
   const isArray = prop.constraints.is_array === true;
   if (resolved.kind === "map") {
+    if (!hasProvided && prop.default_value !== null) {
+      // a mapping written as such, or one whole placeholder giving one
+      const value = substitutePlaceholders(prop.default_value, { this: { ...instanceSoFar, schema: schema as unknown as TransientObject }, dataset: datasetValue });
+      return computeMapValue(prop, true, value, resolved, schema.name);
+    }
     return computeMapValue(prop, hasProvided, providedRaw, resolved, schema.name);
   }
 
@@ -408,10 +417,23 @@ function computePropertyValue(
 
   if (resolved.kind === "relation") {
     if (hasProvided) return providedRaw === undefined ? null : providedRaw;
+    // a default that is a key, or one whole placeholder giving one
+    if (prop.default_value !== null && !isArray) {
+      const key = substitutePlaceholders(prop.default_value, context);
+      return key === "" || key === undefined ? null : key;
+    }
     return isArray ? [] : null;
   }
 
   // scalar
+  if (!hasProvided && isArray && prop.default_value !== null) {
+    // a list written as such, or one whole placeholder giving one; a single value is a list of one
+    const resolvedVal = substitutePlaceholders(prop.default_value, context);
+    const values = (Array.isArray(resolvedVal) ? resolvedVal : resolvedVal === null || resolvedVal === "" ? [] : [resolvedVal]).map((v) =>
+      coerceScalar(v, resolved.base),
+    );
+    return prop.constraints.is_set === true ? canonicalSet(prop.name, values, { ...resolved.constraints, ...prop.constraints }) : values;
+  }
   if (hasProvided) {
     if (providedRaw === null || providedRaw === undefined) {
       const raw = prop.null_value;
@@ -436,6 +458,89 @@ function computePropertyValue(
     return coerceScalar(resolvedVal, resolved.base);
   }
   return scalarDefaultValue(resolved);
+}
+
+const PLACEHOLDER = /\$\{([^}]*)\}/g;
+
+/**
+ * The `default_value` of `prop` with every placeholder that crosses a relation
+ * of `schema` (`${this.type.default_scope}`) replaced by the value it reads,
+ * since `computePropertyValue`, which resolves the others, reads no instance
+ * (see Placeholders, *Across relations*). A whole placeholder keeps the type of
+ * its value. A path that meets a null relation, or reaches no value, gives
+ * `null`: the property then takes its ordinary default. Any other placeholder
+ * is left for `computePropertyValue`.
+ */
+async function crossRelations(
+  impl: PersistenceInterface,
+  rest: string,
+  resolvers: Resolvers,
+  schema: NormalizedSchema,
+  prop: NormalizedProperty,
+  instanceSoFar: TransientObject,
+): Promise<NormalizedProperty["default_value"]> {
+  const crossing = (content: string): string[] | undefined => {
+    const path = content.trim().split(".");
+    if (path[0] !== "this" || path.length < 3) return undefined;
+    const first = findProperty(schema, path[1]);
+    if (!first || first.constraints.is_array === true) return undefined;
+    return resolveType(first.type, resolvers.ctx).kind === "relation" ? path.slice(1) : undefined;
+  };
+  const ctx = { ...resolvers.ctx, impl, rest };
+  let missing = false;
+  const rewrite = async (value: TransientValue): Promise<TransientValue> => {
+    if (typeof value === "string") {
+      const whole = /^\$\{([^}]*)\}$/.exec(value.trim());
+      if (whole) {
+        const path = crossing(whole[1]);
+        if (!path) return value;
+        const found = await valueOnPath(instanceSoFar, schema, path, ctx);
+        if (found === undefined) missing = true;
+        return found ?? null;
+      }
+      let out = "";
+      let last = 0;
+      for (const match of value.matchAll(PLACEHOLDER)) {
+        const path = crossing(match[1]);
+        out += value.slice(last, match.index);
+        last = (match.index as number) + match[0].length;
+        if (!path) {
+          out += match[0];
+          continue;
+        }
+        const found = await valueOnPath(instanceSoFar, schema, path, ctx);
+        if (found === undefined) missing = true;
+        out += found === undefined || found === null ? "" : typeof found === "object" ? JSON.stringify(found) : String(found);
+      }
+      return out + value.slice(last);
+    }
+    if (Array.isArray(value)) return Promise.all(value.map(rewrite));
+    if (value !== null && typeof value === "object") {
+      const out: TransientObject = {};
+      for (const [k, v] of Object.entries(value)) out[k] = await rewrite(v);
+      return out;
+    }
+    return value;
+  };
+  const template = prop.default_value;
+  if (template === null) return null;
+  const rewritten = await rewrite(template as TransientValue);
+  if (missing) return null;
+  return rewritten as NormalizedProperty["default_value"];
+}
+
+/** Whether a default reads a placeholder that may cross a relation, so `crossRelations` must run before the instance is built. */
+function mayCrossRelations(prop: NormalizedProperty): boolean {
+  return prop.default_value !== null && /\$\{\s*this\.[A-Za-z_][A-Za-z0-9_]*\./.test(JSON.stringify(prop.default_value));
+}
+
+/**
+ * Whether `value` is no value for `set_once` (see Property Constraints): a null
+ * relation, or a scalar equal to the default of its base type.
+ */
+function isNoValue(value: TransientValue | undefined, resolved: ResolvedType): boolean {
+  if (value === null || value === undefined) return true;
+  return resolved.kind === "scalar" && value === scalarDefaultValue(resolved);
 }
 
 /** Whether the constraints of a property require its entries to be distinct: `is_set` and `is_unique`. */
@@ -578,6 +683,8 @@ interface Accumulator {
   updatedBefore: TransientValue[];
   updatedAfter: TransientValue[];
   cascadeDeleted: TransientValue[];
+  /** The `cascade` of the delete: whether `confirm` relations cascade. */
+  cascade?: boolean;
   /** The instances `performDelete` has started removing, as `removalId`s: a relation cycle of `cascade` ends there. */
   deleting?: Set<string>;
 }
@@ -873,8 +980,13 @@ function removalId(schema: NormalizedSchema, key: Key): string {
  */
 function onDeleteOf(prop: NormalizedProperty): OnDelete {
   const declared = prop.constraints.on_delete;
-  if (declared === "restrict" || declared === "cascade" || declared === "set_null") return declared;
+  if (declared === "restrict" || declared === "cascade" || declared === "set_null" || declared === "confirm") return declared;
   return prop.constraints.mandatory === true ? "restrict" : "set_null";
+}
+
+/** Whether the delete removes the instances reached through `mode`: `cascade` always, `confirm` with `cascade: true`. */
+function removesWith(mode: OnDelete, cascade: boolean): boolean {
+  return mode === "cascade" || (mode === "confirm" && cascade);
 }
 
 /** An instance whose relation `prop` points at a given instance, with the effect `mode` of deleting it. */
@@ -939,6 +1051,7 @@ async function planRemoval(
   rest: string,
   resolvers: Resolvers,
   roots: { schema: NormalizedSchema; key: Key }[],
+  cascade: boolean,
 ): Promise<Map<string, { schema: NormalizedSchema; key: Key; referrers: Referrer[] }>> {
   const plan = new Map<string, { schema: NormalizedSchema; key: Key; referrers: Referrer[] }>();
   const pending = [...roots];
@@ -965,12 +1078,19 @@ async function planRemoval(
         if (!isSchemaOrDescendant(schema, ownerProp.type, resolvers) || ownerProp.constraints.__generated === true || ownerProp.constraints.extension === true) continue;
         const candidates = await impl.listInstances(rest, targetSchema.name, derivePropertyRoles(targetSchema));
         for (const candidate of candidates) {
-          if ((candidate as TransientObject)[ownerProp.name] === key) pending.push({ schema: targetSchema, key: keyOf(targetSchema, candidate) });
+          if ((candidate as TransientObject)[ownerProp.name] !== key) continue;
+          const ownedKey = keyOf(targetSchema, candidate);
+          // an owner relation with `on_delete: confirm` asks for consent: without it, the owned instance blocks the delete
+          if (ownerProp.constraints.on_delete === "confirm" && !cascade) {
+            referrers.push({ schema: targetSchema, key: ownedKey, prop: ownerProp, mode: "confirm" });
+          } else {
+            pending.push({ schema: targetSchema, key: ownedKey });
+          }
         }
       }
     }
     for (const referrer of referrers) {
-      if (referrer.mode === "cascade") pending.push({ schema: referrer.schema, key: referrer.key });
+      if (removesWith(referrer.mode, cascade)) pending.push({ schema: referrer.schema, key: referrer.key });
     }
   }
   return plan;
@@ -986,14 +1106,18 @@ async function assertDeletable(
   rest: string,
   resolvers: Resolvers,
   roots: { schema: NormalizedSchema; key: Key }[],
+  cascade = false,
 ): Promise<void> {
-  const plan = await planRemoval(impl, rest, resolvers, roots);
+  const plan = await planRemoval(impl, rest, resolvers, roots, cascade);
   for (const { schema, key, referrers } of plan.values()) {
     for (const referrer of referrers) {
-      if (referrer.mode !== "restrict" || plan.has(removalId(referrer.schema, referrer.key))) continue;
+      const blocks = referrer.mode === "restrict" || (referrer.mode === "confirm" && !cascade);
+      if (!blocks || plan.has(removalId(referrer.schema, referrer.key))) continue;
       throw modelError(
         "constraint_violation",
-        `cannot delete "${key}" of "${schema.name}": "${referrer.key}" of "${referrer.schema.name}" references it through "${referrer.prop.name}", which restricts its deletion`,
+        referrer.mode === "confirm"
+          ? `cannot delete "${key}" of "${schema.name}" without consent: "${referrer.key}" of "${referrer.schema.name}" goes with it through "${referrer.prop.name}" (on_delete: confirm) — delete with cascade: true`
+          : `cannot delete "${key}" of "${schema.name}": "${referrer.key}" of "${referrer.schema.name}" references it through "${referrer.prop.name}", which restricts its deletion`,
       );
     }
   }
@@ -1110,7 +1234,8 @@ async function performDelete(
   // them, `set_null` clears the relation, and `restrict` has been checked by `assertDeletable` before any write.
   for (const referrer of await findReferrers(impl, rest, resolvers, schema, key)) {
     if (referrer.schema.name === schema.name && referrer.key === key) continue;
-    if (referrer.mode === "cascade") {
+    // `confirm` without consent was refused by `assertDeletable`, or the instance goes with this delete anyway
+    if (removesWith(referrer.mode, acc.cascade === true)) {
       await performDelete(impl, rest, resolvers, referrer.schema, referrer.key, acc, true, cache);
     } else if (referrer.mode === "set_null") {
       await clearReference(impl, rest, resolvers, referrer, acc, cache);
@@ -1597,11 +1722,16 @@ async function executeCommand(
         // a value of a facet given no value, or null, stays unset
         const unsetFacet = (prop: NormalizedProperty) =>
           facetOfProperty(prop) !== undefined && (itemObj[prop.name] === undefined || itemObj[prop.name] === null);
+        // a default whose placeholder crosses a relation reads the related instance first
+        const effective = async (prop: NormalizedProperty, hasProvided: boolean): Promise<NormalizedProperty> =>
+          !hasProvided && mayCrossRelations(prop)
+            ? { ...prop, default_value: await crossRelations(impl, rest, resolvers, schema, prop, computed) }
+            : prop;
         for (const { prop, resolved } of withResolved) {
           if (resolved.kind !== "relation" || unsetFacet(prop)) continue;
           const hasProvided = Object.prototype.hasOwnProperty.call(itemObj, prop.name);
           computed[prop.name] = computePropertyValue(
-            prop,
+            await effective(prop, hasProvided),
             hasProvided,
             hasProvided ? itemObj[prop.name] : undefined,
             resolved,
@@ -1614,7 +1744,7 @@ async function executeCommand(
           if (resolved.kind === "relation" || unsetFacet(prop)) continue;
           const hasProvided = Object.prototype.hasOwnProperty.call(itemObj, prop.name);
           computed[prop.name] = computePropertyValue(
-            prop,
+            await effective(prop, hasProvided),
             hasProvided,
             hasProvided ? itemObj[prop.name] : undefined,
             resolved,
@@ -1772,6 +1902,14 @@ async function executeCommand(
             ? resolvePatchMapping(prop, resolved, instSchema.name, (instance as TransientObject)[propName], rawValue)
             : rawValue;
           updated[propName] = computePropertyValue(prop, true, providedValue, resolved, updated, instSchema, datasetValue);
+          if (prop.constraints.set_once === true) {
+            // set at most once: from no value to a value; the same value again changes nothing
+            const current = (instance as TransientObject)[propName];
+            const next = updated[propName];
+            if (JSON.stringify(current ?? null) !== JSON.stringify(next ?? null) && !isNoValue(current, resolved)) {
+              throw modelError("constraint_violation", `"${propName}" is set_once on "${instSchema.name}" and already holds ${JSON.stringify(current)}`);
+            }
+          }
           if (facetOfProperty(prop) !== undefined) facetChanges[propName] = updated[propName];
         }
 
@@ -1827,10 +1965,11 @@ async function executeCommand(
     }
 
     case "delete": {
-      const acc: Accumulator = { updatedBefore: [], updatedAfter: [], cascadeDeleted: [] };
+      const cascade = command.cascade === true;
+      const acc: Accumulator = { updatedBefore: [], updatedAfter: [], cascadeDeleted: [], cascade };
       const before = matched.map((m) => clone(m.instance));
-      // refused as a whole, before anything is written, when an instance that stays restricts it
-      await assertDeletable(impl, rest, resolvers, matched.map((m) => ({ schema: m.schema, key: m.key })));
+      // refused as a whole, before anything is written, when an instance that stays restricts it, or goes with it without consent
+      await assertDeletable(impl, rest, resolvers, matched.map((m) => ({ schema: m.schema, key: m.key })), cascade);
       for (const m of matched) {
         // Delete against the matched instance's own schema — it may be
         // `schema` itself or one extending it (see collectExtendingSchemas).
@@ -2015,4 +2154,4 @@ async function executeDatasetCommand(
   }
 }
 
-export { emptyResult, keyOf, clone, coerceScalar, validateScalarValue, assertDistinct, requiresDistinct, validateMapValue, computePropertyValue };
+export { emptyResult, keyOf, clone, coerceScalar, validateScalarValue, assertDistinct, requiresDistinct, validateMapValue, computePropertyValue, collectExtendingSchemas, resolveVirtualProperties, isSchemaOrDescendant };

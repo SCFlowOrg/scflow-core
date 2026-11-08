@@ -15,6 +15,7 @@ A command is one operation on the instances of one schema.
 | `schema` | Target schema; the command also reaches the schemas extending it |
 | `filters` | A filter selecting the instances to act on; absent: every instance |
 | `input` | An object or an array of objects, for `create` and `update` |
+| `cascade` | `delete` only, a boolean: also remove the instances reached through an `on_delete: confirm` relation; false by default |
 | `result` | Narrows what comes back: `properties` and `before` |
 | `namespace` | `""` (default) for the dataset's own instances; the namespace of an import for its instances; `*` for every instance. Any value other than `""` is for `query` only (see [datasets.md](datasets.md), Imports) |
 
@@ -39,7 +40,11 @@ The error codes of a failing command are documented on `ErrorCode`.
   an instance whose relation points at a removed instance follows the `on_delete`
   of that relation (see [authoring.md](authoring.md), Deleting the target): a
   `mandatory` relation refuses the delete unless it says otherwise, nothing being
-  removed, and any other relation is cleared.
+  removed, and any other relation is cleared. A `confirm` relation refuses a plain
+  delete and cascades with `cascade: true`.
+- A command run outside a transaction is checked against the declared rules of
+  the model when it is done (see [rules.md](rules.md)): a breach undoes it and
+  fails with `rule_violation`.
 - `update` and `delete` without `filters` act on every instance of the schema.
 - The properties of the **extensions** of a schema (see [authoring.md](authoring.md),
   Extensions) are properties of that schema in every kind: `query` returns them,
@@ -152,6 +157,7 @@ filters: {
 | `eq`, `ne` | scalar; relation (by key) | equal, not equal |
 | `lt`, `lte`, `gt`, `gte` | number, integer, date, date_time, time | ordered comparison |
 | `in` | scalar; relation | the value is one of an array |
+| `subset_of` | array property | every entry is one of an array, whatever the order; an empty value always matches |
 | `contains` | array property; string | the array has the element, the string has the substring |
 | `matches` | string | the value matches the regexp |
 | `exists` | relation; array; map | the relation is not null, the array or the map is not empty |
@@ -169,6 +175,12 @@ filters: {
 - On an `is_set` property (see [authoring.md](authoring.md), Sets), a bare array and
   the operands of `eq`, `ne` and `in` compare without regard to order: `[b, a]`
   equals `[a, b]`. `contains` and `exists` are unchanged.
+- An operand can be a path on the instance being tested, written as one whole
+  placeholder starting at `this`: `{ "type.domains": { subset_of: "${this.parent.type.domains}" } }`.
+  It is resolved per instance; when it reaches no value (a null relation on the
+  way), the predicate does not hold, `ne` included. Any other `${...}` in a filter
+  of a command (a function, text around it, another root) fails with
+  `invalid_filter`, and its path is checked like a path on the left.
 - `and: []` is true, `or: []` is false, `{}` matches every instance.
 - A filter that is an array or a string, or an `and` that is not an array, is
   refused before any instance is read.
@@ -202,6 +214,41 @@ await runScript(doc, { commands: [
   script in a transaction to make it atomic.
 - A `ScriptSession` (`createScriptSession(locator)`) runs one command at a time and
   keeps the named results in `variables`. It loads the model when it opens.
+- A `${this...}` in the `filters` of a step is left for the filter, which
+  resolves it per instance.
+- Run outside a transaction, a script is checked against the declared rules
+  once, at its end (see [rules.md](rules.md)).
+
+### Procedures
+
+A procedure is a script with parameters, the declared `body` of an action.
+`runProcedure(procedure, params, host)` runs one through a host that gives
+`runCommand(command)` and, for `call` steps, `call(id, params)`; it returns the
+`result` placeholder of the procedure, or the result of the last step that ran.
+
+```ts
+await runProcedure({
+  parameters: { type: "object", properties: { source: { type: "string" }, item: { type: "string" } } },
+  commands: [
+    { create: "scflow.flow", input: { source: "${params.source}", item: "${params.item}" }, as: "flow" },
+    { call: "scflow/hold_item", with: { actor: "${params.source}", item: "${params.item}" },
+      when: { "params.item": { exists: true } } },
+    { each: "${params.tags}", as: "tag", do: [{ create: "scflow.tag", input: { name: "${tag}" } }] },
+    { fail: "no source", when: { "params.source": { exists: false } } },
+  ],
+  result: "${flow.after.0}",
+}, params, { runCommand: (c) => runCommand(locator, c), call });
+```
+
+- A step is exactly one of a command, a `call` with its `with`, an `each` with
+  its `do`, or a `fail`; anything else fails with `invalid_script_step`.
+- `when` is a filter on `params` and the named results; a skipped step leaves its
+  `as` unset.
+- An absent parameter, `${params.x}`, leaves out the property of an `input` that
+  receives it.
+- `fail` refuses the procedure with `procedure_failed` and its message.
+- The host validates the parameters against `parameters` and runs the procedure
+  in the transaction of the action.
 
 ## Examples
 

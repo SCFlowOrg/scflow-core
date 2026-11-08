@@ -79,6 +79,9 @@ function applyOperator(op: string, actual: TransientValue, expected: TransientVa
       return comparablePrimitive(actual) >= comparablePrimitive(expected);
     case "in":
       return Array.isArray(expected) && expected.some((e) => equal(actual, e));
+    case "subset_of":
+      // every entry of the value is one of the operand; an empty value is a subset of anything
+      return Array.isArray(actual) && Array.isArray(expected) && actual.every((e) => expected.some((x) => deepEqual(e, x)));
     case "contains":
       if (Array.isArray(actual)) return actual.some((e) => deepEqual(e, expected));
       if (typeof actual === "string") return actual.includes(String(expected));
@@ -95,14 +98,47 @@ function applyOperator(op: string, actual: TransientValue, expected: TransientVa
   }
 }
 
-function matchPredicate(actual: TransientValue, predicateValue: unknown, isSet = false): boolean {
+/** What an operand that names a path on the instance yields when the path reaches no value: it satisfies no predicate. */
+const MISSING = Symbol("missing operand");
+
+type Operand = TransientValue | typeof MISSING;
+
+function matchPredicate(
+  actual: TransientValue,
+  predicateValue: unknown,
+  isSet = false,
+  resolveOperand: (operand: unknown) => Operand = (o) => o as TransientValue,
+): boolean {
   if (predicateValue !== null && typeof predicateValue === "object" && !Array.isArray(predicateValue)) {
-    for (const [op, operand] of Object.entries(predicateValue as TransientObject)) {
-      if (!applyOperator(op, actual, operand, isSet)) return false;
+    for (const [op, raw] of Object.entries(predicateValue as TransientObject)) {
+      const operand = resolveOperand(raw);
+      if (operand === MISSING || !applyOperator(op, actual, operand, isSet)) return false;
     }
     return true;
   }
-  return applyOperator("eq", actual, predicateValue as TransientValue, isSet);
+  const operand = resolveOperand(predicateValue);
+  return operand !== MISSING && applyOperator("eq", actual, operand, isSet);
+}
+
+/** A whole placeholder that is a plain path starting at `this`: what an operand may be besides a literal (see Filter, *Paths on the right*). */
+const THIS_PATH = /^\$\{\s*this((?:\.[A-Za-z_][A-Za-z0-9_]*)+)\s*\}$/;
+
+/**
+ * The path an operand names on the instance being tested, without its leading
+ * `this`, or `undefined` for a literal. A string holding any other `${...}`
+ * (a function, surrounding text, another root, several placeholders) is
+ * refused with `invalid_filter`, so that a filter stays translatable.
+ */
+export function operandPath(operand: unknown): string[] | undefined {
+  if (typeof operand !== "string" || !operand.includes("${")) return undefined;
+  const match = THIS_PATH.exec(operand.trim());
+  if (!match) {
+    throw modelError(
+      "invalid_filter",
+      `the operand ${JSON.stringify(operand)} is not one whole placeholder naming a plain path that starts at this, such as "\${this.source.type}"`,
+    );
+  }
+  return match[1].slice(1).split(".");
 }
 
 export interface FilterEvalContext extends TypeResolutionContext {
@@ -175,7 +211,12 @@ function resolvePathIsArray(schema: NormalizedSchema, path: string[], ctx: TypeR
 }
 
 /** What `resolvePathIsArray` computes, and whether the property the path ends on is an `is_set` one. */
-function resolvePathKind(schema: NormalizedSchema, path: string[], ctx: TypeResolutionContext): { isArray: boolean; isSet: boolean } {
+function resolvePathKind(
+  schema: NormalizedSchema,
+  path: string[],
+  ctx: TypeResolutionContext,
+  singleRelations = false,
+): { isArray: boolean; isSet: boolean } {
   const singleValued = { isArray: false, isSet: false };
   let currentSchema = schema;
   for (let i = 0; i < path.length; ) {
@@ -197,6 +238,12 @@ function resolvePathKind(schema: NormalizedSchema, path: string[], ctx: TypeReso
     }
     if (resolved.kind !== "relation") {
       throw modelError("unknown_property", `"${segment}" is not a relation, cannot continue path "${path.join(".")}"`);
+    }
+    if (singleRelations && prop.constraints.is_array === true) {
+      throw modelError(
+        "constraint_violation",
+        `the path "${path.join(".")}" crosses "${segment}", a relation to several instances — a rule crosses single-valued relations only`,
+      );
     }
     currentSchema = resolved.schema;
   }
@@ -263,30 +310,58 @@ export function checkFilter(
   schema: NormalizedSchema,
   ctx: TypeResolutionContext,
   where = "filters",
+  singleRelations = false,
 ): void {
   if (filter === undefined || filter === null) return;
   checkFilterShape(filter, where);
-  (filter.and ?? []).forEach((f, i) => checkFilter(f, schema, ctx, `"and"[${i}]`));
-  (filter.or ?? []).forEach((f, i) => checkFilter(f, schema, ctx, `"or"[${i}]`));
-  if (filter.not !== undefined) checkFilter(filter.not, schema, ctx, `"not"`);
-  return checkPredicates(filter, schema, ctx);
+  (filter.and ?? []).forEach((f, i) => checkFilter(f, schema, ctx, `"and"[${i}]`, singleRelations));
+  (filter.or ?? []).forEach((f, i) => checkFilter(f, schema, ctx, `"or"[${i}]`, singleRelations));
+  if (filter.not !== undefined) checkFilter(filter.not, schema, ctx, `"not"`, singleRelations);
+  return checkPredicates(filter, schema, ctx, singleRelations);
 }
 
-function checkPredicates(filter: Filter, schema: NormalizedSchema, ctx: TypeResolutionContext): void {
+/**
+ * `checkFilter` for the `when` and `require` of a rule (see `rules.ts`): a
+ * path, on the left or on the right, that crosses a relation to several
+ * instances is refused with `constraint_violation`.
+ */
+export function checkRuleFilter(filter: Filter | undefined, schema: NormalizedSchema, ctx: TypeResolutionContext, where: string): void {
+  checkFilter(filter, schema, ctx, where, true);
+}
+
+/** Resolves a path on the schema alone, as `checkFilter` does a path on the left; `singleRelations` refuses a relation to several instances on the way. */
+export function checkPath(schema: NormalizedSchema, path: string[], ctx: TypeResolutionContext, singleRelations = false): void {
+  resolvePathKind(schema, path, ctx, singleRelations);
+}
+
+function checkPredicates(filter: Filter, schema: NormalizedSchema, ctx: TypeResolutionContext, singleRelations = false): void {
   for (const [key, predicateValue] of Object.entries(filter)) {
     if (COMBINATORS.has(key)) continue;
-    const isArray = resolvePathIsArray(schema, key.split("."), ctx);
+    const isArray = resolvePathKind(schema, key.split("."), ctx, singleRelations).isArray;
     if (Array.isArray(predicateValue)) {
       if (!isArray) throw arrayValueMismatch(key, "an array is used as a value");
       continue;
     }
-    if (predicateValue === null || typeof predicateValue !== "object") continue;
+    if (predicateValue === null || typeof predicateValue !== "object") {
+      const path = operandPath(predicateValue);
+      if (path) resolvePathKind(schema, path, ctx, singleRelations);
+      continue;
+    }
     for (const [op, operand] of Object.entries(predicateValue as TransientObject)) {
+      if (op === "subset_of" && !isArray) {
+        throw modelError("invalid_operator", `"subset_of" applies to an array property, and "${key}" is not one`);
+      }
+      const path = operandPath(operand);
+      if (path) {
+        // a path on the right is resolved per instance, so its value is checked then
+        resolvePathKind(schema, path, ctx, singleRelations);
+        continue;
+      }
       if ((op === "eq" || op === "ne") && Array.isArray(operand) && !isArray) {
         throw arrayValueMismatch(key, `an array is the operand of "${op}"`);
       }
-      if (op === "in" && !Array.isArray(operand)) {
-        throw modelError("type_mismatch", `the operand of "in" on "${key}" must be an array`);
+      if ((op === "in" || op === "subset_of") && !Array.isArray(operand)) {
+        throw modelError("type_mismatch", `the operand of "${op}" on "${key}" must be an array`);
       }
     }
   }
@@ -362,9 +437,91 @@ export async function matchFilter(
       continue;
     }
     const isSet = Array.isArray(actual) && resolvePathKind(schema, key.split("."), ctx).isSet;
-    if (!matchPredicate(actual, predicateValue, isSet)) return false;
+    const operands = await resolveOperands(predicateValue, instance, schema, ctx);
+    const resolveOperand = (operand: unknown): Operand =>
+      typeof operand === "string" && operands.has(operand) ? (operands.get(operand) as Operand) : (operand as TransientValue);
+    if (!matchPredicate(actual, predicateValue, isSet, resolveOperand)) return false;
   }
   return true;
+}
+
+/** The operands of a predicate that name a path on the instance, resolved on `instance`; a path that reaches no value is `MISSING`. */
+async function resolveOperands(
+  predicateValue: unknown,
+  instance: TransientValue,
+  schema: NormalizedSchema,
+  ctx: FilterEvalContext,
+): Promise<Map<string, Operand>> {
+  const resolved = new Map<string, Operand>();
+  const operands =
+    predicateValue !== null && typeof predicateValue === "object" && !Array.isArray(predicateValue)
+      ? Object.values(predicateValue as TransientObject)
+      : [predicateValue];
+  for (const operand of operands) {
+    const path = operandPath(operand);
+    if (!path || resolved.has(operand as string)) continue;
+    const value = await getPathValue(instance, schema, path, ctx);
+    resolved.set(operand as string, value === null || value === NO_ENTRY || value === UNSET ? MISSING : value);
+  }
+  return resolved;
+}
+
+/**
+ * The value a path reaches on `instance` of `schema`, crossing relations as a
+ * filter does, or `undefined` when it reaches none: a null relation on the way
+ * or at its end, a missing entry of a map, an unset value of a facet. A rule
+ * reads the operands of `each` and `with` this way (see `rules.ts`).
+ */
+export async function valueOnPath(
+  instance: TransientValue,
+  schema: NormalizedSchema,
+  path: string[],
+  ctx: FilterEvalContext,
+): Promise<TransientValue | undefined> {
+  const value = await getPathValue(instance, schema, path, ctx);
+  return value === null || value === NO_ENTRY || value === UNSET ? undefined : value;
+}
+
+/**
+ * Whether the plain value `root` satisfies `filter`, for the `when` of a step
+ * of a script (see `script.ts`): a path names keys of nested mappings, an index
+ * of an array, or, otherwise on an array, its first entry, as a placeholder
+ * does. A path that reaches nothing satisfies no predicate except
+ * `{exists: false}`. The operators are those of a filter on instances.
+ */
+export function matchValueFilter(root: TransientObject, filter: unknown): boolean {
+  checkFilterShape(filter, "when");
+  const f = filter as Filter;
+  if (f.and && !f.and.every((sub) => matchValueFilter(root, sub))) return false;
+  if (f.or && !f.or.some((sub) => matchValueFilter(root, sub))) return false;
+  if (f.not && matchValueFilter(root, f.not)) return false;
+  for (const [key, predicateValue] of Object.entries(f)) {
+    if (COMBINATORS.has(key)) continue;
+    const actual = valueAtPath(root, key.split("."));
+    if (actual === NO_ENTRY) {
+      if (!matchesUnset(predicateValue)) return false;
+      continue;
+    }
+    if (!matchPredicate(actual, predicateValue)) return false;
+  }
+  return true;
+}
+
+function valueAtPath(root: TransientValue, path: string[]): TransientValue | typeof NO_ENTRY {
+  let current: TransientValue = root;
+  for (const segment of path) {
+    if (Array.isArray(current)) {
+      if (/^\d+$/.test(segment)) {
+        current = current[Number(segment)] ?? null;
+        continue;
+      }
+      current = current[0] ?? null;
+    }
+    if (current === null || typeof current !== "object" || Array.isArray(current)) return NO_ENTRY;
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) return NO_ENTRY;
+    current = (current as TransientObject)[segment];
+  }
+  return current === undefined ? NO_ENTRY : current;
 }
 
 /** True for embedded schemas — filters never traverse into embedded arrays as list targets here (out of scope for v1). */
