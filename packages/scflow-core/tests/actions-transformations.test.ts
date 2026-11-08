@@ -10,19 +10,19 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function world() {
   const ctx = await setup();
   const { run } = ctx;
-  await run("scflow/create_actor_type", { name: "Site", domains: ["physical", "information"] });
-  await run("scflow/create_actor_type", { name: "Finance", domains: ["financial"] });
-  const plant = await run("scflow/create_actor", { name: "Plant", type: "Site" });
-  const annex = await run("scflow/create_actor", { name: "Annex", type: "Site" });
-  await run("scflow/create_actor", { name: "Bank", type: "Finance" });
-  await run("scflow/create_item_type", { name: "Part", domain: "physical" });
-  await run("scflow/create_item_type", { name: "Message", domain: "information" });
-  await run("scflow/create_item_type", { name: "Money", domain: "financial" });
-  const bolt = await run("scflow/create_item", { name: "Bolt", type: "Part" });
-  const frame = await run("scflow/create_item", { name: "Frame", type: "Part" });
-  const order = await run("scflow/create_item", { name: "Order", type: "Message" });
-  await run("scflow/create_item", { name: "Euro", type: "Money" });
-  const assembly = await run("scflow/create_transformation_type", { name: "Assembly" });
+  await run("scflow/create_actor_type", { display_name: "Site", domains: ["physical", "information"] });
+  await run("scflow/create_actor_type", { display_name: "Finance", domains: ["financial"] });
+  const plant = await run("scflow/create_actor", { display_name: "Plant", type: "Site" });
+  const annex = await run("scflow/create_actor", { display_name: "Annex", type: "Site" });
+  await run("scflow/create_actor", { display_name: "Bank", type: "Finance" });
+  await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
+  await run("scflow/create_item_type", { display_name: "Message", domain: "information" });
+  await run("scflow/create_item_type", { display_name: "Money", domain: "financial" });
+  const bolt = await run("scflow/create_item", { display_name: "Bolt", type: "Part" });
+  const frame = await run("scflow/create_item", { display_name: "Frame", type: "Part" });
+  const order = await run("scflow/create_item", { display_name: "Order", type: "Message" });
+  await run("scflow/create_item", { display_name: "Euro", type: "Money" });
+  const assembly = await run("scflow/create_transformation_type", { display_name: "Assembly" });
   return { ...ctx, plant, annex, bolt, frame, order, assembly };
 }
 
@@ -50,7 +50,7 @@ describe("scflow/create_transformation_type", () => {
     const { run, query } = await setup();
 
     const type = await run("scflow/create_transformation_type", {
-      name: { en: "Assembly", fr: "Assemblage" },
+      display_name: { en: "Assembly", fr: "Assemblage" },
       description: "Put parts together",
     });
 
@@ -89,7 +89,7 @@ describe("scflow/create_transformation", () => {
     const transformation = await run("scflow/create_transformation", {
       actor: "Plant",
       type: "Assembly",
-      name: { en: "Assemble frames", fr: "Assembler les cadres" },
+      display_name: { en: "Assemble frames", fr: "Assembler les cadres" },
     });
 
     expect(transformation.display_name).toEqual({ en: "Assemble frames", fr: "Assembler les cadres" });
@@ -98,8 +98,8 @@ describe("scflow/create_transformation", () => {
   it("refuses an unknown actor or type and writes nothing", async () => {
     const { run, query } = await world();
 
-    await expect(run("scflow/create_transformation", { actor: "Ghost", type: "Assembly" })).rejects.toThrow(/actor/);
-    await expect(run("scflow/create_transformation", { actor: "Plant", type: "Ghost" })).rejects.toThrow(/type/);
+    await expect(run("scflow/create_transformation", { actor: "Ghost", type: "Assembly" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_transformation", { actor: "Plant", type: "Ghost" })).rejects.toThrow(/names no instance/);
     await expect(run("scflow/create_transformation", { type: "Assembly" })).rejects.toThrow(/actor/);
 
     expect(await query("transformation")).toHaveLength(0);
@@ -112,7 +112,7 @@ describe("scflow/connect_transformation_line", () => {
     const transformation = await ctx.run("scflow/create_transformation", {
       actor: "Plant",
       type: "Assembly",
-      name: "Assemble",
+      display_name: "Assemble",
     });
     const heldBolt = await ctx.run("scflow/hold_item", { actor: "Plant", item: "Bolt" });
     const heldFrame = await ctx.run("scflow/hold_item", { actor: "Plant", item: "Frame" });
@@ -191,15 +191,15 @@ describe("scflow/connect_transformation_line", () => {
 
     await expect(
       run("scflow/connect_transformation_line", { transformation: "Ghost", held_item: heldBolt.id, role: "consumed" }),
-    ).rejects.toThrow(/transformation/);
+    ).rejects.toThrow(/names no instance/);
     await expect(
       run("scflow/connect_transformation_line", { transformation: "Assemble", held_item: "missing", role: "consumed" }),
-    ).rejects.toThrow(/held_item.*not found/);
+    ).rejects.toThrow(/names no instance/);
   });
 
-  it("refuses a transformation name shared by several transformations, listing their ids", async () => {
-    const { run, transformation, heldBolt } = await withHeld();
-    const twin = await run("scflow/create_transformation", { actor: "Annex", type: "Assembly", name: "Assemble" });
+  it("refuses a transformation name shared by several transformations", async () => {
+    const { run, heldBolt } = await withHeld();
+    await run("scflow/create_transformation", { actor: "Annex", type: "Assembly", display_name: "Assemble" });
 
     const error = await run("scflow/connect_transformation_line", {
       transformation: "Assemble",
@@ -207,9 +207,7 @@ describe("scflow/connect_transformation_line", () => {
       role: "consumed",
     }).catch((e: Error) => e);
 
-    expect((error as Error).message).toMatch(/ambiguous/);
-    expect((error as Error).message).toContain(transformation.id);
-    expect((error as Error).message).toContain(twin.id);
+    expect((error as Error).message).toMatch(/names several instance/);
   });
 });
 
@@ -315,13 +313,13 @@ describe("scflow/define_process", () => {
 
     await expect(
       run("scflow/define_process", { actor: "Plant", transformation_type: "Assembly", consumed_items: ["Ghost"] }),
-    ).rejects.toThrow(/consumed_items/);
+    ).rejects.toThrow(/names no instance/);
     await expect(
       run("scflow/define_process", { actor: "Ghost", transformation_type: "Assembly" }),
-    ).rejects.toThrow(/actor/);
+    ).rejects.toThrow(/names no instance/);
     await expect(
       run("scflow/define_process", { actor: "Plant", transformation_type: "Ghost" }),
-    ).rejects.toThrow(/transformation_type/);
+    ).rejects.toThrow(/names no instance/);
     await expect(
       run("scflow/define_process", { actor: "Plant", transformation_type: "Assembly", consumed_items: "Bolt" }),
     ).rejects.toThrow(/consumed_items/);

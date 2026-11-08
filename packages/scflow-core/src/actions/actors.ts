@@ -1,4 +1,5 @@
-import type { MclAccess, ModelActionDefinition } from "@scfloworg/core";
+import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { createActor } from "../actors.js";
 import {
   addActorTrees,
@@ -8,16 +9,6 @@ import {
   newDeletionSet,
   type Snapshot,
 } from "./delete-impact.js";
-import {
-  localizedTextParam,
-  nullableRefParam,
-  optionalBoolean,
-  optionalDomains,
-  optionalStringList,
-  refParam,
-  tagsParam,
-} from "./params.js";
-import { labelOf, resolveRef, type Instance } from "./refs.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -25,21 +16,23 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_scope`. */
 export interface CreateScopeParams {
-  name: Text;
+  display_name: Text;
   description?: Text;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/create_actor_type`. */
 export interface CreateActorTypeParams {
-  name: Text;
+  display_name: Text;
   domains?: string[];
   default_scope?: string;
   description?: Text;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/create_actor`. */
 export interface CreateActorParams {
-  name: Text;
+  display_name: Text;
   type: string;
   scope?: string;
   location?: string;
@@ -50,8 +43,8 @@ export interface CreateActorParams {
 
 /** Parameters of `scflow/update_actor`. */
 export interface UpdateActorParams {
-  actor: string;
-  name?: Text;
+  id: string;
+  display_name?: Text;
   description?: Text;
   type?: string;
   scope?: string | null;
@@ -62,19 +55,19 @@ export interface UpdateActorParams {
 
 /** Parameters of `scflow/delete_actor`. */
 export interface DeleteActorParams {
-  actor: string;
+  id: string;
   cascade?: boolean;
 }
 
 /** Parameters of `scflow/delete_actor_type`. */
 export interface DeleteActorTypeParams {
-  type: string;
+  id: string;
   cascade?: boolean;
 }
 
 /** Parameters of `scflow/delete_scope`. */
 export interface DeleteScopeParams {
-  scope: string;
+  id: string;
   cascade?: boolean;
 }
 
@@ -103,64 +96,77 @@ export interface ActorTypeSummary {
 }
 
 /** Creates a scope; see `scflow/create_scope` in `docs/actions.md`. */
-export const createScopeAction: ModelActionDefinition<CreateScopeParams, ScopeSummary> = {
+export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeSummary> = {
   id: "scflow/create_scope",
+  writes: ["scope"],
   title: "Create a scope",
   description:
     "Creates a scope, a lane that groups actors (for example SOURCE, MAKE, DELIVER or a region), and returns it.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the scope, a string or a map of language to string."),
+      display_name: localizedTextParam("Display name of the scope, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the scope."),
+      tags: tagsParam("Tags of the scope."),
     },
-    required: ["name"],
+    required: ["display_name"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const input: Record<string, unknown> = { display_name: toLocalized(params.name, "name") };
+  async run(params, context) {
+    const input: Record<string, unknown> = { display_name: toLocalized(params.display_name) };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description, "description");
+      input.description = toLocalized(params.description);
     }
-    const { after } = await access.runCommand(locator, { kind: "create", schema: "scope", input });
+    const tags = unique(params.tags);
+    if (tags !== undefined) {
+      input.tags = tags;
+    }
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.scope", input });
     const scope = after[0] as unknown as Instance;
     return { id: scope.id, display_name: scope.display_name as Record<string, string> };
   },
 };
 
 /** Creates an actor type; see `scflow/create_actor_type` in `docs/actions.md`. */
-export const createActorTypeAction: ModelActionDefinition<CreateActorTypeParams, ActorTypeSummary> = {
+export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams, ActorTypeSummary> = {
   id: "scflow/create_actor_type",
+  writes: ["actor_type"],
   title: "Create an actor type",
   description:
     "Creates an actor type with the flow domains its actors can exchange, and an optional default scope, and returns it.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the actor type, a string or a map of language to string."),
+      display_name: localizedTextParam("Display name of the actor type, a string or a map of language to string."),
       domains: {
         type: "array",
         items: { type: "string", enum: ["physical", "information", "financial", "service"] },
+        minItems: 1,
         default: ["physical"],
         description: "Flow domains of the type; physical when omitted.",
       },
-      default_scope: refParam("Id or name of the scope given to the actors of this type that name no scope."),
+      default_scope: refParam("scope", "Id or name of the scope given to the actors of this type that name no scope."),
       description: localizedTextParam("Markdown description of the actor type."),
+      tags: tagsParam("Tags of the actor type."),
     },
-    required: ["name"],
+    required: ["display_name"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const display_name = toLocalized(params.name, "name");
-    const domains = optionalDomains(params.domains, "domains") ?? ["physical"];
+  async run(params, context) {
+    const display_name = toLocalized(params.display_name);
+    const domains = unique(params.domains) ?? ["physical"];
     const input: Record<string, unknown> = { display_name, domains };
     if (params.default_scope !== undefined) {
-      input.default_scope = (await resolveRef(access, locator, "scope", params.default_scope, "default_scope")).id;
+      input.default_scope = params.default_scope;
     }
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description, "description");
+      input.description = toLocalized(params.description);
     }
-    const { after } = await access.runCommand(locator, { kind: "create", schema: "actor_type", input });
+    const tags = unique(params.tags);
+    if (tags !== undefined) {
+      input.tags = tags;
+    }
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.actor_type", input });
     const type = after[0] as unknown as Instance;
     return {
       id: type.id,
@@ -172,8 +178,9 @@ export const createActorTypeAction: ModelActionDefinition<CreateActorTypeParams,
 };
 
 /** Creates an actor; see `scflow/create_actor` in `docs/actions.md`. */
-export const createActorAction: ModelActionDefinition<CreateActorParams, ActorSummary> = {
+export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorSummary> = {
   id: "scflow/create_actor",
+  writes: ["actor"],
   title: "Create an actor",
   description:
     "Creates an actor of a given type in the network, optionally in a scope, at a location and inside a parent actor, and returns it. " +
@@ -181,44 +188,44 @@ export const createActorAction: ModelActionDefinition<CreateActorParams, ActorSu
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the actor, a string or a map of language to string."),
-      type: refParam("Id or name of the actor type."),
-      scope: refParam("Id or name of the containing scope; the default scope of the type when omitted."),
-      location: refParam("Id or name of the location of the actor; none when omitted."),
-      parent_actor: refParam("Id or name of the parent actor, to nest the actor in a hierarchy."),
+      display_name: localizedTextParam("Display name of the actor, a string or a map of language to string."),
+      type: refParam("actor_type", "Id or name of the actor type."),
+      scope: refParam("scope", "Id or name of the containing scope; the default scope of the type when omitted."),
+      location: refParam("location", "Id or name of the location of the actor; none when omitted."),
+      parent_actor: refParam("actor", "Id or name of the parent actor, to nest the actor in a hierarchy."),
       description: localizedTextParam("Markdown description of the actor."),
       tags: tagsParam("Tags of the actor."),
     },
-    required: ["name", "type"],
+    required: ["display_name", "type"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const display_name = toLocalized(params.name, "name");
-    const type = await resolveRef(access, locator, "actor_type", params.type, "type");
-    const input: Parameters<typeof createActor>[2] = { display_name, type: type.id };
+  async run(params, context) {
+    const display_name = toLocalized(params.display_name);
+    const input: Parameters<typeof createActor>[2] = { display_name, type: params.type };
     if (params.scope !== undefined) {
-      input.scope = (await resolveRef(access, locator, "scope", params.scope, "scope")).id;
+      input.scope = params.scope;
     }
     if (params.location !== undefined) {
-      input.location = (await resolveRef(access, locator, "location", params.location, "location")).id;
+      input.location = params.location;
     }
     if (params.parent_actor !== undefined) {
-      input.parent_actor = (await resolveRef(access, locator, "actor", params.parent_actor, "parent_actor")).id;
+      input.parent_actor = params.parent_actor;
     }
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description, "description");
+      input.description = toLocalized(params.description);
     }
-    const tags = optionalStringList(params.tags, "tags");
+    const tags = unique(params.tags);
     if (tags !== undefined) {
       input.tags = tags;
     }
-    return summarizeActor(await createActor(access, locator, input) as Instance);
+    return summarizeActor(await createActor(context, context.locator, input) as Instance);
   },
 };
 
 /** Updates an actor; see `scflow/update_actor` in `docs/actions.md`. */
-export const updateActorAction: ModelActionDefinition<UpdateActorParams, ActorSummary> = {
+export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorSummary> = {
   id: "scflow/update_actor",
+  writes: ["actor"],
   title: "Update an actor",
   description:
     "Changes the name, description, type, scope, location, parent or tags of an actor and returns it. Only the given properties change; " +
@@ -227,63 +234,55 @@ export const updateActorAction: ModelActionDefinition<UpdateActorParams, ActorSu
   parameters: {
     type: "object",
     properties: {
-      actor: refParam("Id or name of the actor to update."),
-      name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
+      id: refParam("actor", "Id or name of the actor to update."),
+      display_name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
       description: localizedTextParam("New Markdown description; same language rule as name."),
-      type: refParam("Id or name of the new actor type."),
-      scope: nullableRefParam("Id or name of the new scope, or null to detach the actor from its scope."),
-      location: nullableRefParam("Id or name of the new location, or null to remove the location of the actor."),
-      parent_actor: nullableRefParam("Id or name of the new parent actor, or null to move the actor to the root."),
+      type: refParam("actor_type", "Id or name of the new actor type."),
+      scope: nullableRefParam("scope", "Id or name of the new scope, or null to detach the actor from its scope."),
+      location: nullableRefParam("location", "Id or name of the new location, or null to remove the location of the actor."),
+      parent_actor: nullableRefParam("actor", "Id or name of the new parent actor, or null to move the actor to the root."),
       tags: tagsParam("New tags; they replace the current ones."),
     },
-    required: ["actor"],
+    required: ["id"],
+    minProperties: 2,
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
+  async run(params, context) {
+    const actor = await loadInstance(context, "scflow.actor", params.id);
     const patch: Record<string, unknown> = {};
 
-    if (params.name !== undefined) {
-      patch.display_name = { set: toLocalized(params.name, "name") };
+    if (params.display_name !== undefined) {
+      patch.display_name = { set: toLocalized(params.display_name) };
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description, "description") };
+      patch.description = { set: toLocalized(params.description) };
     }
     if (params.type !== undefined) {
-      patch.type = (await resolveRef(access, locator, "actor_type", params.type, "type")).id;
+      patch.type = params.type;
     }
     if (params.scope !== undefined) {
-      patch.scope =
-        params.scope === null ? null : (await resolveRef(access, locator, "scope", params.scope, "scope")).id;
+      patch.scope = params.scope;
     }
     if (params.location !== undefined) {
-      patch.location =
-        params.location === null
-          ? null
-          : (await resolveRef(access, locator, "location", params.location, "location")).id;
+      patch.location = params.location;
     }
     if (params.parent_actor !== undefined) {
       if (params.parent_actor === null) {
         patch.parent_actor = null;
       } else {
-        const parent = await resolveRef(access, locator, "actor", params.parent_actor, "parent_actor");
-        await assertNoCycle(access, locator, actor, parent);
+        const parent = await loadInstance(context, "scflow.actor", params.parent_actor);
+        await assertNoCycle(context, actor, parent);
         patch.parent_actor = parent.id;
       }
     }
-    const tags = optionalStringList(params.tags, "tags");
+    const tags = unique(params.tags);
     if (tags !== undefined) {
       patch.tags = tags;
     }
-    if (Object.keys(patch).length === 0) {
-      throw new Error(
-        'scflow/update_actor: give at least one property to change besides "actor" (name, description, type, scope, location, parent_actor, tags)',
-      );
-    }
 
-    const { after } = await access.runCommand(locator, {
+    const { after } = await context.runCommand(context.locator, {
       kind: "update",
-      schema: "actor",
+      schema: "scflow.actor",
       filters: { id: actor.id },
       input: patch,
     });
@@ -292,8 +291,10 @@ export const updateActorAction: ModelActionDefinition<UpdateActorParams, ActorSu
 };
 
 /** Deletes an actor; see `scflow/delete_actor` in `docs/actions.md`. */
-export const deleteActorAction: ModelActionDefinition<DeleteActorParams, { id: string }> = {
+export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: string }> = {
   id: "scflow/delete_actor",
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion"],
+  destructive: true,
   title: "Delete an actor",
   description:
     "Deletes an actor. It is refused while child actors, flows, held items, transformations or conversions reference the actor, unless cascade is true, " +
@@ -302,33 +303,30 @@ export const deleteActorAction: ModelActionDefinition<DeleteActorParams, { id: s
   parameters: {
     type: "object",
     properties: {
-      actor: refParam("Id or name of the actor to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description:
-          "When true, also deletes the descendant actors, the incident flows, the held items, the transformations, the conversions and the notes.",
-      },
+      id: refParam("actor", "Id or name of the actor to delete."),
+      cascade: cascadeParam("When true, also deletes the descendant actors, the incident flows, the held items, the transformations, the conversions and the notes."),
     },
-    required: ["actor"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const actor = await loadInstance(context, "scflow.actor", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
 
     if (!cascade) {
       assertUnreferenced(snapshot, actor);
     }
-    await deleteActorTrees(access, locator, snapshot, [actor.id]);
+    await deleteActorTrees(context, snapshot, [actor.id]);
     return { id: actor.id };
   },
 };
 
 /** Deletes an actor type; see `scflow/delete_actor_type` in `docs/actions.md`. */
-export const deleteActorTypeAction: ModelActionDefinition<DeleteActorTypeParams, { id: string }> = {
+export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams, { id: string }> = {
   id: "scflow/delete_actor_type",
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "actor_type"],
+  destructive: true,
   title: "Delete an actor type",
   description:
     "Deletes an actor type. It is refused while actors have this type, unless cascade is true, which deletes those actors " +
@@ -336,36 +334,34 @@ export const deleteActorTypeAction: ModelActionDefinition<DeleteActorTypeParams,
   parameters: {
     type: "object",
     properties: {
-      type: refParam("Id or name of the actor type to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description: "When true, also deletes the actors of this type with their descendants, flows, held items, transformations and notes.",
-      },
+      id: refParam("actor_type", "Id or name of the actor type to delete."),
+      cascade: cascadeParam("When true, also deletes the actors of this type with their descendants, flows, held items, transformations and notes."),
     },
-    required: ["type"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const type = await resolveRef(access, locator, "actor_type", params.type, "type");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const type = await loadInstance(context, "scflow.actor_type", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
     const actors = snapshot.actors.filter((actor) => actor.type === type.id);
 
     if (actors.length > 0 && !cascade) {
       throw new Error(
-        `parameter "type": "${labelOf(type)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
+        `parameter "id": "${labelOf(type)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
       );
     }
-    await deleteActorTrees(access, locator, snapshot, actors.map((actor) => actor.id));
-    await access.runCommand(locator, { kind: "delete", schema: "actor_type", filters: { id: type.id } });
+    await deleteActorTrees(context, snapshot, actors.map((actor) => actor.id));
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.actor_type", filters: { id: type.id } });
     return { id: type.id };
   },
 };
 
 /** Deletes a scope; see `scflow/delete_scope` in `docs/actions.md`. */
-export const deleteScopeAction: ModelActionDefinition<DeleteScopeParams, { id: string }> = {
+export const deleteScopeAction: ScflowActionDefinition<DeleteScopeParams, { id: string }> = {
   id: "scflow/delete_scope",
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "scope", "actor_type"],
+  destructive: true,
   title: "Delete a scope",
   description:
     "Deletes a scope. It is refused while actors are assigned to it, unless cascade is true, which deletes those actors first, " +
@@ -373,35 +369,31 @@ export const deleteScopeAction: ModelActionDefinition<DeleteScopeParams, { id: s
   parameters: {
     type: "object",
     properties: {
-      scope: refParam("Id or name of the scope to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description: "When true, also deletes the actors of this scope with their descendants, flows, held items, transformations and notes.",
-      },
+      id: refParam("scope", "Id or name of the scope to delete."),
+      cascade: cascadeParam("When true, also deletes the actors of this scope with their descendants, flows, held items, transformations and notes."),
     },
-    required: ["scope"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const scope = await resolveRef(access, locator, "scope", params.scope, "scope");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const scope = await loadInstance(context, "scflow.scope", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
     const actors = snapshot.actors.filter((actor) => actor.scope === scope.id);
 
     if (actors.length > 0 && !cascade) {
       throw new Error(
-        `parameter "scope": "${labelOf(scope)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
+        `parameter "id": "${labelOf(scope)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
       );
     }
-    await deleteActorTrees(access, locator, snapshot, actors.map((actor) => actor.id));
-    await access.runCommand(locator, {
+    await deleteActorTrees(context, snapshot, actors.map((actor) => actor.id));
+    await context.runCommand(context.locator, {
       kind: "update",
-      schema: "actor_type",
+      schema: "scflow.actor_type",
       filters: { default_scope: scope.id },
       input: { default_scope: null },
     });
-    await access.runCommand(locator, { kind: "delete", schema: "scope", filters: { id: scope.id } });
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.scope", filters: { id: scope.id } });
     return { id: scope.id };
   },
 };
@@ -434,30 +426,29 @@ function assertUnreferenced(snapshot: Snapshot, actor: Instance): void {
     .map(([n, what]) => `${n} ${what}(s)`);
   if (references.length > 0) {
     throw new Error(
-      `parameter "actor": "${labelOf(actor)}" is still referenced by ${references.join(", ")}; use cascade: true to delete them`,
+      `parameter "id": "${labelOf(actor)}" is still referenced by ${references.join(", ")}; use cascade: true to delete them`,
     );
   }
 }
 
 /** Deletes actors with their descendants and everything that depends on them. */
 async function deleteActorTrees(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   snapshot: Snapshot,
   actorIds: readonly string[],
 ): Promise<void> {
   const set = newDeletionSet();
   addActorTrees(snapshot, set, actorIds);
   closeDeletionSet(snapshot, set);
-  await executeDeletion(access, locator, snapshot, set);
+  await executeDeletion(context, snapshot, set);
 }
 
 /**
  * Refuses a parent that is the actor itself or one of its descendants, which
  * would make the actor its own ancestor.
  */
-async function assertNoCycle(access: MclAccess, locator: string, actor: Instance, parent: Instance): Promise<void> {
-  const { after } = await access.runCommand(locator, { kind: "query", schema: "actor" });
+async function assertNoCycle(context: ActionAccess, actor: Instance, parent: Instance): Promise<void> {
+  const { after } = await context.runCommand(context.locator, { kind: "query", schema: "scflow.actor" });
   const parentOf = new Map(
     (after as unknown as Instance[]).map((instance) => [instance.id, instance.parent_actor as string | undefined]),
   );

@@ -5,8 +5,8 @@ async function withUsages() {
   const ctx = await setup();
   const { create, run } = ctx;
   await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const a = await run("scflow/create_actor", { name: "A", type: "Site" });
-  const b = await run("scflow/create_actor", { name: "B", type: "Site" });
+  const a = await run("scflow/create_actor", { display_name: "A", type: "Site" });
+  const b = await run("scflow/create_actor", { display_name: "B", type: "Site" });
   const partType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
   const toolType = await create("item_type", { display_name: { en: "Tool" }, domain: "physical" });
   const bolt = await create("item", { display_name: { en: "Bolt" }, type: partType });
@@ -51,7 +51,7 @@ describe("scflow/delete_item", () => {
     const type = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
     await create("item", { display_name: { en: "Spare" }, type });
 
-    const result = await run("scflow/delete_item", { item: "Spare" });
+    const result = await run("scflow/delete_item", { id: "Spare" });
 
     expect(typeof result.id).toBe("string");
     expect(await query("item")).toHaveLength(0);
@@ -60,7 +60,7 @@ describe("scflow/delete_item", () => {
   it("refuses an item that is held or carried by a flow without cascade, and removes nothing", async () => {
     const { run, query } = await withUsages();
 
-    await expect(run("scflow/delete_item", { item: "Bolt" })).rejects.toThrow(/held item.*flow/);
+    await expect(run("scflow/delete_item", { id: "Bolt" })).rejects.toThrow(/held item.*flow/);
 
     expect(await query("item")).toHaveLength(3);
     expect(await query("item_at_actor")).toHaveLength(3);
@@ -71,7 +71,7 @@ describe("scflow/delete_item", () => {
   it("deletes the held instances, the flows that carry the item, their lines and every note with cascade, and nothing else", async () => {
     const { run, query, nut, heldNut, flowNut, lineNut, heldDrill, transformation } = await withUsages();
 
-    await run("scflow/delete_item", { item: "Bolt", cascade: true });
+    await run("scflow/delete_item", { id: "Bolt", cascade: true });
 
     expect((await query("item")).map((item) => item.id).sort()).toHaveLength(2);
     expect((await query("item_at_actor")).map((held) => held.id).sort()).toEqual([heldDrill, heldNut].sort());
@@ -86,7 +86,7 @@ describe("scflow/delete_item", () => {
   it("refuses an unknown item", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_item", { item: "Ghost" })).rejects.toThrow(/item/);
+    await expect(run("scflow/delete_item", { id: "Ghost" })).rejects.toThrow(/names no instance/);
   });
 });
 
@@ -95,7 +95,7 @@ describe("scflow/delete_item_type", () => {
     const { run, query, create } = await setup();
     await create("item_type", { display_name: { en: "Unused" }, domain: "physical" });
 
-    await run("scflow/delete_item_type", { type: "Unused" });
+    await run("scflow/delete_item_type", { id: "Unused" });
 
     expect(await query("item_type")).toHaveLength(0);
   });
@@ -103,7 +103,7 @@ describe("scflow/delete_item_type", () => {
   it("refuses a type that items use without cascade, and removes nothing", async () => {
     const { run, query } = await withUsages();
 
-    await expect(run("scflow/delete_item_type", { type: "Part" })).rejects.toThrow(/item/);
+    await expect(run("scflow/delete_item_type", { id: "Part" })).rejects.toThrow(/item/);
 
     expect(await query("item_type")).toHaveLength(2);
     expect(await query("item")).toHaveLength(3);
@@ -112,7 +112,7 @@ describe("scflow/delete_item_type", () => {
   it("deletes the items of the type with their usages, and the type, with cascade", async () => {
     const { run, query, toolType, drill, heldDrill } = await withUsages();
 
-    await run("scflow/delete_item_type", { type: "Part", cascade: true });
+    await run("scflow/delete_item_type", { id: "Part", cascade: true });
 
     expect((await query("item_type")).map((type) => type.id)).toEqual([toolType]);
     expect((await query("item")).map((item) => item.id)).toEqual([drill]);
@@ -125,6 +125,6 @@ describe("scflow/delete_item_type", () => {
   it("refuses an unknown type", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_item_type", { type: "Ghost" })).rejects.toThrow(/type/);
+    await expect(run("scflow/delete_item_type", { id: "Ghost" })).rejects.toThrow(/names no instance/);
   });
 });

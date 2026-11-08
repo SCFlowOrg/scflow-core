@@ -47,7 +47,7 @@ describe("the bundle of scflow:core", () => {
       runCommand: (locator: string, command: AuthoredCommand) => doc.mcl.runCommand(locator, command),
       runScript: (locator: string, script: AuthoredScript) => doc.mcl.runScript(locator, script),
     };
-    const created = (await createActorType(context, { name: "Plant", domains: ["physical"] })) as { id: string };
+    const created = (await createActorType(context, { display_name: "Plant", domains: ["physical"] })) as { id: string };
     const [stored] = await doc.query("actor_type");
     expect(stored.id).toBe(created.id);
     expect(stored.display_name).toEqual({ en: "Plant" });

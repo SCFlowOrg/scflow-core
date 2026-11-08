@@ -1,4 +1,5 @@
-import type { ModelActionDefinition } from "@scfloworg/core";
+import { labelOf, namesOf, resolveRef, type Instance } from "./refs.js";
+import { type ParamProperty, type ScflowActionDefinition } from "./params.js";
 import {
   addActorTrees,
   allIds,
@@ -9,8 +10,6 @@ import {
   type DeletionSet,
   type Snapshot,
 } from "./delete-impact.js";
-import type { ParamProperty } from "./params.js";
-import { labelOf, namesOf, resolveRef, type Instance } from "./refs.js";
 
 /** The kinds of entity that `scflow/inspect_delete_impact` accepts as a target. */
 export const DELETE_TARGET_SCHEMAS = [
@@ -71,8 +70,9 @@ export interface DeleteImpactResult {
 }
 
 /** Reports what a cascading delete would remove; see `scflow/inspect_delete_impact` in `docs/actions.md`. */
-export const inspectDeleteImpactAction: ModelActionDefinition<InspectDeleteImpactParams, DeleteImpactResult> = {
+export const inspectDeleteImpactAction: ScflowActionDefinition<InspectDeleteImpactParams, DeleteImpactResult> = {
   id: "scflow/inspect_delete_impact",
+  writes: [],
   title: "Inspect the impact of a delete",
   description:
     "Lists what deleting the given entities with cascade true would remove besides the entities themselves: actors, flows, items, " +
@@ -90,7 +90,7 @@ export const inspectDeleteImpactAction: ModelActionDefinition<InspectDeleteImpac
           type: "object",
           properties: {
             schema: { type: "string", enum: [...DELETE_TARGET_SCHEMAS], description: "The kind of the entity." },
-            ref: { type: "string", description: "Id or name of the entity; the id only for a flow and an item_at_actor." },
+            ref: { type: "string", minLength: 1, description: "Id or name of the entity; the id only for a flow and an item_at_actor." },
           },
           required: ["schema", "ref"],
           additionalProperties: false,
@@ -100,16 +100,15 @@ export const inspectDeleteImpactAction: ModelActionDefinition<InspectDeleteImpac
     required: ["targets"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const requested = readTargets(params.targets);
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const snapshot = await loadSnapshot(context);
     const set = newDeletionSet();
     const direct = newDeletionSet();
     const targets: DeleteImpactResult["targets"] = [];
     const targetIds = new Set<string>();
 
-    for (const [index, target] of requested.entries()) {
-      const instance = await resolveRef(access, locator, target.schema, target.ref, `targets[${index}].ref`);
+    for (const [index, target] of params.targets.entries()) {
+      const instance = await resolveRef(context, `scflow.${target.schema}`, target.ref, `targets[${index}].ref`);
       if (targetIds.has(instance.id)) {
         continue;
       }
@@ -126,23 +125,6 @@ export const inspectDeleteImpactAction: ModelActionDefinition<InspectDeleteImpac
 
 /** The actions of the lot inspection, in catalog order. */
 export const INSPECT_ACTIONS = [inspectDeleteImpactAction] as const;
-
-/** Validates the `targets` parameter. */
-function readTargets(value: unknown): InspectDeleteImpactParams["targets"] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error('parameter "targets": expected a non-empty list of { schema, ref }');
-  }
-  return value.map((entry, index) => {
-    const target = entry as { schema?: unknown; ref?: unknown } | null;
-    if (typeof target?.schema !== "string" || !(DELETE_TARGET_SCHEMAS as readonly string[]).includes(target.schema)) {
-      throw new Error(`parameter "targets[${index}].schema": expected one of ${DELETE_TARGET_SCHEMAS.join(", ")}`);
-    }
-    if (typeof target.ref !== "string" || target.ref === "") {
-      throw new Error(`parameter "targets[${index}].ref": expected the id or the name of a ${target.schema}`);
-    }
-    return { schema: target.schema as DeleteTargetSchema, ref: target.ref };
-  });
-}
 
 /**
  * Adds a target to the deletion set. `direct` records the entities named as targets, which the

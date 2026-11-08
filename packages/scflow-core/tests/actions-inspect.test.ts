@@ -6,11 +6,11 @@ async function withNetwork() {
   const ctx = await setup();
   const { create, run } = ctx;
   await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const campus = await run("scflow/create_actor", { name: "Campus", type: "Site" });
-  const dock = await run("scflow/create_actor", { name: "Dock", type: "Site", parent_actor: "Campus" });
-  const bay = await run("scflow/create_actor", { name: "Bay", type: "Site", parent_actor: "Dock" });
-  const outside = await run("scflow/create_actor", { name: "Outside", type: "Site" });
-  const hub = await run("scflow/create_actor", { name: "Hub", type: "Site" });
+  const campus = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
+  const dock = await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
+  const bay = await run("scflow/create_actor", { display_name: "Bay", type: "Site", parent_actor: "Dock" });
+  const outside = await run("scflow/create_actor", { display_name: "Outside", type: "Site" });
+  const hub = await run("scflow/create_actor", { display_name: "Hub", type: "Site" });
   const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
   const bolt = await create("item", { display_name: { en: "Bolt" }, type: itemType });
   const nut = await create("item", { display_name: { en: "Nut" }, type: itemType });

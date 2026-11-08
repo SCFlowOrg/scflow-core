@@ -1,34 +1,42 @@
-import type { MclAccess } from "@scfloworg/core";
+import type { ActionAccess } from "./params.js";
 
 /** An instance of a schema, as a query returns it: its `id` and its properties. */
 export type Instance = Record<string, unknown> & { id: string };
 
 /**
- * Finds the instance that a reference designates.
+ * Reads one instance by its key.
+ *
+ * @param context The access to the dataset.
+ * @param schema The qualified name of the schema, for example `"scflow.actor"`.
+ * @param id The key of the instance.
+ * @returns The instance.
+ * @throws When no instance has this key.
+ */
+export async function loadInstance(context: ActionAccess, schema: string, id: unknown): Promise<Instance> {
+  const { after } = await context.runCommand(context.locator, { kind: "query", schema, filters: { id: id as string } });
+  const found = (after as unknown as Instance[])[0];
+  if (!found) {
+    throw new Error(`${schema} "${String(id)}" does not exist`);
+  }
+  return found;
+}
+
+/**
+ * Finds the instance that a reference designates, for a parameter whose schema
+ * is only known when the action runs, which the keyword `ref` cannot name.
  *
  * The reference is the id of the instance, or the exact `display_name` of one
- * instance, in any language. An id wins over a name that equals it. A reference
- * to a schema without `display_name` can only be an id.
+ * instance, in any language. An id wins over a name that equals it.
  *
- * @param mcl The access to the dataset.
- * @param locator The locator of the dataset.
- * @param schema The schema of the instance, for example `"actor"`.
+ * @param context The access to the dataset.
+ * @param schema The qualified name of the schema.
  * @param ref The id or the name given by the caller.
  * @param param The name of the parameter, quoted in the error message.
  * @returns The instance.
- * @throws When the reference is empty, matches no instance, or is a name shared by several instances (the error lists their ids).
+ * @throws When the reference matches no instance, or is a name shared by several instances (the error lists their ids).
  */
-export async function resolveRef(
-  mcl: MclAccess,
-  locator: string,
-  schema: string,
-  ref: unknown,
-  param: string,
-): Promise<Instance> {
-  if (typeof ref !== "string" || ref === "") {
-    throw new Error(`parameter "${param}": expected the id or the name of a ${schema}`);
-  }
-  const { after } = await mcl.runCommand(locator, { kind: "query", schema });
+export async function resolveRef(context: ActionAccess, schema: string, ref: string, param: string): Promise<Instance> {
+  const { after } = await context.runCommand(context.locator, { kind: "query", schema });
   const instances = after as unknown as Instance[];
 
   const byId = instances.find((instance) => instance.id === ref);
@@ -44,32 +52,6 @@ export async function resolveRef(
   }
   const ids = byName.map((instance) => instance.id).join(", ");
   throw new Error(`parameter "${param}": ${schema} name "${ref}" is ambiguous, it matches ${ids}`);
-}
-
-/**
- * Finds the entity that an id designates, whatever its schema, by a query on the
- * base schema `annotable`.
- *
- * `resolveRef` is not used: the entities carry a `display_name`, and the actions
- * that act on any entity (notes, tags) designate it by its id alone.
- *
- * @param mcl The access to the dataset.
- * @param locator The locator of the dataset.
- * @param entity The id given by the caller.
- * @param param The name of the parameter, quoted in the error message.
- * @returns The instance.
- * @throws When the id is not a non-empty string or matches no entity.
- */
-export async function resolveEntity(mcl: MclAccess, locator: string, entity: unknown, param: string): Promise<Instance> {
-  if (typeof entity !== "string" || entity === "") {
-    throw new Error(`parameter "${param}": expected the id of an entity`);
-  }
-  const { after } = await mcl.runCommand(locator, { kind: "query", schema: "annotable", filters: { id: entity } });
-  const found = (after as unknown as Instance[])[0];
-  if (!found) {
-    throw new Error(`parameter "${param}": no entity with id "${entity}"`);
-  }
-  return found;
 }
 
 /** The names of an instance, one per language of its `display_name`. */
