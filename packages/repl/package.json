@@ -11,6 +11,10 @@
     "scflow": "dist/scflowCli.js"
   },
   "exports": {
+    "./scflow": {
+      "types": "./dist/scflow.d.ts",
+      "default": "./dist/scflow.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
