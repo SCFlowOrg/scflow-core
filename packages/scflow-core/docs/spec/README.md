@@ -65,7 +65,7 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [Schemas Package](implementation.md#schemas-package): `@scfloworg/scflow-core` is the module `scflow:core`, declared in its manifest `module.yaml`; the schemas are compiled to TypeScript at build time and exported as `SCHEMAS`
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin contributes the SCFLOW schemas to the built-in model of its area through core-plugin's upgradeModel
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
-- [Network Rules](implementation.md#network-rules): The nine rules a network satisfies beyond CORE constraints, each with a stable name used in check results
-- [Network Check](implementation.md#network-check): checkNetwork runs on demand, evaluates every network rule and returns the violations without blocking any write
+- [Network Rules](implementation.md#network-rules): The ten rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`
+- [Network Check](implementation.md#network-check): The engine refuses a breach of a network rule at the end of any transaction; there is no separate check
 - [Common Flow Domains And Flow Creation](implementation.md#common-flow-domains-and-flow-creation): getCommonFlowDomains lists the flow domains common to two actors, and createFlow creates one flow between them
 - [Actor Creation](implementation.md#actor-creation): createActor creates an actor and gives it the default scope of its type when no scope is given

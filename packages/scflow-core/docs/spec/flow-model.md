@@ -95,7 +95,7 @@ A **transformation** states that an [actor](#actor) consumes items to produce ot
 - It is owned by its actor, where it takes place.
 - Its `transformation_type` is mandatory and set at creation, like the type of an actor or an item, per [Typing](#typing); it carries no domain.
 - Its lines list the consumed items and the produced items.
-- Each line references the [item at actor](#item-at-actor) it consumes or produces, held by the transformation's own actor.
+- Each line references the [item at actor](#item-at-actor) it consumes or produces, held by the transformation's own actor. A transformation has at most one line for a given held item and role, per the rule `transformation_line_unique`.
 - Consumed and produced items can belong to different domains, as long as each is among the actor's domains — which is how a service built on products is described, per [All Flow Domains](why-modelling-flows.md#all-flow-domains).
 
 Transformations are what link the flows reaching an actor to the flows leaving it.

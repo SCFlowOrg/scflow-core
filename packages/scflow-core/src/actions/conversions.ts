@@ -1,7 +1,6 @@
-import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { type Instance } from "./refs.js";
 import { type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
-import { deleteConversions, loadSnapshot } from "./delete-impact.js";
-import { domainOfItem } from "./items.js";
+import { deleteById } from "./delete-impact.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -63,18 +62,7 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
     additionalProperties: false,
   },
   async run(params, context) {
-    const from = await loadInstance(context, "scflow.item", params.from_item);
-    const to = await loadInstance(context, "scflow.item", params.to_item);
-
-    const fromDomain = await domainOfItem(context, from);
-    const toDomain = await domainOfItem(context, to);
-    if (fromDomain !== toDomain) {
-      throw new Error(
-        `parameter "to_item": "${labelOf(to)}" is in the ${toDomain} domain, but "${labelOf(from)}" is in the ${fromDomain} domain`,
-      );
-    }
-
-    const input: Record<string, unknown> = { actor: params.actor, from_item: from.id, to_item: to.id };
+    const input: Record<string, unknown> = { actor: params.actor, from_item: params.from_item, to_item: params.to_item };
     if (params.display_name !== undefined) {
       input.display_name = toLocalized(params.display_name);
     }
@@ -158,9 +146,7 @@ export const deleteConversionAction: ScflowActionDefinition<DeleteConversionPara
     additionalProperties: false,
   },
   async run(params, context) {
-    const snapshot = await loadSnapshot(context);
-
-    await deleteConversions(context, snapshot, [params.id]);
+    await deleteById(context, "scflow.conversion", params.id);
     return { id: params.id };
   },
 };

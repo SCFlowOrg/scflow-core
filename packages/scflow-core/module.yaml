@@ -7,7 +7,7 @@
 name: scflow:core
 namespace: scflow
 # always the version of package.json
-version: 1.0.0
+version: 1.1.0
 mcl: ^1.0
 title: Supply chain flow
 
@@ -114,6 +114,10 @@ schemas:
       delete: scflow/delete_actor
     extends: annotable
     is_root: true
+    checks:
+      - name: parent_actor_domains
+        when: { parent_actor: { exists: true } }
+        require: { type.domains: { subset_of: "${this.parent_actor.type.domains}" } }
     properties:
       - name: display_name
         type: localized_string
@@ -122,11 +126,14 @@ schemas:
         type: localized_markdown
       - name: type
         type: actor_type
+        on_delete: confirm
         mandatory: true
         inverse_name: actors
         inverse_is_array: true
       - name: scope
         type: scope
+        on_delete: confirm
+        default_value: "${this.type.default_scope}"
         inverse_name: actors
         inverse_is_array: true
       - name: location
@@ -135,6 +142,8 @@ schemas:
         inverse_is_array: true
       - name: parent_actor
         type: actor
+        on_delete: confirm
+        acyclic: true
         inverse_name: child_actors
         inverse_is_array: true
 
@@ -146,6 +155,23 @@ schemas:
       delete: scflow/delete_flow
     extends: annotable
     is_root: true
+    checks:
+      - name: internal_flow_item
+        when:
+          or:
+            - source.parent_actor: { eq: "${this.destination}" }
+            - destination.parent_actor: { eq: "${this.source}" }
+        require: { item: { exists: true } }
+      - name: carried_item_domain
+        when: { item: { exists: true } }
+        require:
+          and:
+            - item.type.domain: { in: "${this.source.type.domains}" }
+            - item.type.domain: { in: "${this.destination.type.domains}" }
+      - name: flow_ends_hold_item
+        when: { item: { exists: true } }
+        each: ["${this.source}", "${this.destination}"]
+        exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
     properties:
       - name: display_name
         type: localized_string
@@ -153,16 +179,20 @@ schemas:
         type: localized_markdown
       - name: source
         type: actor
+        on_delete: confirm
         mandatory: true
         inverse_name: outgoing_flows
         inverse_is_array: true
       - name: destination
         type: actor
+        on_delete: confirm
         mandatory: true
         inverse_name: incoming_flows
         inverse_is_array: true
       - name: item
         type: item
+        on_delete: confirm
+        set_once: true
         updated_by: scflow/set_flow_item
         inverse_name: carried_on
         inverse_is_array: true
@@ -185,6 +215,7 @@ schemas:
         type: localized_markdown
       - name: type
         type: item_type
+        on_delete: confirm
         mandatory: true
         inverse_name: items
         inverse_is_array: true
@@ -195,14 +226,22 @@ schemas:
       create: scflow/hold_item
       delete: scflow/release_held_item
     extends: annotable
+    checks:
+      - name: held_item_domain
+        require: { item.type.domain: { in: "${this.actor.type.domains}" } }
+    unique:
+      - name: held_item_unique
+        properties: [actor, item]
     properties:
       - name: actor
         type: actor
+        on_delete: confirm
         owner: true
         inverse_name: held_items
         inverse_is_array: true
       - name: item
         type: item
+        on_delete: confirm
         mandatory: true
         constant: true
         inverse_name: held_at
@@ -232,17 +271,20 @@ schemas:
     properties:
       - name: display_name
         type: localized_string
+        default_value: "${this.type.display_name}"
         min_length: 1
       - name: description
         type: localized_markdown
       - name: type
         type: transformation_type
+        on_delete: confirm
         mandatory: true
         constant: true
         inverse_name: transformations
         inverse_is_array: true
       - name: actor
         type: actor
+        on_delete: confirm
         owner: true
         inverse_name: transformations
         inverse_is_array: true
@@ -252,6 +294,12 @@ schemas:
     crud:
       create: scflow/connect_transformation_line
     extends: annotable
+    checks:
+      - name: transformation_line_actor
+        require: { held_item.actor: { eq: "${this.transformation.actor}" } }
+    unique:
+      - name: transformation_line_unique
+        properties: [transformation, held_item, role]
     properties:
       - name: transformation
         type: transformation
@@ -262,6 +310,7 @@ schemas:
         type: transformation_role
       - name: held_item
         type: item_at_actor
+        on_delete: confirm
         mandatory: true
         inverse_name: transformation_lines
         inverse_is_array: true
@@ -273,6 +322,9 @@ schemas:
       update: scflow/update_conversion
       delete: scflow/delete_conversion
     extends: annotable
+    checks:
+      - name: conversion_item_domain
+        require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
     properties:
       - name: display_name
         type: localized_string
@@ -280,15 +332,18 @@ schemas:
         type: localized_markdown
       - name: actor
         type: actor
+        on_delete: confirm
         owner: true
         inverse_name: conversions
         inverse_is_array: true
       - name: from_item
         type: item
+        on_delete: confirm
         mandatory: true
         constant: true
       - name: to_item
         type: item
+        on_delete: confirm
         mandatory: true
         constant: true
 
@@ -362,8 +417,8 @@ actions:
     description: >-
       Changes the name, description, type, scope, location, parent or tags of an actor and returns
       it. Only the given properties change; scope, location and parent_actor accept null to clear
-      the relation. Changing the type does not check the held items, the flows and the parent of the
-      actor: the network check reports the ones whose domain no longer fits.
+      the relation. A change that breaks a rule on the held items, the flows or the parent of the actor
+      is refused.
     kind: action
     writes:
       - actor
@@ -618,8 +673,8 @@ actions:
     title: Update an item
     description: >-
       Changes the name, description or type of an item and returns it. Only the given properties
-      change. Changing the type does not check the held records of the item and the flows that carry
-      it: the network check reports the ones whose domain no longer fits.
+      change. A change of type that breaks a rule on the held records of the item or the flows that
+      carry it is refused.
     kind: action
     writes:
       - item

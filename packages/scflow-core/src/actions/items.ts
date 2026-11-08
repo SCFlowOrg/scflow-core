@@ -1,6 +1,6 @@
-import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { type Instance } from "./refs.js";
 import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
-import { deleteItems, loadSnapshot } from "./delete-impact.js";
+import { deleteById } from "./delete-impact.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -156,8 +156,7 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
   title: "Update an item",
   description:
     "Changes the name, description or type of an item and returns it. Only the given properties change. " +
-    "Changing the type does not check the held records of the item and the flows that carry it: the network check reports " +
-    "the ones whose domain no longer fits.",
+    "A change of type that breaks a rule on the held records of the item or the flows that carry it is refused.",
   parameters: {
     type: "object",
     properties: {
@@ -222,11 +221,7 @@ export const holdItemAction: ScflowActionDefinition<HoldItemParams, HeldItemSumm
     additionalProperties: false,
   },
   async run(params, context) {
-    const actor = await loadInstance(context, "scflow.actor", params.actor);
-    const item = await loadInstance(context, "scflow.item", params.item);
-
-    await assertHoldable(context, actor, item, "item");
-    return summarizeHeld(await holdItem(context, actor, item, unique(params.tags)));
+    return summarizeHeld(await holdItem(context, params.actor, params.item, unique(params.tags)));
   },
 };
 
@@ -249,22 +244,8 @@ export const releaseHeldItemAction: ScflowActionDefinition<ReleaseHeldItemParams
     additionalProperties: false,
   },
   async run(params, context) {
-    const held = await loadInstance(context, "scflow.item_at_actor", params.id);
-    const lines = await context.runCommand(context.locator, {
-      kind: "query",
-      schema: "scflow.transformation_line",
-      filters: { held_item: held.id },
-    });
-    if (lines.after.length > 0 && params.cascade !== true) {
-      throw new Error(
-        `parameter "id": the record is used by ${lines.after.length} transformation line(s); remove them first or use cascade: true`,
-      );
-    }
-    if (lines.after.length > 0) {
-      await context.runCommand(context.locator, { kind: "delete", schema: "scflow.transformation_line", filters: { held_item: held.id } });
-    }
-    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.item_at_actor", filters: { id: held.id } });
-    return { id: held.id };
+    await deleteById(context, "scflow.item_at_actor", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -288,31 +269,8 @@ export const deleteItemAction: ScflowActionDefinition<DeleteItemParams, { id: st
     additionalProperties: false,
   },
   async run(params, context) {
-    const item = await loadInstance(context, "scflow.item", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-
-    if (!cascade) {
-      const references = [
-        [snapshot.held.filter((record) => record.item === item.id).length, "held item"],
-        [snapshot.flows.filter((flow) => flow.item === item.id).length, "flow"],
-        [
-          snapshot.conversions.filter(
-            (conversion) => conversion.from_item === item.id || conversion.to_item === item.id,
-          ).length,
-          "conversion",
-        ],
-      ]
-        .filter(([n]) => (n as number) > 0)
-        .map(([n, what]) => `${n} ${what}(s)`);
-      if (references.length > 0) {
-        throw new Error(
-          `parameter "id": "${labelOf(item)}" is still used by ${references.join(", ")}; use cascade: true to delete them`,
-        );
-      }
-    }
-    await deleteItems(context, snapshot, [item.id]);
-    return { id: item.id };
+    await deleteById(context, "scflow.item", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -335,19 +293,8 @@ export const deleteItemTypeAction: ScflowActionDefinition<DeleteItemTypeParams, 
     additionalProperties: false,
   },
   async run(params, context) {
-    const type = await loadInstance(context, "scflow.item_type", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-    const items = snapshot.items.filter((item) => item.type === type.id);
-
-    if (items.length > 0 && !cascade) {
-      throw new Error(
-        `parameter "id": "${labelOf(type)}" is used by ${items.length} item(s); use cascade: true to delete them`,
-      );
-    }
-    await deleteItems(context, snapshot, items.map((item) => item.id));
-    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.item_type", filters: { id: type.id } });
-    return { id: type.id };
+    await deleteById(context, "scflow.item_type", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -363,67 +310,14 @@ export const ITEM_ACTIONS = [
 ] as const;
 
 /**
- * Checks that an actor can hold an item: the domain of the item, which is the
- * domain of its type, is among the domains of the type of the actor.
- *
- * @param param The name of the parameter that gave the item, quoted in the error message.
- * @throws When the domain of the item is not among the domains of the actor.
- */
-export async function assertHoldable(
-  context: ActionAccess,
-  actor: Instance,
-  item: Instance,
-  param: string,
-): Promise<void> {
-  const domain = await domainOfItem(context, item);
-  const actorType = await loadInstance(context, "scflow.actor_type", actor.type);
-  const actorDomains = actorType.domains as string[];
-  if (!actorDomains.includes(domain)) {
-    throw new Error(
-      `parameter "${param}": "${labelOf(item)}" is in the ${domain} domain, which is not among the domains of "${labelOf(actor)}" (${actorDomains.join(", ")})`,
-    );
-  }
-}
-
-/**
- * Checks that a flow can carry an item: the domain of the item, which is the
- * domain of its type, is among the domains of the type of the source actor and
- * among the domains of the type of the destination actor of the flow.
- *
- * @param source The source actor of the flow.
- * @param destination The destination actor of the flow.
- * @throws When the domain of the item is not among the domains of an end of the flow.
- */
-export async function assertCarryable(
-  context: ActionAccess,
-  source: Instance,
-  destination: Instance,
-  item: Instance,
-): Promise<void> {
-  const domain = await domainOfItem(context, item);
-  for (const [role, actor] of [
-    ["source", source],
-    ["destination", destination],
-  ] as const) {
-    const actorType = await loadInstance(context, "scflow.actor_type", actor.type);
-    const actorDomains = actorType.domains as string[];
-    if (!actorDomains.includes(domain)) {
-      throw new Error(
-        `parameter "item": "${labelOf(item)}" is in the ${domain} domain, which is not among the domains of the ${role} "${labelOf(actor)}" of the flow (${actorDomains.join(", ")})`,
-      );
-    }
-  }
-}
-
-/**
  * Returns the `item_at_actor` record of an actor and an item, and creates it when the
- * actor does not hold the item yet. It checks nothing: call {@link assertHoldable} first.
+ * actor does not hold the item yet. The engine refuses a breach of the rules of the record.
  */
-export async function holdItem(context: ActionAccess, actor: Instance, item: Instance, tags?: string[]): Promise<Instance> {
+export async function holdItem(context: ActionAccess, actor: string, item: string, tags?: string[]): Promise<Instance> {
   const existing = await context.runCommand(context.locator, {
     kind: "query",
     schema: "scflow.item_at_actor",
-    filters: { actor: actor.id, item: item.id },
+    filters: { actor, item },
   });
   if (existing.after.length > 0) {
     return existing.after[0] as unknown as Instance;
@@ -431,15 +325,9 @@ export async function holdItem(context: ActionAccess, actor: Instance, item: Ins
   const { after } = await context.runCommand(context.locator, {
     kind: "create",
     schema: "scflow.item_at_actor",
-    input: { actor: actor.id, item: item.id, ...(tags === undefined ? {} : { tags }) },
+    input: { actor, item, ...(tags === undefined ? {} : { tags }) },
   });
   return after[0] as unknown as Instance;
-}
-
-/** The flow domain of an item, which is the domain of its type. */
-export async function domainOfItem(context: ActionAccess, item: Instance): Promise<string> {
-  const type = await loadInstance(context, "scflow.item_type", item.type);
-  return type.domain as string;
 }
 
 function summarizeHeld(record: Instance): HeldItemSummary {

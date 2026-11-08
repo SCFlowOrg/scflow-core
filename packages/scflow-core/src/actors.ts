@@ -22,8 +22,8 @@ export interface CreateActorInput {
  * Creates an actor and returns it.
  *
  * The actor takes `scope` when the input gives one, which always overrides the
- * default. Otherwise it takes the `default_scope` of its type, and no scope when
- * the type has none. The default is applied at creation: a later change of the
+ * default. Otherwise the `default_value` of its `scope` property gives it the
+ * `default_scope` of its type, and no scope when the type has none. The default is applied at creation: a later change of the
  * `default_scope` of the type leaves the existing actors unchanged.
  *
  * The actor is at the `location` of the input when the input gives one, and at
@@ -37,38 +37,6 @@ export async function createActor(
   locator: string,
   input: CreateActorInput,
 ): Promise<Record<string, unknown>> {
-  const { type, scope, ...rest } = input;
-
-  const types = await mcl.runCommand(locator, {
-    kind: "query",
-    schema: "scflow.actor_type",
-    filters: { id: type },
-  });
-  if (types.after.length === 0) {
-    throw new Error(`createActor: actor type "${type}" does not exist`);
-  }
-  const defaultScope = (types.after[0] as unknown as { default_scope?: string | null }).default_scope;
-
-  const actorScope = scope ?? defaultScope ?? undefined;
-  if (scope !== undefined) {
-    await assertScopeExists(mcl, locator, scope);
-  }
-
-  const { after } = await mcl.runCommand(locator, {
-    kind: "create",
-    schema: "scflow.actor",
-    input: { ...rest, type, ...(actorScope === undefined ? {} : { scope: actorScope }) },
-  });
+  const { after } = await mcl.runCommand(locator, { kind: "create", schema: "scflow.actor", input: { ...input } });
   return after[0] as unknown as Record<string, unknown>;
-}
-
-async function assertScopeExists(mcl: MclAccess, locator: string, scope: string): Promise<void> {
-  const scopes = await mcl.runCommand(locator, {
-    kind: "query",
-    schema: "scflow.scope",
-    filters: { id: scope },
-  });
-  if (scopes.after.length === 0) {
-    throw new Error(`createActor: scope "${scope}" does not exist`);
-  }
 }

@@ -7,7 +7,7 @@ These actions serve as high-level semantic building blocks shared across:
 2. **The AI Assistant**: Exposed as native *Function Calling* tools with JSON Schema definitions.
 3. **Macros and Automation Scripts**: Composable, serializable, and replayable operations.
 
-Each action encapsulates referential integrity checks, domain default values, and executes inside an atomic, undoable transaction.
+The rules of the network are declared on the schemas of the module and enforced by the engine, so a body stays thin, and each action executes inside an atomic, undoable transaction.
 
 The package exports them as `ACTIONS`. Each has a body `run(params, context)`, the form of an action of `@scfloworg/actions`, and names the schemas of the module by their qualified name, such as `scflow.actor`. The manifest `module.yaml` declares each of them with its `id`, `title`, `description`, `kind`, `destructive`, `writes` and `parameters`, so a tool knows them without running code; a test checks that the declarations and `ACTIONS` agree, so adding or changing an action changes both. An environment runs them with `dataset.run(id, params)`.
 
@@ -23,6 +23,10 @@ The package exports them as `ACTIONS`. Each has a body `run(params, context)`, t
 - **CRUD parameters**: An action that takes the place of a CRUD operation of a schema, named by the `crud` of that schema, follows the CRUD parameters of the [meta-model](../../core/docs/spec/meta-model.md#action): a create takes the property names, an update takes `id` and the property names, and a delete takes `id` and `cascade`. A create takes every property of its schema, `tags` included.
 - **Write limit**: Each action declares the schemas it writes in `writes`; a write outside them is refused with `write_not_declared`.
 - **Read actions**: An action that only queries declares `kind: "read"`. The host runs it outside any undo transaction, so it writes nothing. The other actions are mutations (`kind: "action"`, the default).
+
+### Rules
+
+The [network rules](spec/implementation.md#network-rules) are declared on the schemas. The engine checks them at the end of the transaction of an action, and a breach refuses the whole action with `rule_violation`, whose details give `rule`, `schema` and `key`. A change of any instance that a rule reads is covered: changing the type of an actor or of an item is refused when an item it holds or carries no longer fits. A rule only refuses, so the actions below still write what a rule requires, such as the holdings of the two ends of a flow.
 
 ### Deletion and cascade
 
@@ -59,7 +63,7 @@ Updates an existing actor's properties.
   - `location` *(string | null, optional)*: ID or name of the new location (or `null` to remove it).
   - `parent_actor` *(string | null, optional)*: ID or name of the new parent container (or `null` to move to root).
   - `tags` *(string[], optional)*.
-- **Behavior**: Only the parameters that are given change the actor, and at least one must be given. Changing the type checks nothing: the held items, the flows and the parent of the actor keep their records, and the network check reports the ones whose domain no longer fits the domains of the new type. For `display_name` and `description`, each given language replaces the entry of the same language and the other languages are kept. An actor cannot become its own parent, directly or through its descendants. The package ships no action on locations yet, so a location is created with a command and referenced here by id or name.
+- **Behavior**: Only the parameters that are given change the actor, and at least one must be given. A change of type or of parent that breaks a rule on the held items, the flows or the parent of the actor is refused with `rule_violation`. For `display_name` and `description`, each given language replaces the entry of the same language and the other languages are kept. An actor cannot become its own parent, directly or through its descendants: the `acyclic` rule, reported as `parent_actor`, refuses it. The package ships no action on locations yet, so a location is created with a command and referenced here by id or name.
 - **Returns**: The updated actor `{ id, display_name, type, scope?, location?, parent_actor? }`.
 
 #### `scflow/delete_actor`
@@ -108,7 +112,7 @@ Creates a scope/lane boundary (e.g., SOURCE, MAKE, DELIVER, or geographic region
 
 #### `scflow/create_flow`
 Creates one flow between two actors, one-way from source to destination unless `bidirectional` is set.
-- **Behavior**: A flow has no domain, so the action does not check the domains of the two actors; an interface that wants to refuse a connection between actors without a common domain asks `getCommonFlowDomains` first. Flows that already link the two actors are neither reused nor reported: each call creates a new flow. A flow carries at most one item. A flow between an actor and one of its child actors, in either direction, is a transport inside the actor and must carry an item, otherwise the action fails and creates nothing; this is the rule `internal_flow_item` of the network check. When `item` is given, its domain must be among the domains of the actor type of the source and of the destination, otherwise the action fails and the error names the end that lacks the domain (rule `carried_item_domain`), and the action creates the `item_at_actor` that the source and the destination lack (rule `flow_ends_hold_item`), as `scflow/hold_item` does.
+- **Behavior**: A flow has no domain, so the action does not check the domains of the two actors; an interface that wants to refuse a connection between actors without a common domain asks `getCommonFlowDomains` first. Flows that already link the two actors are neither reused nor reported: each call creates a new flow. A flow carries at most one item. A flow between an actor and one of its child actors, in either direction, is a transport inside the actor and must carry an item (rule `internal_flow_item`). When `item` is given, its domain must be among the domains of the actor type of the source and of the destination (rule `carried_item_domain`), and the action creates the `item_at_actor` that the source and the destination lack (rule `flow_ends_hold_item`), as `scflow/hold_item` does.
 - **Parameters**:
   - `source` *(string, required)*: ID or name of the source actor.
   - `destination` *(string, required)*: ID or name of the destination actor.
@@ -132,7 +136,7 @@ Changes the name, the bidirectional flag, the description or the tags of a flow.
 
 #### `scflow/set_flow_item`
 Sets the item carried by a flow that carries none.
-- **Behavior**: The item of a flow never changes and is never removed: the action fails when the flow carries another item, and changes nothing when it already carries the given one. The domain of the item must be among the domains of the actor type of the source and of the destination, otherwise the action fails and the error names the end that lacks the domain (rule `carried_item_domain`). The action creates the `item_at_actor` that the source and the destination lack, so that both hold the item (rule `flow_ends_hold_item`).
+- **Behavior**: The item of a flow never changes and is never removed: it is `set_once`, so another item is refused with `constraint_violation`, and the given one again changes nothing. The domain of the item must be among the domains of the actor type of the source and of the destination (rule `carried_item_domain`). The action creates the `item_at_actor` that the source and the destination lack, so that both hold the item (rule `flow_ends_hold_item`).
 - **Parameters**:
   - `id` *(string, required)*: ID or name of the flow.
   - `item` *(string, required)*: ID or name of the item.
@@ -171,7 +175,7 @@ Changes the name, the description or the type of an item.
   - `display_name` *(string | Record<string, string>, optional)*.
   - `description` *(string | Record<string, string>, optional)*: New Markdown description.
   - `type` *(string, optional)*: ID or name of the new `item_type`.
-- **Behavior**: Only the given properties change, and at least one must be given. For `display_name` and `description`, each given language replaces the entry of the same language and the other languages are kept. Changing the type checks nothing: the held records of the item and the flows that carry it are kept, and the network check reports the ones whose domain no longer fits the domain of the new type.
+- **Behavior**: Only the given properties change, and at least one must be given. For `display_name` and `description`, each given language replaces the entry of the same language and the other languages are kept. A change of type that breaks a rule on the held records of the item or the flows that carry it is refused with `rule_violation`.
 - **Returns**: The updated item `{ id, display_name, type }`.
 
 #### `scflow/hold_item`
@@ -236,7 +240,7 @@ Connects an actor's held item to a transformation as an input or output.
 
 #### `scflow/define_process` *(Composite Macro)*
 High-level compound action: instantiates the transformation at the actor, ensures consumed and produced items are held at the actor (creating `item_at_actor` links if missing), and attaches all transformation lines in a single step.
-- **Behavior**: The actor, the type and every item are resolved, and every item is checked against the domains of the actor (as in `scflow/hold_item`), before anything is written. The transformation takes the display name of its type. An item listed twice in one list counts once; an item listed in both lists is consumed and produced.
+- **Behavior**: The actor, the type and every item are resolved before anything is written, and an item outside the domains of the actor refuses the whole action (rule `held_item_domain`). The transformation takes the display name of its type. An item listed twice in one list counts once; an item listed in both lists is consumed and produced.
 - **Parameters**:
   - `actor` *(string, required)*: ID or name of the actor.
   - `transformation_type` *(string, required)*: ID or name of the transformation type.
@@ -268,7 +272,7 @@ A conversion turns one item into another item at an actor, the way a flow moves 
 
 #### `scflow/create_conversion`
 Creates a conversion at an actor.
-- **Behavior**: The domain of `to_item` must be the domain of `from_item`, otherwise the action fails and creates nothing; this is the rule `conversion_item_domain` of the network check. `from_item` and `to_item` may be the same item. The domain of the items is not compared with the domains of the actor, and a conversion has no uniqueness rule.
+- **Behavior**: The domain of `to_item` must be the domain of `from_item`, otherwise the action is refused and creates nothing (rule `conversion_item_domain`). `from_item` and `to_item` may be the same item. The domain of the items is not compared with the domains of the actor, and a conversion has no uniqueness rule.
 - **Parameters**:
   - `actor` *(string, required)*: ID or name of the actor where the conversion takes place.
   - `from_item` *(string, required)*: ID or name of the item that is converted.

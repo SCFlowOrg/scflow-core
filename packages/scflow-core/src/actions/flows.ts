@@ -1,4 +1,4 @@
-import { loadInstance, type Instance } from "./refs.js";
+import { type Instance } from "./refs.js";
 import { cascadeParam, type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, refParam, tagsParam, unique } from "./params.js";
 import { createFlow, setFlowItem } from "../flows.js";
 import { toLocalized } from "./text.js";

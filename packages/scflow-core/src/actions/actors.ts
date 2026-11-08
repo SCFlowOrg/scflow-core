@@ -1,14 +1,7 @@
-import { labelOf, loadInstance, type Instance } from "./refs.js";
-import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
+import { type Instance } from "./refs.js";
+import { type ScflowActionDefinition, localizedTextParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { createActor } from "../actors.js";
-import {
-  addActorTrees,
-  closeDeletionSet,
-  executeDeletion,
-  loadSnapshot,
-  newDeletionSet,
-  type Snapshot,
-} from "./delete-impact.js";
+import { deleteById } from "./delete-impact.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -229,8 +222,8 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
   title: "Update an actor",
   description:
     "Changes the name, description, type, scope, location, parent or tags of an actor and returns it. Only the given properties change; " +
-    "scope, location and parent_actor accept null to clear the relation. Changing the type does not check the held items, " +
-    "the flows and the parent of the actor: the network check reports the ones whose domain no longer fits.",
+    "scope, location and parent_actor accept null to clear the relation. A change that breaks a rule on the held items, " +
+    "the flows or the parent of the actor is refused.",
   parameters: {
     type: "object",
     properties: {
@@ -248,7 +241,6 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
     additionalProperties: false,
   },
   async run(params, context) {
-    const actor = await loadInstance(context, "scflow.actor", params.id);
     const patch: Record<string, unknown> = {};
 
     if (params.display_name !== undefined) {
@@ -267,13 +259,7 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
       patch.location = params.location;
     }
     if (params.parent_actor !== undefined) {
-      if (params.parent_actor === null) {
-        patch.parent_actor = null;
-      } else {
-        const parent = await loadInstance(context, "scflow.actor", params.parent_actor);
-        await assertNoCycle(context, actor, parent);
-        patch.parent_actor = parent.id;
-      }
+      patch.parent_actor = params.parent_actor;
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -283,7 +269,7 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
     const { after } = await context.runCommand(context.locator, {
       kind: "update",
       schema: "scflow.actor",
-      filters: { id: actor.id },
+      filters: { id: params.id },
       input: patch,
     });
     return summarizeActor(after[0] as unknown as Instance);
@@ -310,15 +296,8 @@ export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: 
     additionalProperties: false,
   },
   async run(params, context) {
-    const actor = await loadInstance(context, "scflow.actor", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-
-    if (!cascade) {
-      assertUnreferenced(snapshot, actor);
-    }
-    await deleteActorTrees(context, snapshot, [actor.id]);
-    return { id: actor.id };
+    await deleteById(context, "scflow.actor", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -341,19 +320,8 @@ export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams
     additionalProperties: false,
   },
   async run(params, context) {
-    const type = await loadInstance(context, "scflow.actor_type", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-    const actors = snapshot.actors.filter((actor) => actor.type === type.id);
-
-    if (actors.length > 0 && !cascade) {
-      throw new Error(
-        `parameter "id": "${labelOf(type)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
-      );
-    }
-    await deleteActorTrees(context, snapshot, actors.map((actor) => actor.id));
-    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.actor_type", filters: { id: type.id } });
-    return { id: type.id };
+    await deleteById(context, "scflow.actor_type", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -376,25 +344,8 @@ export const deleteScopeAction: ScflowActionDefinition<DeleteScopeParams, { id: 
     additionalProperties: false,
   },
   async run(params, context) {
-    const scope = await loadInstance(context, "scflow.scope", params.id);
-    const cascade = params.cascade === true;
-    const snapshot = await loadSnapshot(context);
-    const actors = snapshot.actors.filter((actor) => actor.scope === scope.id);
-
-    if (actors.length > 0 && !cascade) {
-      throw new Error(
-        `parameter "id": "${labelOf(scope)}" is used by ${actors.length} actor(s); use cascade: true to delete them`,
-      );
-    }
-    await deleteActorTrees(context, snapshot, actors.map((actor) => actor.id));
-    await context.runCommand(context.locator, {
-      kind: "update",
-      schema: "scflow.actor_type",
-      filters: { default_scope: scope.id },
-      input: { default_scope: null },
-    });
-    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.scope", filters: { id: scope.id } });
-    return { id: scope.id };
+    await deleteById(context, "scflow.scope", params.id, params.cascade);
+    return { id: params.id };
   },
 };
 
@@ -408,61 +359,6 @@ export const ACTOR_ACTIONS = [
   createActorTypeAction,
   createScopeAction,
 ] as const;
-
-/**
- * Refuses the deletion of an actor that child actors, flows, held items or transformations reference.
- *
- * @throws An error that counts each kind of reference.
- */
-function assertUnreferenced(snapshot: Snapshot, actor: Instance): void {
-  const references = [
-    [snapshot.actors.filter((other) => other.parent_actor === actor.id).length, "child actor"],
-    [snapshot.flows.filter((flow) => flow.source === actor.id || flow.destination === actor.id).length, "flow"],
-    [snapshot.held.filter((record) => record.actor === actor.id).length, "held item"],
-    [snapshot.transformations.filter((transformation) => transformation.actor === actor.id).length, "transformation"],
-    [snapshot.conversions.filter((conversion) => conversion.actor === actor.id).length, "conversion"],
-  ]
-    .filter(([n]) => (n as number) > 0)
-    .map(([n, what]) => `${n} ${what}(s)`);
-  if (references.length > 0) {
-    throw new Error(
-      `parameter "id": "${labelOf(actor)}" is still referenced by ${references.join(", ")}; use cascade: true to delete them`,
-    );
-  }
-}
-
-/** Deletes actors with their descendants and everything that depends on them. */
-async function deleteActorTrees(
-  context: ActionAccess,
-  snapshot: Snapshot,
-  actorIds: readonly string[],
-): Promise<void> {
-  const set = newDeletionSet();
-  addActorTrees(snapshot, set, actorIds);
-  closeDeletionSet(snapshot, set);
-  await executeDeletion(context, snapshot, set);
-}
-
-/**
- * Refuses a parent that is the actor itself or one of its descendants, which
- * would make the actor its own ancestor.
- */
-async function assertNoCycle(context: ActionAccess, actor: Instance, parent: Instance): Promise<void> {
-  const { after } = await context.runCommand(context.locator, { kind: "query", schema: "scflow.actor" });
-  const parentOf = new Map(
-    (after as unknown as Instance[]).map((instance) => [instance.id, instance.parent_actor as string | undefined]),
-  );
-  const seen = new Set<string>();
-  for (let current: string | undefined = parent.id; current !== undefined && !seen.has(current); ) {
-    if (current === actor.id) {
-      throw new Error(
-        `parameter "parent_actor": "${labelOf(parent)}" cannot be the parent of "${labelOf(actor)}", it would make the actor its own ancestor`,
-      );
-    }
-    seen.add(current);
-    current = parentOf.get(current) ?? undefined;
-  }
-}
 
 function summarizeActor(actor: Instance): ActorSummary {
   return {

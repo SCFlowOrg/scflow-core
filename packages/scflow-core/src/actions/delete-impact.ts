@@ -123,47 +123,6 @@ export function closeDeletionSet(snapshot: Snapshot, set: DeletionSet): void {
   }
 }
 
-/** Deletes items with the held records and the flows that reference them and the lines of those records. */
-export async function deleteItems(
-  context: ActionAccess,
-  snapshot: Snapshot,
-  itemIds: readonly string[],
-): Promise<void> {
-  const set = newDeletionSet();
-  for (const id of itemIds) {
-    set.items.add(id);
-  }
-  closeDeletionSet(snapshot, set);
-  await executeDeletion(context, snapshot, set);
-}
-
-/** Deletes transformations with their lines. */
-export async function deleteTransformations(
-  context: ActionAccess,
-  snapshot: Snapshot,
-  transformationIds: readonly string[],
-): Promise<void> {
-  const set = newDeletionSet();
-  for (const id of transformationIds) {
-    set.transformations.add(id);
-  }
-  closeDeletionSet(snapshot, set);
-  await executeDeletion(context, snapshot, set);
-}
-
-/** Deletes conversions. */
-export async function deleteConversions(
-  context: ActionAccess,
-  snapshot: Snapshot,
-  conversionIds: readonly string[],
-): Promise<void> {
-  const set = newDeletionSet();
-  for (const id of conversionIds) {
-    set.conversions.add(id);
-  }
-  await executeDeletion(context, snapshot, set);
-}
-
 /** The ids of every instance of the set, whatever its kind. */
 export function allIds(set: DeletionSet): Set<string> {
   return new Set([
@@ -183,47 +142,10 @@ export function notesOn(snapshot: Snapshot, ids: ReadonlySet<string>): Instance[
 }
 
 /**
- * Deletes the instances of the set in dependency order: lines, conversions, held items,
- * transformations, flows, actors from the deepest to the root, then items. The notes of a deleted
- * instance go with it.
+ * Deletes one instance. The relations of the schemas say what happens to what
+ * references it: with `on_delete: confirm`, a plain delete is refused and
+ * `cascade` removes the referencing instances too.
  */
-export async function executeDeletion(
-  context: ActionAccess,
-  snapshot: Snapshot,
-  set: DeletionSet,
-): Promise<void> {
-  const remove = async (schema: string, ids: readonly string[]): Promise<void> => {
-    if (ids.length > 0) {
-      await context.runCommand(context.locator, { kind: "delete", schema, filters: { id: { in: ids } } });
-    }
-  };
-  await remove("scflow.transformation_line", [...set.lines]);
-  await remove("scflow.conversion", [...set.conversions]);
-  await remove("scflow.item_at_actor", [...set.held]);
-  await remove("scflow.transformation", [...set.transformations]);
-  await remove("scflow.flow", [...set.flows]);
-  for (const level of actorsByDepth(snapshot, set.actors)) {
-    await remove("scflow.actor", level);
-  }
-  await remove("scflow.item", [...set.items]);
-}
-
-/** The actors of the set grouped by depth in the `parent_actor` tree, the deepest group first. */
-function actorsByDepth(snapshot: Snapshot, ids: ReadonlySet<string>): string[][] {
-  const parentOf = new Map(snapshot.actors.map((actor) => [actor.id, actor.parent_actor as string | undefined | null]));
-  const depthOf = (id: string): number => {
-    let depth = 0;
-    const seen = new Set<string>();
-    for (let current = parentOf.get(id); current && !seen.has(current); current = parentOf.get(current)) {
-      seen.add(current);
-      depth += 1;
-    }
-    return depth;
-  };
-  const levels = new Map<number, string[]>();
-  for (const id of ids) {
-    const depth = depthOf(id);
-    levels.set(depth, [...(levels.get(depth) ?? []), id]);
-  }
-  return [...levels.entries()].sort(([a], [b]) => b - a).map(([, level]) => level);
+export async function deleteById(context: ActionAccess, schema: string, id: string, cascade?: boolean): Promise<void> {
+  await context.runCommand(context.locator, { kind: "delete", schema, filters: { id }, cascade: cascade === true });
 }
