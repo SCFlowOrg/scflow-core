@@ -92,6 +92,25 @@ not changed by schema commands: a module is replaced by another version.
   uses another version of a module than the dataset (see
   [datasets.md](datasets.md#imports)).
 
+## Adding a module
+
+```ts
+session.addModule(locator, manifests): Promise<string[]>   // the keys added, in order
+```
+
+`addModule` embeds modules a dataset does not use yet, dependencies first, as
+Model Upgrade in [the specification](spec/meta-model.md#model-upgrade) says.
+
+- It writes no instance. It bumps `model_minor_version`, leaves the data versions
+  alone, and a facet reads its `default_value` until a value is set.
+- A module embedded with the same version and digest is skipped, and `[]` with
+  nothing changed is the result when all are. Another version or digest fails
+  with `duplicate_name`: that is the job of `upgradeModule`.
+- The new set of modules must build, as for `initDataset`. A local module fails
+  with `constraint_violation`, and an open transaction with `transaction_open`. A refusal changes nothing.
+- It records no delta, so nothing undoes it, and the deltas recorded before it
+  are not affected by it, once given the current versions.
+
 ## Upgrading a module
 
 ```ts

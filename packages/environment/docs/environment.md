@@ -58,6 +58,13 @@ env.modules.list(): readonly InstalledModule[]
   The entry `@scfloworg/environment/browser` gives the same `createEnvironment`
   for a host with no file system: nothing from Node is reached from it, and
   `load` fails with `constraint_violation`.
+- `dataset.addModule(key)` adds an installed module and its missing
+  dependencies to an open dataset, and gives the keys added. It is a model
+  upgrade that writes no instance and records no delta (see
+  [model-upgrade.md](../../core/docs/model-upgrade.md), Adding a module). Its
+  actions run from then on. A module the dataset already uses, same version and
+  digest, is left alone. It is refused on a read-only dataset, with
+  `read_only_dataset`, and during a transaction, with `transaction_open`.
 - An `InstalledModule` gives the validated `manifest`, its `key` and
   `version`, the body of each action by id in `actions`, and the body of
   each migration by version in `migrations`.

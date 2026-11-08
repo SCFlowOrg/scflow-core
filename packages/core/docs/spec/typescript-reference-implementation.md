@@ -141,6 +141,12 @@ interface UpgradeModuleResult {
 ApiSession.upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<UpgradeModuleResult>
 ```
 
+```ts
+ApiSession.addModule(locator: string, manifests: ModuleManifest[]): Promise<string[]>   // the keys added, in order
+```
+
+- `addModule` embeds each manifest the dataset does not use, as Adding a module in Model Upgrade says, as one step: a refusal changes nothing. It fails with `transaction_open` while a transaction is open, `duplicate_name` for another version or digest of an embedded module, `constraint_violation` for a local module, and with what `createModuleSet` throws for the new set of modules. When nothing is added it gives `[]` and changes nothing.
+
 - The upgrade runs in a transaction of its own, which the session opens, or joins the transaction the session has open on `locator`, and then `delta` is `null`. `migrate` runs its code through the same session, so its commands join that transaction. Each migration whose `migrate` returns false runs its declared form.
 - On a format without transactions, an upgrade with no migration is checked before anything is written, so a refusal changes nothing. An upgrade that needs a migration fails with `transactions_not_supported`.
 - The upgrade records the new manifest and its digest in the dataset, and bumps `data_minor_version` when an instance changed.

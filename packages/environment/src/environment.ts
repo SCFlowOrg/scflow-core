@@ -183,6 +183,15 @@ export interface OpenDataset {
   commit(): Promise<void>;
   /** Discards the open transaction. Fails with `no_transaction` when none is open. */
   rollback(): Promise<void>;
+  /**
+   * Adds the installed module `key` and its missing dependencies, as Adding a
+   * module in Model Upgrade says, and gives the keys added: `[]` when the dataset
+   * already uses them. Writes no instance and records no delta. `modules` and
+   * `actions` then include them. Fails with `read_only_dataset`, with
+   * `transaction_open` during a transaction, with `key_not_found` for a module
+   * not installed, and as `addModule` of the engine does.
+   */
+  addModule(key: string): Promise<string[]>;
   /** Applies the inverse of `delta` in the open transaction, as `revert` of the engine does. */
   revert(delta: Delta): Promise<void>;
   /** The actions of the dataset, declared and generated, that it can run. */
@@ -378,15 +387,18 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
 
   function openDataset(
     locator: string,
-    states: ModuleState[],
+    initialStates: ModuleState[],
     upgrades: ModuleUpgrade[],
     openedReadOnly: boolean,
-    model: DatasetModel | null,
+    initialModel: DatasetModel | null,
   ): OpenDataset {
+    // What the modules of the dataset decide, replaced when a module is added.
+    let states = initialStates;
+    let model = initialModel;
     const readOnly =
       openedReadOnly ||
       states.some((state) => state.state !== "current" && state.state !== "local");
-    const { registry, limits } = buildRegistry(modules, states, model);
+    let { registry, limits } = buildRegistry(modules, states, model);
     let queue: Promise<unknown> = Promise.resolve();
     const inTurn = <T>(task: () => Promise<T>): Promise<T> => {
       const run = queue.then(task, task);
@@ -402,9 +414,9 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
     };
 
     const limitOf = (id: string) => limits.get(id) as ActionLimit;
-    const resolveRef = model
-      ? createRefResolver(model, (command) => session.runCommand(locator, command))
-      : undefined;
+    const refResolverOf = (current: DatasetModel | null) =>
+      current ? createRefResolver(current, (command) => session.runCommand(locator, command)) : undefined;
+    let resolveRef = refResolverOf(model);
 
     function contextOf(trace: RunTrace): ActionContext {
       const limit = limitOf(trace.action);
@@ -453,7 +465,26 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       });
     }
 
-    const host: RunHost<ActionContext> = { context: contextOf, resolveRef };
+    const host: RunHost<ActionContext> = {
+      context: contextOf,
+      get resolveRef() {
+        return resolveRef;
+      },
+    };
+
+    async function addModule(key: string): Promise<string[]> {
+      if (readOnly) throw modelError("read_only_dataset", `"${locator}" is read only: no module can be added`);
+      if (openTransaction !== null)
+        throw modelError("transaction_open", `"${locator}" has an open transaction: no module can be added`);
+      const added = await session.addModule(locator, closure(modules, [key]));
+      if (added.length === 0) return added;
+      const info = (await session.queryDataset(locator)) as TransientObject;
+      states = await moduleStates(modules, info);
+      model = await session.datasetModel(locator);
+      ({ registry, limits } = buildRegistry(modules, states, model));
+      resolveRef = refResolverOf(model);
+      return added;
+    }
 
     async function run(id: string, params: unknown): Promise<ActionOutcome> {
       const action = registry.get(id);
@@ -503,9 +534,12 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
 
     const dataset: OpenDataset = Object.freeze({
       locator,
-      modules: Object.freeze(states),
+      get modules() {
+        return Object.freeze(states);
+      },
       upgrades: Object.freeze(upgrades),
       readOnly,
+      addModule: (key: string) => inTurn(() => addModule(key)),
       run: (id: string, params?: unknown) => inTurn(() => run(id, params)),
       begin: (label?: string) =>
         inTurn(async () => {

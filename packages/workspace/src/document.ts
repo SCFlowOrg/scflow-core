@@ -63,6 +63,13 @@ export interface BaseDocument {
   prepare(): Promise<{ changed: boolean }>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
+  /**
+   * Adds an installed module and its missing dependencies, and gives the keys
+   * added. It stays out of the undo history, and the steps of the history still
+   * revert. Fails with `read_only_document` and `transaction_open`, and as
+   * `addModule` of the dataset does.
+   */
+  addModule(key: string): Promise<string[]>;
   /** Undoes the last step, and gives `false` when there is none. */
   undo(): Promise<boolean>;
   /** Redoes the last undone step, and gives `false` when there is none. */
@@ -285,6 +292,11 @@ export function makeDocument<D extends BaseDocument>(
         if (open) await rollback();
         throw error;
       }
+    },
+    async addModule(key) {
+      refuseIfReadOnly("adding a module");
+      refuseIfOpen("adding a module");
+      return dataset.addModule(key);
     },
     begin,
     prepare,

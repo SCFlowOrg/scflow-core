@@ -184,7 +184,8 @@ await runCommand("js:plant", { create: "scflow.actor", input: { name: "acme" } }
 - A format stores each manifest as an instance of `module`, by module key, and
   the list as the `modules` property of the dataset.
 - Changing the modules of a dataset, apart from a local module, goes through a
-  model upgrade (see [model-upgrade.md](model-upgrade.md)).
+  model upgrade (see [model-upgrade.md](model-upgrade.md)): `addModule` for a
+  module it does not use yet, `upgradeModule` for one it embeds.
 
 ### Local modules
 

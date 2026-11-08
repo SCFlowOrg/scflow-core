@@ -65,6 +65,12 @@ const { sections: toSave } = await doc.content();
 
 The sections are read as those of a file are: the owners declared on the format migrate theirs, the digests are checked, and the modules are upgraded on opening. The modules are given to the catalogue with `install`, since `modules.load` needs a file system and fails with `constraint_violation` on this entry.
 
+## Adding a module
+
+`doc.addModule(key)` adds an installed module and its missing dependencies to the document, and gives the keys added, or `[]` when the document already uses them. A host calls it when it needs a module the document was created without, such as a presentation module the first time its view opens.
+
+It is a model upgrade that writes no instance (see [model-upgrade.md](../../core/docs/model-upgrade.md), Adding a module). The user did not ask for it, so it is not a step of the history: `undo` does not remove the module, and the steps before it still revert. It is refused with `read_only_document` on a read-only document and with `transaction_open` during a transaction. Like any change, it reaches the file on the next save.
+
 ## Transactions
 
 `doc.run(id, params)` runs one action in its own transaction, which is one undo step. `doc.transaction(label, async (tx) => { ... })` groups the `tx.run` calls in one, and rolls back when its function throws.
