@@ -22,3 +22,4 @@ export type {
   OpenOptions,
 } from "./environment.js";
 export type { InstalledModule, ModuleCatalogue } from "./catalogue.js";
+export type { Action, RunEntry } from "@scfloworg/actions";

@@ -592,6 +592,63 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
     for (const short of entry.authoredScalarTypes.keys()) scalarTypeOf(entry, short);
     for (const short of entry.authoredSchemas.keys()) schemaOf(entry, short);
   }
+  for (const entry of byKey.values()) checkActionDeclarations(entry);
+
+  /**
+   * The checks of Schema Processing, *Actions*, each breach a
+   * `constraint_violation`: a `crud` or an `updated_by` names an action of the
+   * module, `crud` offers no create or delete on a facet or a singleton,
+   * `updated_by` is not set on a constant property, and `writes` names schemas
+   * of the module. A declaration of another module cannot reach a schema: a
+   * manifest holds only its own, and neither `crud` nor a checked `updated_by`
+   * comes through `extends`.
+   */
+  function checkActionDeclarations(entry: Entry): void {
+    const fail = (message: string): never => {
+      throw modelError("constraint_violation", `module "${entry.key}": ${message}`);
+    };
+    const isAction = (id: unknown) => typeof id === "string" && entry.actions.has(id);
+    for (const [short, schema] of entry.schemas) {
+      const crud = schema.constraints.crud;
+      if (crud !== undefined) {
+        if (!isPlainObject(crud)) fail(`the crud of "${short}" must be a mapping`);
+        const facetOrSingleton =
+          typeof schema.constraints.facet_of === "string" || schema.constraints.singleton === true;
+        for (const [operation, value] of Object.entries(crud as Record<string, TransientValue>)) {
+          if (!["create", "update", "delete"].includes(operation))
+            fail(`the crud of "${short}" has an unknown operation "${operation}"`);
+          if (value !== "generated" && value !== "none" && !isAction(value))
+            fail(`the crud of "${short}" names ${JSON.stringify(value)}, not an action of the module`);
+          if (operation !== "update" && value !== "none" && facetOrSingleton)
+            fail(`"${short}" is a facet or a singleton and offers no ${operation}`);
+        }
+      }
+      const parent = schema.extends ? canonicalContext.resolveSchema(schema.extends) : undefined;
+      for (const prop of schema.properties) {
+        const updatedBy = prop.constraints.updated_by;
+        if (updatedBy === undefined) continue;
+        if (parent?.properties.some((p) => p.name === prop.name && p.constraints.updated_by === updatedBy)) continue;
+        if (!isAction(updatedBy))
+          fail(`"${short}.${prop.name}" is updated by ${JSON.stringify(updatedBy)}, not an action of the module`);
+        if (prop.constraints.constant === true)
+          fail(`"${short}.${prop.name}" is constant and cannot have an "updated_by"`);
+      }
+    }
+    for (const [id, action] of entry.actions) {
+      if (action.writes === undefined || action.writes === null) continue;
+      if (!Array.isArray(action.writes)) fail(`the writes of "${id}" must be a list`);
+      for (const name of action.writes as TransientValue[]) {
+        let owner: Entry | undefined;
+        try {
+          owner = typeof name === "string" ? locate(name, entry)?.entry : undefined;
+          if (owner && !schemaOf(owner, (locate(name as string, entry) as { short: string }).short)) owner = undefined;
+        } catch {
+          owner = undefined;
+        }
+        if (owner !== entry) fail(`"${id}" writes ${JSON.stringify(name)}, not a schema of the module`);
+      }
+    }
+  }
 
   const modules = [...byKey.values()];
   return {

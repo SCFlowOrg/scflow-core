@@ -24,13 +24,16 @@ schemas:
 ${extra}
 actions:
   - id: tasks/add_task
+    writes: [task]
     title: Add a task
   - id: tasks/add_two
+    writes: [task]
     title: Add two tasks
   - id: tasks/count_tasks
     title: Count the tasks
     kind: read
   - id: tasks/fail
+    writes: [task]
     title: Add a task, then fail
   - id: tasks/escape
     title: Reach another dataset
@@ -53,6 +56,7 @@ schemas:
         type: string
 actions:
   - id: notes/add_noted_task
+    writes: [task_note]
     title: Add a task with a note
 `;
 
@@ -596,7 +600,8 @@ describe("running an action", () => {
     const env = environment();
     const dataset = await env.datasets.create({ locator: "js:plant", modules: ["acme:tasks"] });
     await dataset.run("tasks/add_task", { title: "Ship" });
-    expect(await dataset.run("tasks/count_tasks")).toEqual({
+    expect(await dataset.run("tasks/count_tasks")).toMatchObject({
+      entry: { action: "tasks/count_tasks", outcome: "done", result: "1" },
       result: 1,
       changed: false,
       delta: null,

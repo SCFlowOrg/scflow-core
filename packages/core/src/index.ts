@@ -27,11 +27,14 @@ export {
 export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
 export type { CheckImportResult, RefreshResult } from "./imports.js";
 export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
-export type { DatasetModule } from "./datasetModules.js";
+export type { DatasetModel, DatasetModule } from "./datasetModules.js";
 export type { MigrationStep, UpgradeModuleOptions, UpgradeModuleResult } from "./migrations.js";
 export type { RestoreResult, CheckUpgradeResult, ApiSession, TransactionId, DatasetVersions, Delta, PreparedTransaction, ObservableChange, ObservableDelta, ObservableListener } from "./api.js";
 export type { ModelActionDefinition, ModelActionParamsSchema } from "./action.js";
 export { resolveCommandForm } from "./command.js";
+export type { BlockingReference, DeleteImpact, ImpactedInstance } from "./command.js";
+export { canonicalParameters, checkActionWrite, createRefResolver, generatedActions } from "./moduleActions.js";
+export type { EngineRefResolver, GeneratedAction, GeneratedActionContext } from "./moduleActions.js";
 export type { ScriptSession } from "./script.js";
 export { BASE_SCALAR_TYPES, BUILTIN_SCALAR_TYPES, META_SCHEMAS, isBaseScalarType } from "./builtins.js";
 export { UUID_PATTERN, isUuid } from "./ids.js";

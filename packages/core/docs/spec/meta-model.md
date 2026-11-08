@@ -958,7 +958,7 @@ The prefix of an action id is the namespace of its module.
 
 A write command outside an action is refused with `write_outside_action`, because write access to a dataset exists only in the context an action receives. Some writes stay below actions, run by the engine: loading and saving a dataset, model upgrade, the definition of schemas by a model author, the creation of singleton instances with a dataset, and the removal of the owned instances and facets of a deleted instance.
 
-**Write limit.** An action writes only the schemas of its own module, and only those it declares in `writes`. To change the data of another module, it calls the actions of that module, in the same transaction, so a module cannot break the rules of another one. The limit holds per property for facets: a property of a facet is written only by the actions of its module, although commands show it on the target. A write outside this limit is refused with `write_not_declared`. No action reacts to another action: a module has no hook on the actions of another.
+**Write limit.** An action writes only the schemas of its own module, and only those it declares in `writes`. To change the data of another module, it calls the actions of that module, in the same transaction, so a module cannot break the rules of another one. The limit holds per property for facets: a property of a facet is written only by the actions of its module, although commands show it on the target. A write outside this limit is refused with `write_not_declared`. A `create` and a `delete` write the schema of the command, and an `update` writes it when it sets a property of its own. An absent `writes` declares nothing, and an action of kind `read` writes nothing. No action reacts to another action: a module has no hook on the actions of another.
 
 **Parameters.** `parameters` is a JSON Schema object, which a standard validator checks before the body runs, so a body validates nothing by hand. It adds one keyword, `ref`, which names a schema: the value is the id of an instance of that schema, or the exact `display_name` of one instance, in any language, and the action receives the key. An id wins over a name that equals it. A value that matches no instance or several instances is refused with `invalid_parameters`, like any other breach of the parameters.
 
@@ -989,14 +989,19 @@ An action that takes the place of a CRUD operation follows the CRUD parameters, 
 | Update | `<namespace>/update_<schema>` | `id` for the target, and the property names |
 | Delete | `<namespace>/delete_<schema>` | `id` for the target, and `cascade` |
 
-- No action is generated for an `abstract` schema.
+- No action is generated for an `abstract` or an `embedded` schema, whose instances have no key of their own.
+- A declared action with the id of a generated one takes its place.
 - No create or delete is generated for a `singleton` or a facet.
-- No update covers a `constant` property, a property with `updated_by` or a generated relation.
+- No update covers a `constant` property, a property with `updated_by`, the key of the instance or a generated relation, and no update is generated when no property is left.
+- `crud` is not inherited through `extends`, because it belongs to the module of each schema.
+- The parameter `id` is a `ref` to the schema. The parameters of an action are never the properties of a facet.
 - A relation is a `ref` parameter, an optional property is an optional parameter, and a `default_value` is the default of the parameter.
 
 **Actions of a facet.** The actions of a schema never change when a facet is added to it, because their signatures belong to the module of the schema, which does not know the facet. A facet has its own update action, `<namespace>/update_<facet>`, generated or named by its `crud`, with `id` for the target, and a generated read action, `<namespace>/get_<facet>`, because an AI reads through actions. It has no create or delete, since its instance follows its target. A caller that sets a facet value when it creates the target runs both actions in one batch, with a `${name.path}` reference to the created instance. A module can offer a composite action that calls the action of the target and writes its facet.
 
-**Impact of a delete.** The engine gives the impact of a delete, because it knows every facet and owned schema, and the module of the deleted schema does not.
+**Impact of a delete.** The engine gives the impact of a delete, because it knows every facet and owned schema, and the module of the deleted schema does not. For a schema and filters, it gives, without writing anything, `removed`, each instance and facet instance the delete would remove with `cascade: true`, as its `schema` and `key`, and `blocked`, each `restrict` reference from an instance that stays, as the `schema`, `key` and `property` of that reference and the `target` it points at. A delete with a `blocked` entry is refused.
+
+**Singletons.** When a dataset is created with its modules, the engine creates the one instance of each `singleton` schema of those modules that is neither `abstract` nor a facet, from its default values. A singleton that its defaults cannot build, a mandatory property without a `default_value` for example, refuses the creation of the dataset with a `constraint_violation`. A restored dataset is not seeded, since its dump holds its instances.
 
 **Forms of an action.** An action takes the first form that fits, because each form is easier to check and to carry to another host than the next one:
 

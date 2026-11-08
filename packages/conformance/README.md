@@ -21,6 +21,8 @@ A format that provides the optional `lock(rest)` of the persistence interface al
 
 ## Actions
 
+`runModuleActionConformanceSuite(impl)` holds the cases of the actions of a module, which need a dataset: the checks of the declarations, the write limit, the generated actions with those of a facet, the impact of a delete and the seeding of singletons. An environment runs it against itself, as `packages/environment/tests/conformance.test.ts` does; the suite states the shape it uses, so it does not depend on `@scfloworg/environment`.
+
 `runActionConformanceSuite(impl)` holds the cases of the action contract that need no dataset: the check of parameters and the resolution of `ref`, the registry, the run log in canonical JSON, the batches of calls with `${name.path}`, and the export to AI tools. An implementation of the neutral action package runs it against itself, as `packages/actions/tests/conformance.test.ts` does; the suite states the shape it uses in `ActionImplementation`, so it does not depend on `@scfloworg/actions`.
 
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.

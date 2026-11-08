@@ -9,12 +9,19 @@ import {
   isLocalModule,
   modelError,
   moduleDigest,
+  canonicalParameters,
+  checkActionWrite,
+  createRefResolver,
+  generatedActions,
   type ApiSession,
   type AuthoredCommand,
   type AuthoredScript,
   type CommandResult,
+  type DatasetModel,
+  type DeleteImpact,
   type Delta,
   type Engine,
+  type Filter,
   type MclAccess,
   type MigrationStep,
   type ModuleManifest,
@@ -22,6 +29,15 @@ import {
   type TransientObject,
   type TransientValue,
 } from "@scfloworg/core";
+import {
+  createActionRegistry,
+  type Action,
+  type ActionRegistry,
+  type JsonSchema,
+  type RunEntry,
+  type RunHost,
+  type RunTrace,
+} from "@scfloworg/actions";
 import { createCatalogue, type InstalledModule, type ModuleCatalogue } from "./catalogue.js";
 
 /** What `createEnvironment` takes. */
@@ -124,6 +140,8 @@ export interface ActionOutcome {
   readonly changed: boolean;
   /** The delta of the transaction, to undo it, or `null` for a run in no transaction. */
   readonly delta: Delta | null;
+  /** The run entry of the call, with its commands and nested calls as steps. */
+  readonly entry: RunEntry;
 }
 
 /** A dataset the environment has open. */
@@ -141,11 +159,20 @@ export interface OpenDataset {
   /**
    * Runs the action `id` with `params`, in one transaction unless it is a
    * `read` action. Fails with `unknown_action` for an action no module of the
-   * dataset declares, with `read_only_dataset` for an action that writes on a
+   * dataset declares, with `invalid_parameters` for parameters that break its
+   * JSON Schema, with `write_not_declared` for a write beyond its limit, with
+   * `read_only_dataset` for an action that writes on a
    * read-only dataset, and with what the body throws, the transaction rolled
    * back.
    */
   run(id: string, params?: unknown): Promise<ActionOutcome>;
+  /** The actions of the dataset, declared and generated, that it can run. */
+  actions(): readonly Action<ActionContext>[];
+  /**
+   * What deleting the instances of `schema` matched by `filters` would remove
+   * and what refuses it, without writing anything.
+   */
+  deleteImpact(schema: string, filters?: unknown): Promise<DeleteImpact>;
   /** Runs a command outside any action, for a read. A write is not refused yet (see `docs/environment.md`). */
   query(command: AuthoredCommand): Promise<CommandResult>;
   /** The dataset, as `queryDataset` gives it. */
@@ -172,8 +199,8 @@ export interface ActionContext extends MclAccess {
   runScript(locator: string, script: AuthoredScript): Promise<CommandResult>;
   /**
    * Runs the action `id` of the same module or of a dependency, in the same
-   * transaction, and returns its result. Any other id fails with
-   * `unknown_action`.
+   * transaction, its parameters checked, and returns its result. Any other id
+   * fails with `unknown_action`.
    */
   call(id: string, params?: unknown): Promise<unknown>;
 }
@@ -204,13 +231,13 @@ export interface MigrationContext extends MclAccess {
 /** The body of a migration, as the environment calls it: with no parameters. */
 export type MigrationBody = (context: MigrationContext, params: undefined) => unknown;
 
-/** An action found in the modules of a dataset. */
-interface FoundAction {
-  readonly id: string;
-  readonly module: InstalledModule;
+/** What the environment knows of a registered action to run it. */
+interface ActionLimit {
+  /** The key of the module of the action. */
+  readonly module: string;
+  /** The canonical names of the schemas it writes; none for a `read` action. */
+  readonly writes: ReadonlySet<string>;
   readonly title: string;
-  readonly kind: string;
-  readonly body: ActionBody;
 }
 
 /** Creates an environment over `formats`; it shares nothing with another one. Fails with `duplicate_name` for two formats of one name. */
@@ -286,7 +313,13 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       }
       if (upgrades.length > 0) states = await read();
     }
-    const dataset = openDataset(locator, states, upgrades, readOnly);
+    const dataset = openDataset(
+      locator,
+      states,
+      upgrades,
+      readOnly,
+      await session.datasetModel(locator),
+    );
     open.set(locator, dataset);
     return dataset;
   }
@@ -329,14 +362,12 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
     states: ModuleState[],
     upgrades: ModuleUpgrade[],
     openedReadOnly: boolean,
+    model: DatasetModel | null,
   ): OpenDataset {
     const readOnly =
       openedReadOnly ||
       states.some((state) => state.state !== "current" && state.state !== "local");
-    // The modules of the dataset whose code the environment runs.
-    const usable = states
-      .filter((state) => state.installed !== null)
-      .map((state) => modules.get(state.module)!);
+    const { registry, limits } = buildRegistry(modules, states, model);
     let queue: Promise<unknown> = Promise.resolve();
     const inTurn = <T>(task: () => Promise<T>): Promise<T> => {
       const run = queue.then(task, task);
@@ -344,73 +375,67 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       return run;
     };
 
-    function find(id: string, from?: InstalledModule): FoundAction {
-      const namespace = id.slice(0, id.indexOf("/"));
-      const module = usable.find((candidate) => candidate.manifest.namespace === namespace);
-      const declaration = module?.manifest.actions.find((action) => action.id === id);
-      if (!module || !declaration)
-        throw modelError("unknown_action", `no module of "${locator}" declares the action "${id}"`);
-      if (
-        from &&
-        module !== from &&
-        !from.manifest.dependencies.some((dependency) => dependency.module === module.key)
-      )
-        throw modelError(
-          "unknown_action",
-          `"${id}" belongs to "${module.key}", which "${from.key}" does not depend on`,
-        );
-      const body = module.actions.get(id) as ActionBody | undefined;
-      if (!body)
-        throw modelError(
-          "unknown_action",
-          `"${id}" is a procedure, which the environment does not run yet`,
-        );
-      return {
-        id,
-        module,
-        title:
-          typeof declaration.title === "string" && declaration.title !== ""
-            ? declaration.title
-            : id,
-        kind: typeof declaration.kind === "string" ? declaration.kind : "action",
-        body,
-      };
-    }
+    const limitOf = (id: string) => limits.get(id) as ActionLimit;
+    const resolveRef = model
+      ? createRefResolver(model, (command) => session.runCommand(locator, command))
+      : undefined;
 
-    function contextOf(action: FoundAction): ActionContext {
+    function contextOf(trace: RunTrace): ActionContext {
+      const limit = limitOf(trace.action);
       const reach = (target: string) => {
         if (target !== locator)
           throw modelError(
             "dataset_not_found",
-            `the action "${action.id}" reaches only "${locator}", not "${target}"`,
+            `the action "${trace.action}" reaches only "${locator}", not "${target}"`,
           );
+      };
+      const checkWrite = (command: AuthoredCommand) => {
+        if (model) checkActionWrite(model, limit.module, limit.writes, command);
       };
       return Object.freeze({
         locator,
-        action: action.id,
+        action: trace.action,
         async runCommand(target: string, command: AuthoredCommand) {
           reach(target);
-          return session.runCommand(locator, command);
+          checkWrite(command);
+          const result = await session.runCommand(locator, command);
+          trace.command(command, result);
+          return result;
         },
         async runScript(target: string, script: AuthoredScript) {
           reach(target);
-          return session.runScript(locator, script);
+          script.commands.forEach(checkWrite);
+          const result = await session.runScript(locator, script);
+          trace.command(script, result);
+          return result;
         },
         async call(id: string, params?: unknown) {
-          const callee = find(id, action.module);
-          return callee.body(contextOf(callee), params);
+          const callee = limits.get(id);
+          const dependencies = model?.set.module(limit.module)?.manifest.dependencies ?? [];
+          if (
+            !callee ||
+            (callee.module !== limit.module &&
+              !dependencies.some((dependency) => dependency.module === callee.module))
+          )
+            throw modelError(
+              "unknown_action",
+              `"${trace.action}" cannot reach the action "${id}": it is not of its module or of a dependency`,
+            );
+          return trace.call(id, params);
         },
       });
     }
 
+    const host: RunHost<ActionContext> = { context: contextOf, resolveRef };
+
     async function run(id: string, params: unknown): Promise<ActionOutcome> {
-      const action = find(id);
-      if (action.kind === "read")
-        return {
-          result: await action.body(contextOf(action), params),
-          changed: false,
-          delta: null,
-        };
+      const action = registry.get(id);
+      if (!action)
+        throw modelError("unknown_action", `no module of "${locator}" runs the action "${id}"`);
+      if (action.kind === "read") {
+        const { result, entry } = await registry.run(id, params, host);
+        return { result, changed: false, delta: null, entry };
+      }
       if (readOnly)
         throw modelError(
           "read_only_dataset",
@@ -418,15 +443,15 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
         );
       if (!(await session.supportsTransactions(locator))) {
         const before = await dataVersions();
-        const result = await action.body(contextOf(action), params);
-        return { result, changed: (await dataVersions()) !== before, delta: null };
+        const { result, entry } = await registry.run(id, params, host);
+        return { result, changed: (await dataVersions()) !== before, delta: null, entry };
       }
-      const tx = await session.beginTransaction(locator, action.title);
+      const tx = await session.beginTransaction(locator, limitOf(id).title);
       try {
-        const result = await action.body(contextOf(action), params);
+        const { result, entry } = await registry.run(id, params, host);
         const { changed, delta } = await session.prepareTransaction(locator, tx);
         await session.commitTransaction(locator, tx);
-        return { result, changed, delta };
+        return { result, changed, delta, entry };
       } catch (error) {
         await session.rollbackTransaction(locator, tx);
         throw error;
@@ -444,6 +469,9 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       upgrades: Object.freeze(upgrades),
       readOnly,
       run: (id: string, params?: unknown) => inTurn(() => run(id, params)),
+      actions: () => registry.list(),
+      deleteImpact: (schema: string, filters?: unknown) =>
+        inTurn(() => session.deleteImpact(locator, schema, filters as Filter | undefined)),
       query: (command: AuthoredCommand) => inTurn(() => session.runCommand(locator, command)),
       info: () => inTurn(() => session.queryDataset(locator)),
       dump: (format: DumpFormat) => inTurn(() => session.dumpDataset(locator, format)),
@@ -457,6 +485,70 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
   }
 
   return Object.freeze({ formats: engine.formats, modules, datasets });
+}
+
+/**
+ * The registry of a dataset: the actions its modules declare with a body the
+ * environment holds, and the actions generated from their schemas. A declared
+ * action takes the place of a generated one of the same id. A procedure, which
+ * has no code to run yet, is not registered.
+ */
+function buildRegistry(
+  modules: ModuleCatalogue,
+  states: readonly ModuleState[],
+  model: DatasetModel | null,
+): { registry: ActionRegistry<ActionContext>; limits: Map<string, ActionLimit> } {
+  const registry = createActionRegistry<ActionContext>();
+  const limits = new Map<string, ActionLimit>();
+  if (!model) return { registry, limits };
+  const canonicalWrites = (key: string, writes: unknown): string[] =>
+    (Array.isArray(writes) ? (writes as string[]) : []).map(
+      (name) => model.set.requireSchema(name, key).key,
+    );
+  for (const loaded of model.set.modules) {
+    if (loaded.key === MCL_CORE_KEY) continue;
+    const installed = states.some((s) => s.module === loaded.key && s.installed !== null)
+      ? modules.get(loaded.key)
+      : undefined;
+    for (const declaration of loaded.actions.values()) {
+      const id = declaration.id as string;
+      const body = installed?.actions.get(id) as ActionBody | undefined;
+      if (!body) continue;
+      const writes = canonicalWrites(loaded.key, declaration.writes);
+      const kind = declaration.kind === "read" ? "read" : "action";
+      const title =
+        typeof declaration.title === "string" && declaration.title !== "" ? declaration.title : id;
+      const parameters = declaration.parameters;
+      registry.register({
+        id,
+        title,
+        description:
+          typeof declaration.description === "string" ? declaration.description : undefined,
+        kind,
+        destructive: declaration.destructive === true,
+        exposure: declaration.exposure === "hidden" ? "hidden" : "visible",
+        writes,
+        ...(parameters === undefined || parameters === null || parameters === ""
+          ? {}
+          : { parameters: canonicalParameters(model, loaded.key, id, parameters) as JsonSchema }),
+        run: (params, context) => body(context, params),
+      });
+      limits.set(id, { module: loaded.key, writes: new Set(kind === "read" ? [] : writes), title });
+    }
+    // a module the dataset embeds but the environment does not have stays out, as its declared actions do
+    const state = states.find((s) => s.module === loaded.key)?.state;
+    if (state === "missing" || state === "ahead") continue;
+    for (const generated of generatedActions(model, loaded)) {
+      if (loaded.actions.has(generated.id)) continue;
+      registry.register(generated as unknown as Action<ActionContext>);
+      limits.set(generated.id, {
+        module: loaded.key,
+        writes: new Set(generated.writes),
+        title: generated.title,
+      });
+    }
+  }
+  return { registry, limits };
 }
 
 /**

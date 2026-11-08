@@ -11,10 +11,15 @@
   ones included; it leaves no review to the host before it writes.
 - **Published modules are not upgraded.** The modules of a dataset are set by
   `initDataset`, a restore or an import; only a local module changes afterwards.
-- **Facets have no actions yet.** The engine does not generate the
-  `<namespace>/update_<facet>` and `<namespace>/get_<facet>` actions, and does not
-  hold the write limit of a facet to the actions of its module: any command may
-  write the values of a facet through its target.
+- **The write limit holds in the context of an action only.** A command run
+  outside an action is not refused yet, so it may write any schema and any facet.
+- **Singletons are seeded when a dataset is created.** A singleton schema added
+  to a module by a later upgrade gets no instance.
+- **A generated `delete` with `cascade: true` waits for `on_delete: confirm`.**
+  The command does not take `cascade` yet, and the impact of a delete does not
+  follow `confirm` relations yet.
+- **Declared procedures do not run yet.** An action whose body is a procedure is
+  not registered, and fails with `unknown_action`.
 - **Extensions stay beside facets.** The `extension` relation still works; it is
   removed once the graph styles of `scflow-plugins` use facets.
 - **Embedded schemas are not command targets.** An embedded schema is a data shape

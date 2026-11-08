@@ -92,6 +92,8 @@ export const ErrorCode = {
   // Actions
   /** An action id names no action that the caller can reach: no module of the dataset declares it, or it belongs to a module the calling action does not depend on. */
   unknown_action: "unknown_action",
+  /** An action writes a schema outside its `writes`, or a property of a facet of another module (see Action, Write limit, in `docs/spec/meta-model.md`). */
+  write_not_declared: "write_not_declared",
   /** An action that writes runs on a dataset a host opened read only, on request or because a module it uses is not installed at its version (see Model Upgrade, Opening a dataset, in `docs/spec/meta-model.md`). */
   read_only_dataset: "read_only_dataset",
 

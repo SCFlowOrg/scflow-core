@@ -213,6 +213,8 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
     for (const p of ownProperties) merged.set(p.name, p);
     properties = [...merged.values()];
     constraints = { ...parent.constraints, ...ownConstraints };
+    // each schema states these for itself: `crud` belongs to its module, and the child of an abstract schema has instances
+    for (const own of ["crud", "abstract"]) if (!(own in ownConstraints)) delete constraints[own];
   }
 
   // Inherited properties count toward "at most one per role" too — a subclass

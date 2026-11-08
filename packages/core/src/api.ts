@@ -1,5 +1,8 @@
 import * as YAML from "js-yaml";
-import { assertDistinct, computePropertyValue, requiresDistinct, resolveCommandForm, runCommand as runCommandEngine, validateMapValue, validateScalarValue } from "./command.js";
+import { assertDistinct, computePropertyValue, requiresDistinct, resolveCommandForm, runCommand as runCommandEngine, validateMapValue, validateScalarValue, deleteImpact as deleteImpactEngine } from "./command.js";
+import type { DeleteImpact } from "./command.js";
+import type { DatasetModel as LoadedDatasetModel } from "./datasetModules.js";
+import type { Filter as CommandFilter } from "./types.js";
 import { META_SCHEMAS } from "./builtins.js";
 import { modelError } from "./errors.js";
 import { isOwnProperty } from "./extensions.js";
@@ -380,9 +383,37 @@ async function initDatasetIn(scope: EngineScope, locator: string, name: string, 
   const manifests = (options.modules ?? []).map((m) => validateModuleManifest(m));
   if (manifests.length > 0) buildDatasetModel(manifests);
   await impl.createDataset(rest, name);
-  if (manifests.length > 0) await writeModules(impl, rest, manifests);
+  if (manifests.length > 0) {
+    await writeModules(impl, rest, manifests);
+    try {
+      await seedSingletons(impl, rest);
+    } catch (error) {
+      await impl.deleteDataset(rest);
+      throw error;
+    }
+  }
   notifyObservable(scope, locator, { kind: "reset" });
   return datasetTransientForm(impl, rest);
+}
+
+/**
+ * Creates, from its default values, the one instance of each `singleton`
+ * schema of the modules of the new dataset at `rest` that is neither `abstract`
+ * nor a facet (see Action, Singletons, in `docs/spec/meta-model.md`). Throws what
+ * a `create` with no value throws.
+ */
+async function seedSingletons(impl: PersistenceInterface, rest: string): Promise<void> {
+  const model = await loadDatasetModel(impl, rest);
+  if (!model) return;
+  const resolvers = await loadResolvers(impl, rest);
+  for (const [name, schema] of model.schemas) {
+    if (schema.constraints.singleton !== true || schema.constraints.abstract === true || schema.constraints.facet_of !== undefined) continue;
+    const missing = schema.properties.find(
+      (p) => (p.constraints.mandatory === true || (p.name === "name" && schema.constraints.shared_by_name === true)) && p.default_value === null && p.constraints.__generated !== true,
+    );
+    if (missing) throw modelError("constraint_violation", `the singleton "${name}" cannot be created with the dataset: "${missing.name}" has no default_value`);
+    await runCommandEngine(impl, rest, { kind: "create", schema: name, input: [{}] }, resolvers);
+  }
 }
 
 /**
@@ -1705,6 +1736,13 @@ export interface ApiSession {
    * returns its id. `label` is an informational tag (an entry of a UI history
    * list, say) with no role in nesting, delta or revert.
    */
+  /** The model the dataset at `locator` reads from its modules, or `null` when it uses none. */
+  datasetModel(locator: string): Promise<LoadedDatasetModel | null>;
+  /**
+   * What deleting the instances of `schema` matched by `filters` would remove
+   * and what refuses it, without writing anything. Throws what a `query` throws.
+   */
+  deleteImpact(locator: string, schema: string, filters?: CommandFilter): Promise<DeleteImpact>;
   beginTransaction(locator: string, label?: string): Promise<TransactionId>;
   /**
    * The failable phase of the outermost commit, per the spec's "Two-phase
@@ -2346,6 +2384,20 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
           if (resolved.kind !== "query" && !isModelSchema(resolved.schema) && !isNoopDatasetRename(resolved, result)) await bumpVersion(impl, rest, "data_minor_version");
           return result;
         });
+      });
+    },
+
+    datasetModel(locator: string): Promise<LoadedDatasetModel | null> {
+      return serialize(locator, async () => {
+        const { impl, rest } = resolveImpl(scope, locator);
+        return loadDatasetModel(impl, rest);
+      });
+    },
+
+    deleteImpact(locator: string, schema: string, filters?: CommandFilter): Promise<DeleteImpact> {
+      return serialize(locator, async () => {
+        const { impl, rest } = resolveImpl(scope, locator);
+        return deleteImpactEngine(impl, rest, await getResolvers(impl, rest, locator), schema, filters);
       });
     },
 
