@@ -109,6 +109,53 @@ function refreshImport(locator: string, importKey: Key): Promise<RefreshResult>
 | `key_not_found`             | Import does not exist                                                                        |
 | `import_not_upgraded`       | The imported dataset uses a version of a module the dataset has not upgraded to             |
 
+## API Model Upgrade
+
+*Definition.*
+
+**Upgrading a module.** A session upgrades one module of a dataset to a newer manifest, or to the same version with another digest, as [Model Upgrade](meta-model.md#model-upgrade) says. Opening a dataset, comparing its modules with the installed ones and choosing to open it read only belong to the host, which calls this function for each module to upgrade.
+
+```ts
+interface MigrationStep {
+  module: string            // the key of the module
+  from: string              // the version embedded before the upgrade
+  to: string                // the version this migration reaches
+  migration: TransientValue // the entry of the manifest
+}
+
+interface UpgradeModuleOptions {
+  // Runs a migration the host has code for and returns true; returns false
+  // to let the engine apply the declared form of the migration.
+  migrate?: (step: MigrationStep) => Promise<boolean>
+}
+
+interface UpgradeModuleResult {
+  module: string
+  from: string
+  to: string
+  migrations: string[]      // the `to` of each migration that ran, in order
+  changed: boolean          // whether an instance changed
+  delta: Delta | null       // the delta of the transaction, or null on a format without transactions or in a joined transaction
+}
+
+ApiSession.upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<UpgradeModuleResult>
+```
+
+- The upgrade runs in a transaction of its own, which the session opens, or joins the transaction the session has open on `locator`, and then `delta` is `null`. `migrate` runs its code through the same session, so its commands join that transaction. Each migration whose `migrate` returns false runs its declared form.
+- On a format without transactions, an upgrade with no migration is checked before anything is written, so a refusal changes nothing. An upgrade that needs a migration fails with `transactions_not_supported`.
+- The upgrade records the new manifest and its digest in the dataset, and bumps `data_minor_version` when an instance changed.
+
+*Exceptions.*
+
+| exception                    | thrown when                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `unknown_persistent_format`  | `locator` format prefix has no registered Persistence Interface                             |
+| `dataset_not_found`          | `locator` does not resolve to an existing dataset                                           |
+| `key_not_found`              | The dataset does not use the module                                                         |
+| `constraint_violation`       | The manifest breaks the `module` schema, names a local module, or is older than the embedded one, or is the same version with the same digest |
+| `transactions_not_supported` | The upgrade needs a migration and the format does not support transactions                  |
+| `incompatible_upgrade`       | After the migrations, an instance does not match the installed schemas; nothing is changed  |
+
 ## Persistence Interface
 
 *Definition.*

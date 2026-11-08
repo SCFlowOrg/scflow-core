@@ -13,8 +13,12 @@ export type {
   DumpFormat,
   Environment,
   EnvironmentOptions,
+  MigrationBody,
+  MigrationContext,
   ModuleState,
   ModuleStateName,
+  ModuleUpgrade,
   OpenDataset,
+  OpenOptions,
 } from "./environment.js";
 export type { InstalledModule, ModuleCatalogue } from "./catalogue.js";
