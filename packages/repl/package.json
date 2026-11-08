@@ -7,7 +7,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "model-repl": "dist/cli.js"
+    "model-repl": "dist/cli.js",
+    "scflow": "dist/scflowCli.js"
   },
   "exports": {
     ".": {
@@ -26,6 +27,7 @@
   "dependencies": {
     "@scfloworg/core": "^0.1.0",
     "@scfloworg/format-js": "^0.1.0",
+    "@scfloworg/workspace": "^0.1.0",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

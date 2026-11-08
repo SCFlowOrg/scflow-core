@@ -5,5 +5,5 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../format-js" }]
+  "references": [{ "path": "../core" }, { "path": "../format-js" }, { "path": "../workspace" }]
 }

@@ -36,3 +36,7 @@ The REPL logs to its own stderr, never to stdout, which carries the prompt and t
 ## Layout
 
 `src/repl.ts` is the input loop, `src/meta.ts` the meta-commands, `src/commandBlock.ts` the command blocks, `src/datasets.ts` the dataset contexts and `src/state.ts` the state. `src/io.ts` abstracts input and output so tests drive the loop without a terminal. `packages/repl-conformance` runs fixtures through the same parser a typed block uses.
+
+## The `scflow` command
+
+`scflow` works on a project on disk through actions, while `model-repl` stays for the command language. See [docs/scflow.md](docs/scflow.md).
