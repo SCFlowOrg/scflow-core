@@ -6,4 +6,6 @@ The workspace of SCFlow: documents, their sections, transactions and undo, over 
 
 `@scfloworg/workspace/host` gives a host that reads projects from disk its environment, file format, workspace and the modules of a folder.
 
+`doc.addModule(key)` adds an installed module and its missing dependencies to an open document, outside the undo history.
+
 See [docs/workspace.md](docs/workspace.md).

@@ -1283,6 +1283,17 @@ The migrations between the embedded and the installed version run in version ord
 
 **Scalar types are never modified by a command.** A new version of a module can change a scalar type, under the same compatibility check.
 
+**Adding a module**
+
+A host can add an installed module to a dataset that does not use it yet, with its missing dependencies. This is the model upgrade of a module with no embedded version:
+
+- **Compatible by construction.** The module brings only new schemas. The new set of modules must build, so a namespace conflict or a missing dependency is refused and changes nothing.
+- **It writes no instance.** The manifest is embedded and listed, and `model_minor_version` is bumped. The data versions do not move, and a [facet](#facet) reads its `default_value` until a value is set. No stored instance belongs to the new schemas, so no rule of the module has anything to refuse.
+- **Not part of a transaction.** It is refused while a transaction is open, and it records no delta: it is not a change of the data, so nothing reverts it and it leaves the deltas recorded before it valid.
+- **Idempotent.** A module already embedded with the same version and digest is left alone. Another version or digest of it is refused: [opening a dataset](#model-upgrade) upgrades a module, adding never does.
+- **Refused read only**, like every write. A local module is not added this way: it belongs to the dataset, and changes with its own operation.
+
+
 **Automatic upgrade**
 
 What counts as an automatic, compatible change is left to implementation, but the general rule is: a change that can never invalidate an already-stored value is compatible; a change that could turn an existing stored value into something violating the new schema is not. The easiest case is adding a property with a default value — the upgrade is just a backfill on all instances (equivalent to serializing and restoring).

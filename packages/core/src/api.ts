@@ -1869,6 +1869,18 @@ export interface ApiSession {
    * upgrade changes nothing.
    */
   upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<UpgradeModuleResult>;
+  /**
+   * Embeds in the dataset at `locator` each of `manifests` it does not use yet,
+   * dependencies first, as Adding a module in Model Upgrade says, and returns the
+   * keys added. Writes no instance and records no delta, and bumps
+   * `model_minor_version` when something is added. A module embedded with the
+   * same version and digest is skipped. Throws `dataset_not_found`;
+   * `transaction_open` while a transaction is open; `duplicate_name` for another
+   * version or digest of an embedded module; `constraint_violation` for a
+   * local module or an invalid manifest; and what `createModuleSet` throws for the
+   * new set of modules. A refusal changes nothing.
+   */
+  addModule(locator: string, manifests: readonly ModuleManifest[]): Promise<string[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -2327,6 +2339,46 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
     if (changes.length > 0) await bumpVersion(impl, rest, "data_minor_version");
   }
 
+  async function addModule(locator: string, manifests: readonly ModuleManifest[]): Promise<string[]> {
+    const { impl, rest } = resolveImpl(scope, locator);
+    const validated = manifests.map(validateModuleManifest);
+    for (const manifest of validated) {
+      if (isLocalModule(manifest.name)) {
+        throw modelError("constraint_violation", `"${manifest.name}" is a local module: it is added with setLocalModule`);
+      }
+    }
+    const added = await serialize(locator, async () => {
+      await requireDataset(impl, rest, locator);
+      if (openTx.has(locator)) {
+        throw modelError("transaction_open", `"${locator}" has an open transaction: no module can be added`);
+      }
+      const entries = await readModuleEntries(impl, rest);
+      const missing: ModuleManifest[] = [];
+      for (const manifest of validated) {
+        const entry = entries.find((e) => e.module === manifest.name);
+        if (!entry) {
+          missing.push(manifest);
+        } else if (entry.version !== manifest.version || entry.digest !== (await moduleDigest(manifest))) {
+          throw modelError("duplicate_name", `"${locator}" already embeds another "${manifest.name}" (${entry.version}): a module it uses changes with upgradeModule`);
+        }
+      }
+      if (missing.length === 0) return [];
+      const before = await readModuleManifests(impl, rest, entries);
+      const after = [...before, ...missing];
+      // the new set of modules must build before anything is written
+      buildDatasetModel(after);
+      return withWriteLock(locator, impl, rest, async () => {
+        await writeModules(impl, rest, after);
+        resolversCache.delete(locator);
+        await bumpVersion(impl, rest, "model_minor_version");
+        await impl.updateDataset(rest, { updated_at: new Date().toISOString() });
+        return missing.map((m) => m.name);
+      });
+    });
+    if (added.length > 0) notifyObservable(scope, locator, { kind: "reset" });
+    return added;
+  }
+
   async function upgradeModule(locator: string, manifest: ModuleManifest, options: UpgradeModuleOptions = {}): Promise<UpgradeModuleResult> {
     const { impl, rest } = resolveImpl(scope, locator);
     const installed = validateModuleManifest(manifest);
@@ -2706,6 +2758,7 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
     },
 
     upgradeModule,
+    addModule,
   };
   return session;
 }
