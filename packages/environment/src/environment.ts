@@ -13,6 +13,7 @@ import {
   checkActionWrite,
   createRefResolver,
   generatedActions,
+  resolveClockPlaceholders,
   runProcedure,
   type ApiSession,
   type AuthoredCommand,
@@ -400,7 +401,8 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
         async runCommand(target: string, command: AuthoredCommand) {
           reach(target);
           checkWrite(command);
-          const result = await session.runCommand(locator, command);
+          // the run log keeps ${now()} as the body emitted it; only what runs reads the clock
+          const result = await session.runCommand(locator, resolveClockPlaceholders(command));
           trace.command(command, result);
           return result;
         },

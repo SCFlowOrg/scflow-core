@@ -25,7 +25,7 @@ export {
   createEngine,
 } from "./api.js";
 export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
-export { runProcedure } from "./procedure.js";
+export { resolveClockPlaceholders, runProcedure } from "./procedure.js";
 export type { Procedure, ProcedureHost } from "./procedure.js";
 export type { RuleViolation } from "./rules.js";
 export type { CheckRule, UniqueGroup } from "./ruleDeclarations.js";

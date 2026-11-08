@@ -701,4 +701,37 @@ describe("the context of an action", () => {
     await dataset.run("tasks/add_two");
     expect(seen).toEqual(["tasks/add_two", "tasks/add_task"]);
   });
+
+  it("writes the time for ${now()} in a procedure", async () => {
+    const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
+    env.modules.install(
+      defineModule(
+        manifest(`
+name: acme:stamps
+namespace: stamps
+version: 1.0.0
+mcl: ^1.0
+title: Stamps
+schemas:
+  - name: stamp
+    properties:
+      - name: at
+        type: string
+actions:
+  - id: stamps/stamp
+    writes: [stamp]
+    title: Stamp
+    body:
+      commands:
+        - create: stamps.stamp
+          input: { at: "\${now()}" }
+`),
+        { actions: {} },
+      ),
+    );
+    const dataset = await env.datasets.create({ modules: ["acme:stamps"] });
+    await dataset.run("stamps/stamp");
+    const { after } = await dataset.query({ query: "stamps.stamp" });
+    expect((after[0] as Row).at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
 });
