@@ -1062,7 +1062,11 @@ properties:
     description: a call to another action
 ```
 
-A step holds either a `command` with its `result`, or a `call`. A command is recorded as the body emitted it, so `${now()}` and the keys of the engine stay placeholders there, and a replay compares what the body decided, not what the engine resolved. To replay an entry, the body runs with its `parameters`, each command receives its recorded `result`, and the body must emit the same steps, compared in the canonical form of JSON: the keys of every object sorted and no white space.
+A step holds either a `command` with its `result`, or a `call`. A command is recorded as the body emitted it, so `${now()}` and the keys of the engine stay placeholders there, and a replay compares what the body decided, not what the engine resolved. To replay an entry, the body runs with its `parameters`, each command receives its recorded `result`, and the body must emit the same steps, compared in the canonical form of JSON: the keys of every object sorted and no white space. Its `outcome`, `error` and `result` must be the same too, since a body depends only on its inputs.
+
+- **A nested call** is a step like a command: the body must call the same action with the same parameters, and the called body is replayed against the steps of its own entry.
+- **No dataset is needed.** A `ref` value stands for itself in a replay, because a recorded entry holds keys. A body that names an instance to a nested call by its id or its `display_name`, instead of by a key, does not pass the replay, since the entry no longer holds what the body gave.
+- **A call refused by its parameters** ran no body, so its replay gives the same refusal and no step.
 
 ## Names
 

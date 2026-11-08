@@ -188,9 +188,11 @@ These parts are given to the package by the engine, in later pieces:
   on the trace (`RunHost.context`), with the action declarations per module
   and the generated actions;
 - the steps `when`, `each` and `fail` of a batch, and procedures, run by the
-  script runner of the engine;
-- the replay of a body against its run entries, which compares steps in
-  canonical JSON.
+  script runner of the engine.
+
+The replay of a body against its run entry is `replayEntry` of
+`@scfloworg/conformance`, which runs on this package's registry and needs no
+engine.
 
 ## Errors
 

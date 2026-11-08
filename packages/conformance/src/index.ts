@@ -2501,3 +2501,12 @@ export type {
   ConformanceRunHost,
   ConformanceRunTrace,
 } from "./actions.js";
+export { replayEntry } from "./replay.js";
+export type {
+  ReplayContext,
+  ReplayEntry,
+  ReplayMismatch,
+  ReplayOptions,
+  ReplayReport,
+  ReplayStep,
+} from "./replay.js";
