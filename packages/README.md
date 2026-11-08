@@ -15,9 +15,10 @@ These packages are the source of truth. They are developed, versioned and publis
 | `core-plugin-core` | The runtime behind the `core-plugin` application plugin | `core`, `format-js` |
 | `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, the check of the code against the manifest, `modules.load` | `core` (not its `defineModule` entry) |
 | `environment` | The environment: the catalogue of modules with their code, formats given at creation, open datasets, the context of actions and the transaction of one action | `core`, `module` |
+| `project-file` | The project file: the sectioned envelope in its two shapes, the registry of sections, the preservation of what a reader does not know | none |
 | `scflow-core` | The supply chain flow model: schemas and domain logic, the module `scflow:core` | `core`, `module` (at build), `environment` (in tests) |
 
-Every package but `actions`, which is neutral, depends on `core`, so a change to `core` is built and tested on the whole repo.
+Every package but `actions` and `project-file`, which are neutral, depends on `core`, so a change to `core` is built and tested on the whole repo.
 
 Rules:
 - Packages must never import from `src/`, which holds the UI harness.
