@@ -53,7 +53,29 @@ A project has two shapes, which hold the same content.
 - **Single file.** One JSON document, which serves for exchange.
 - **Folder.** A file `project.json` holds the envelope keys. Each section is a file `<section>.json`, or a sub-folder `<section>/` that its owner organizes. The folder is readable in Git: an upgrade changes `modules.json` and `model.json` in one readable commit, and data diffs stay clean. A reader keeps the files and the sub-folders it does not know.
 
+A file or a sub-folder that no reader knows belongs to the folder: the single file has no place for it, so converting a folder to a single file leaves it out. A file `<section>.json` that does not hold valid JSON and whose section nobody declares is such a file.
+
+A section key that cannot name a file, or the key `project`, cannot be written in the folder shape, and the writer refuses it. A folder file is never written outside the folder.
+
+### Bytes
+
 A writer gives the same content the same bytes, with stable key order, so a change in Git is the change that was made.
+
+- JSON is written with two spaces of indentation, line feeds and one final line feed.
+- The envelope keys come first, in the order of the table above. The sections follow: `modules`, `model` and `data`, then the others sorted by key, by code unit. The keys inside a section stay in the order its owner gives them.
+- **What did not change keeps its bytes.** A file read and written back with the same content is written with the bytes it was read with, even when another writer formatted it differently. In the folder shape this holds for each file on its own, so a change of one section touches one file.
+
+### Errors
+
+| Exception | Thrown when |
+| --- | --- |
+| `not_a_project` | The `format` is not `scflow-project`, or the folder has no `project.json` |
+| `unsupported_version` | The `version` of the format is not known to the reader |
+| `invalid_project` | The JSON of the envelope or of a declared section is not valid, the `type` or the `title` is missing, or `project.json` holds a key that is not an envelope key |
+| `section_clash` | Two owners declare the same section |
+| `unsupported_section_version` | A declared section has a version newer than its owner's, or an older one that its owner cannot migrate |
+| `invalid_section_key` | A section key cannot be written in the folder shape |
+| `invalid_file_path` | The path of a folder file leaves the folder |
 
 ## References to data
 
