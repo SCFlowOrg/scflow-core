@@ -226,7 +226,8 @@ interface ActionContext extends MclAccess {
   dependencies; any other id fails with `unknown_action`.
 - Time and ids come from MCL: a body uses `${now()}` and the keys of the
   engine, and reads no clock (see the contract of a body in the
-  specification).
+  specification). `runCommand` of the context resolves `${now()}` in the
+  command it runs and records the command as the body emitted it.
 - A command that writes beyond the limit of the action fails with
   `write_not_declared`: it writes only the schemas of its `writes`, which name
   schemas of its module, and a property of a facet only if that facet is in its

@@ -170,35 +170,42 @@ function stringifyForInterpolation(value: TransientValue): string {
   return String(value);
 }
 
+/** `true` for the content of a placeholder that reads the clock, such as `now()` or `year(now())`. */
+export function readsClock(content: string): boolean {
+  return /\bnow\s*\(/.test(content);
+}
+
 /**
  * Resolves every ${...} in `value` (recursively through arrays/objects).
  * A string that is *entirely* one placeholder returns the resolved value
  * unconverted (so `${now()}` on a date_time property yields a string, and a
  * hypothetical placeholder resolving to a number or object round-trips as
  * such); a string with a placeholder embedded in more text interpolates it
- * as a string.
+ * as a string. A placeholder whose content `keep` accepts stays as it is.
  */
 export function substitutePlaceholders(
   value: TransientValue,
   context: Record<string, TransientValue>,
+  keep?: (content: string) => boolean,
 ): TransientValue {
   if (typeof value === "string") {
     const wholeMatch = /^\$\{([^}]*)\}$/.exec(value.trim());
     if (wholeMatch) {
+      if (keep?.(wholeMatch[1])) return value;
       return evalContent(wholeMatch[1], context);
     }
     if (!value.includes("${")) return value;
-    return value.replace(PLACEHOLDER_RE, (_full, inner) =>
-      stringifyForInterpolation(evalContent(inner, context)),
+    return value.replace(PLACEHOLDER_RE, (full, inner) =>
+      keep?.(inner) ? full : stringifyForInterpolation(evalContent(inner, context)),
     );
   }
   if (Array.isArray(value)) {
-    return value.map((item) => substitutePlaceholders(item, context));
+    return value.map((item) => substitutePlaceholders(item, context, keep));
   }
   if (value !== null && typeof value === "object") {
     const result: { [k: string]: TransientValue } = {};
     for (const [k, v] of Object.entries(value)) {
-      result[k] = substitutePlaceholders(v, context);
+      result[k] = substitutePlaceholders(v, context, keep);
     }
     return result;
   }

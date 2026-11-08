@@ -728,10 +728,7 @@ export function runActionConformanceSuite(impl: ActionImplementation): void {
         });
       });
 
-      // Expected to fail: runProcedure resolves ${now()} before its host sees the
-      // command, against "A command is recorded as the body emitted it" in the
-      // run log of meta-model.md, so a procedure using it does not replay.
-      it.fails("keeps ${now()} as a placeholder in the commands it records", async () => {
+      it("keeps ${now()} as a placeholder in the commands it records", async () => {
         const registry = procedureRegistry({
           commands: [{ create: "thing", input: { at: "${now()}" } }],
         });

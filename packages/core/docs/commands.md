@@ -247,6 +247,10 @@ await runProcedure({
 - An absent parameter, `${params.x}`, leaves out the property of an `input` that
   receives it.
 - `fail` refuses the procedure with `procedure_failed` and its message.
+- A placeholder reading the clock, such as `${now()}`, stays in the `input` and
+  `filters` of a command and the `with` of a call. A standalone command resolves
+  no placeholder of its `input`, so a host records the command as it receives
+  it and runs `resolveClockPlaceholders(command)`.
 - The host validates the parameters against `parameters` and runs the procedure
   in the transaction of the action.
 

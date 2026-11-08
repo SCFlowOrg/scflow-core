@@ -1,6 +1,8 @@
 import { modelError, ModelError } from "./errors.js";
 import { matchValueFilter } from "./filter.js";
-import { substitutePlaceholders } from "./placeholders.js";
+import { resolveCommandForm } from "./command.js";
+import { isModelSchema } from "./modelUpgrade.js";
+import { readsClock, substitutePlaceholders } from "./placeholders.js";
 import type { AuthoredCommand, CommandResult, TransientObject, TransientValue } from "./types.js";
 
 /**
@@ -23,7 +25,11 @@ export interface Procedure {
 
 /** What a procedure runs its steps through. */
 export interface ProcedureHost {
-  /** Runs one command, in the transaction of the procedure. */
+  /**
+   * Runs one command, in the transaction of the procedure. A placeholder reading
+   * the clock is still in the command: the host records it as it is and runs
+   * the result of `resolveClockPlaceholders`.
+   */
   runCommand(command: AuthoredCommand): Promise<CommandResult>;
   /** Calls an action by id, in the same transaction. A `call` step without it is refused with `unknown_action`. */
   call?(id: string, params: unknown): Promise<unknown>;
@@ -34,6 +40,12 @@ const COMMON_KEYS = new Set(["as", "when"]);
 
 /** What an absent parameter gives a property of an input: the property is left out. */
 const ABSENT = Symbol("absent parameter");
+
+/** What `resolve` leaves unresolved. */
+interface Keep {
+  self?: boolean;
+  clock?: boolean;
+}
 
 type StepForm = "command" | "call" | "each" | "fail";
 
@@ -73,15 +85,17 @@ function formOf(step: unknown, where: string): StepForm {
  * Resolves the placeholders of `value` against `context`. A string that is one
  * whole placeholder naming an absent parameter (`${params.x}`) gives `ABSENT`,
  * which a mapping leaves out and an array reads as `null`. A string holding a
- * path on `this` is kept when `keepThis` is set: a filter resolves it per
- * instance (see Filter, *Paths on the right*).
+ * path on `this` is kept when `keep.self` is set: a filter resolves it per
+ * instance (see Filter, *Paths on the right*). A placeholder reading the clock
+ * is kept when `keep.clock` is set: the host resolves it (see
+ * `resolveClockPlaceholders`).
  */
-function resolve(value: unknown, context: Record<string, TransientValue>, keepThis = false): TransientValue | typeof ABSENT {
+function resolve(value: unknown, context: Record<string, TransientValue>, keep: Keep = {}): TransientValue | typeof ABSENT {
   if (typeof value === "string") {
-    if (keepThis && /\$\{\s*this[.}\s]/.test(value)) return value;
+    if (keep.self && /\$\{\s*this[.}\s]/.test(value)) return value;
     if (!value.includes("${")) return value;
     try {
-      return substitutePlaceholders(value, context);
+      return substitutePlaceholders(value, context, keep.clock ? readsClock : undefined);
     } catch (error) {
       const whole = /^\$\{\s*params\.[^}]*\}$/.test(value.trim());
       if (whole && error instanceof ModelError && error.code === "unknown_reference") return ABSENT;
@@ -90,14 +104,14 @@ function resolve(value: unknown, context: Record<string, TransientValue>, keepTh
   }
   if (Array.isArray(value)) {
     return value.map((v) => {
-      const r = resolve(v, context, keepThis);
+      const r = resolve(v, context, keep);
       return r === ABSENT ? null : r;
     });
   }
   if (isMapping(value)) {
     const out: TransientObject = {};
     for (const [k, v] of Object.entries(value)) {
-      const r = resolve(v, context, keepThis);
+      const r = resolve(v, context, keep);
       if (r !== ABSENT) out[k] = r;
     }
     return out;
@@ -105,8 +119,8 @@ function resolve(value: unknown, context: Record<string, TransientValue>, keepTh
   return (value ?? null) as TransientValue;
 }
 
-function resolved(value: unknown, context: Record<string, TransientValue>, keepThis = false): TransientValue {
-  const r = resolve(value, context, keepThis);
+function resolved(value: unknown, context: Record<string, TransientValue>, keep: Keep = {}): TransientValue {
+  const r = resolve(value, context, keep);
   return r === ABSENT ? null : r;
 }
 
@@ -121,7 +135,9 @@ function resolved(value: unknown, context: Record<string, TransientValue>, keepT
  * entry named by `as`, and a name set inside `do` stays local to that run. A
  * `fail` refuses the procedure with `procedure_failed` and its message. A
  * command's `input`, `filters` and `result`, and a call's `with`, are resolved
- * first; a `${this...}` of a filter is left for the command.
+ * first; a `${this...}` of a filter is left for the command, and a placeholder
+ * reading the clock in `input`, `filters` or `with` is left for the host, so
+ * that the run log records it as the procedure emitted it.
  *
  * Throws `invalid_script_step` for a step of another shape, `procedure_failed`,
  * `unknown_reference` for a placeholder that does not resolve, `unknown_action`
@@ -156,14 +172,14 @@ async function runSteps(
         const command: Record<string, unknown> = { ...step };
         delete command.as;
         delete command.when;
-        if (command.input !== undefined) command.input = resolved(command.input, context);
-        if (command.filters !== undefined) command.filters = resolved(command.filters, context, true);
+        if (command.input !== undefined) command.input = resolved(command.input, context, { clock: true });
+        if (command.filters !== undefined) command.filters = resolved(command.filters, context, { self: true, clock: true });
         result = await host.runCommand(command);
         break;
       }
       case "call": {
         if (!host.call) throw modelError("unknown_action", `${at} calls "${String(step.call)}", and the host of this procedure calls no action`);
-        result = await host.call(step.call as string, step.with === undefined ? {} : resolved(step.with, context));
+        result = await host.call(step.call as string, step.with === undefined ? {} : resolved(step.with, context, { clock: true }));
         break;
       }
       case "each": {
@@ -184,4 +200,21 @@ async function runSteps(
     state.last = result;
     if (typeof step.as === "string") context[step.as] = result as TransientValue;
   }
+}
+
+/**
+ * The command a host runs for a command emitted by a body: the placeholders
+ * reading the clock in its `input` and `filters` resolved, every other
+ * placeholder left as it is, and `command` unchanged so that it can be recorded.
+ * The `input` of a command on a model schema is left whole: a `default_value`
+ * in it belongs to the instances that schema will construct.
+ */
+export function resolveClockPlaceholders(command: AuthoredCommand): AuthoredCommand {
+  const form = resolveCommandForm(command);
+  const onlyClock = (content: string) => !readsClock(content);
+  if (form.filters !== undefined) form.filters = substitutePlaceholders(form.filters as TransientValue, {}, onlyClock);
+  if (form.input !== undefined && !isModelSchema(form.schema as string)) {
+    form.input = substitutePlaceholders(form.input as TransientValue, {}, onlyClock);
+  }
+  return form as unknown as AuthoredCommand;
 }

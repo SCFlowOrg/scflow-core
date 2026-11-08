@@ -276,6 +276,8 @@ commands:
 
 **Processing.** Steps execute in array order. Before each step runs, its `input`, `filters` and `with` are resolved for placeholders against the usual context (see [Placeholders](meta-model.md#placeholders)) plus `params` and the results named so far in the script. A `${this...}` in `filters` is left as it is, since it is resolved per instance (see [Filter](#filter)).
 
+In a procedure, a placeholder that reads the clock, such as `${now()}` or `${year(now())}`, is also left as it is in the `input` and `filters` of a command and in the `with` of a call, so that the [run log](meta-model.md#action) records what the body decided. The host of the procedure resolves it when it runs the command, after the write checks, and records the command as the procedure emitted it. A `default_value` in the `input` of a command on a model schema is never resolved there: it belongs to the instances that schema will construct.
+
 **Result.** A script's result is its `result` when given, otherwise the `result` of its last step.
 
 

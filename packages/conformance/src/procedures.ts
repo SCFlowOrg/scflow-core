@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createApiSession, initDataset, readModuleManifest, runCommand, runProcedure, queryDataset } from "@scfloworg/core";
+import { createApiSession, initDataset, readModuleManifest, resolveClockPlaceholders, runCommand, runProcedure, queryDataset } from "@scfloworg/core";
 import type { ModuleManifest, UpgradeModuleOptions } from "@scfloworg/core";
 import type { AuthoredCommand, ProcedureHost } from "@scfloworg/core";
 
@@ -109,6 +109,45 @@ export function procedureCases(formatPrefix: string, newLocator: () => string): 
       expect(await codeOf(runProcedure({ commands: [{ create: "shop.site", input: {}, call: "shop/x" }] }, {}, host(locator)))).toBe("invalid_script_step");
       expect(await codeOf(runProcedure({ commands: [{ each: "${params.names}" }] }, { names: [] }, host(locator)))).toBe("invalid_script_step");
       expect(await codeOf(runProcedure({ commands: [{ query: "shop.site", as: "s" }, { fail: "${nope.after}" }] }, {}, host(locator)))).toBe("unknown_reference");
+    });
+
+    it("leaves a placeholder reading the clock to its host, in a command and in a call", async () => {
+      const commands: unknown[] = [];
+      const calls: unknown[] = [];
+      await runProcedure(
+        {
+          commands: [
+            { create: "shop.site", input: { name: "${params.name}", at: "${now()}", note: "${params.name} in ${year(now())}" } },
+            { query: "shop.site", filters: { at: { lt: "${now()}" } } },
+            { call: "shop/notify", with: { at: "${now()}" } },
+          ],
+        },
+        { name: "paris" },
+        {
+          runCommand: async (command) => { commands.push(command); return { after: [] } as never; },
+          call: async (_id, params) => { calls.push(params); return null; },
+        },
+      );
+      expect(commands).toEqual([
+        { create: "shop.site", input: { name: "paris", at: "${now()}", note: "paris in ${year(now())}" } },
+        { query: "shop.site", filters: { at: { lt: "${now()}" } } },
+      ]);
+      expect(calls).toEqual([{ at: "${now()}" }]);
+    });
+
+    it("resolves only the clock of a command with resolveClockPlaceholders", () => {
+      const command = { create: "shop.site", input: { at: "${now()}", name: "${other}" }, filters: { label: { eq: "${this.name}" } } };
+      const resolved = resolveClockPlaceholders(command as never) as unknown as { input: Row; filters: Row };
+      expect(resolved.input.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(resolved.input.name).toBe("${other}");
+      expect(resolved.filters).toEqual({ label: { eq: "${this.name}" } });
+      expect(command.input.at).toBe("${now()}");
+    });
+
+    it("leaves a default_value of a schema input for the instances it constructs", () => {
+      const input = [{ name: "stamp", properties: [{ name: "at", type: "date_time", default_value: "${now()}" }] }];
+      const resolved = resolveClockPlaceholders({ create: "schema", input } as never) as unknown as { input: unknown };
+      expect(resolved.input).toEqual(input);
     });
 
     it("leaves a path on this in its filters for the command to resolve per instance", async () => {
