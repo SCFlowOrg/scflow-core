@@ -1,3 +1,5 @@
+import { runProcedure } from "@scfloworg/core";
+import type { Procedure, ProcedureHost } from "@scfloworg/core";
 import { describe, expect, it } from "vitest";
 import { replayEntry } from "./replay.js";
 import type { ReplayContext, ReplayEntry } from "./replay.js";
@@ -638,6 +640,109 @@ export function runActionConformanceSuite(impl: ActionImplementation): void {
           context: (replay) => ({ runCommand: replay.command, call: replay.call }),
         }),
       ).toEqual({ matches: true });
+    });
+
+    describe("of a procedure, run by runProcedure", () => {
+      const asHost = (replay: ReplayContext) =>
+        ({
+          runCommand: replay.command,
+          call: (id: string, params: unknown) => replay.call(id, params),
+        }) as ProcedureHost;
+
+      function procedureRegistry(procedure: Procedure) {
+        const registry = impl.createRegistry();
+        registry.register({
+          id: "demo/inner",
+          parameters: { type: "object", properties: { of: { type: "string" } } },
+          run: (params: { of: string }) => ({ done: params.of }),
+        });
+        registry.register({
+          id: "demo/procedure",
+          parameters: {
+            type: "object",
+            properties: { name: { type: "string" }, urgent: { type: "boolean" } },
+          },
+          run: (params: unknown, host: ProcedureHost) => runProcedure(procedure, params, host),
+        });
+        return registry;
+      }
+
+      async function recordProcedure(
+        registry: ConformanceRegistry,
+        params: unknown,
+        results: unknown[],
+      ): Promise<ReplayEntry> {
+        let entry: unknown;
+        await registry
+          .run("demo/procedure", params, {
+            context: (trace) => asHost(emitters(trace, results)),
+            onEntry: (e) => (entry = e),
+          })
+          .catch(() => undefined);
+        return entry as ReplayEntry;
+      }
+
+      const procedure: Procedure = {
+        commands: [
+          { query: "site", filters: { name: "${params.name}" }, as: "site" },
+          { each: "${site.after}", as: "one", do: [{ update: "site", filters: { id: "${one.id}" }, input: { seen: true } }] },
+          { create: "alert", input: { site: "${site.after.0.id}" }, when: { "params.urgent": true } },
+          { call: "demo/inner", with: { of: "${site.after.0.id}" }, as: "inner" },
+        ],
+        result: "${inner}",
+      };
+      const results = () => [
+        { after: [{ id: "s1" }, { id: "s2" }] },
+        { after: [{ id: "s1" }] },
+        { after: [{ id: "s2" }] },
+        { after: [{ id: "a1" }] },
+      ];
+
+      it("passes against the entry of its run, its each, when and call included", async () => {
+        const registry = procedureRegistry(procedure);
+        const entry = await recordProcedure(registry, { name: "lyon", urgent: true }, results());
+        expect(entry.outcome).toBe("done");
+        expect(entry.steps).toHaveLength(5);
+        expect(entry.result).toBe('{"done":"s1"}');
+        expect(await replayEntry(impl, registry, entry, { context: asHost })).toEqual({
+          matches: true,
+        });
+      });
+
+      it("fails when the procedure takes another branch than its entry", async () => {
+        const registry = procedureRegistry(procedure);
+        const entry = await recordProcedure(registry, { name: "lyon", urgent: true }, results());
+        const notUrgent = { ...entry, parameters: '{"name":"lyon","urgent":false}' };
+        expect(await replayEntry(impl, registry, notUrgent, { context: asHost })).toMatchObject({
+          matches: false,
+          mismatch: { path: "steps[3]" },
+        });
+      });
+
+      it("replays a fail step to the same refusal", async () => {
+        const registry = procedureRegistry({ commands: [{ fail: "no" }] });
+        const entry = await recordProcedure(registry, {}, []);
+        expect(entry).toMatchObject({ outcome: "refused", error: "procedure_failed" });
+        expect(await replayEntry(impl, registry, entry, { context: asHost })).toEqual({
+          matches: true,
+        });
+      });
+
+      // Expected to fail: runProcedure resolves ${now()} before its host sees the
+      // command, against "A command is recorded as the body emitted it" in the
+      // run log of meta-model.md, so a procedure using it does not replay.
+      it.fails("keeps ${now()} as a placeholder in the commands it records", async () => {
+        const registry = procedureRegistry({
+          commands: [{ create: "thing", input: { at: "${now()}" } }],
+        });
+        const entry = await recordProcedure(registry, {}, [{ after: [] }]);
+        expect(entry.steps[0]).toMatchObject({
+          command: { create: "thing", input: { at: "${now()}" } },
+        });
+        expect(await replayEntry(impl, registry, entry, { context: asHost })).toEqual({
+          matches: true,
+        });
+      });
     });
 
     it("refuses an entry whose action is not registered with unknown_action", async () => {

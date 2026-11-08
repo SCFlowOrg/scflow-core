@@ -41,7 +41,8 @@ const report = await replayEntry({ canonicalJson }, registry, entry, {
 - It needs no dataset: a `ref` value stands for itself. A body that names an instance to a nested call by its id or `display_name` instead of by a key does not pass.
 - A body emits one step at a time; a body that starts several steps at once cannot be replayed.
 - An entry whose action the registry does not have rejects with `unknown_action`. A body that breaks its contract does not reject: the report gives the first mismatch.
-- A procedure is replayed by giving its host through `context`, once the engine runs procedures.
+- A procedure is replayed through `runProcedure`, its host built from the replay by `context`: `{ runCommand: replay.command, call: replay.call }`. The suite covers `each`, `when`, `call` and `fail`.
+- Known gap: `runProcedure` resolves `${now()}` before its host sees the command, so a procedure that uses it does not pass its replay. The case that states the rule is marked as an expected failure.
 
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.
 
