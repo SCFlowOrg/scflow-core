@@ -1,0 +1,22 @@
+// Builds the packages under packages/ in dependency order, through the project
+// references of each package. Two packages are built after it by their own
+// script, see build:packages in package.json: core-plugin-core, which is not a
+// composite project, and scflow-core, which generates sources first and bundles
+// its module afterwards.
+{
+  "files": [],
+  "references": [
+    { "path": "packages/actions" },
+    { "path": "packages/conformance" },
+    { "path": "packages/core" },
+    { "path": "packages/environment" },
+    { "path": "packages/format-file" },
+    { "path": "packages/format-js" },
+    { "path": "packages/mcp" },
+    { "path": "packages/module" },
+    { "path": "packages/project-file" },
+    { "path": "packages/repl" },
+    { "path": "packages/repl-conformance" },
+    { "path": "packages/workspace" }
+  ]
+}
