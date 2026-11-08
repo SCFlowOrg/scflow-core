@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { replayEntry } from "./replay.js";
+import type { ReplayContext, ReplayEntry } from "./replay.js";
 
 /**
  * The cases of the action contract that need no dataset: the check of
  * parameters with the resolution of `ref`, the registry, the run log, the
- * batches made only of calls and the export to AI tools. They follow the
+ * replay of a body, the batches made only of calls and the export to AI tools.
+ * They follow the
  * Action section of `packages/core/docs/spec/meta-model.md`, the Batches of its
  * `model-command-language.md` and the Action Package section of its
  * `typescript-reference-implementation.md`.
@@ -406,6 +409,247 @@ export function runActionConformanceSuite(impl: ActionImplementation): void {
         steps: [],
         outcome: "done",
       });
+    });
+  });
+
+  describe("actions: replay", () => {
+    /** What a body receives: the emitters of `ReplayContext`, on a run or on a replay. */
+    function emitters(trace: ConformanceRunTrace, results: unknown[]): ReplayContext {
+      return {
+        async command(command) {
+          const result = results.shift();
+          trace.command(command, result);
+          return result;
+        },
+        call: (id, params) => trace.call(id, params),
+      };
+    }
+
+    /** Runs an action once, its commands answered by `results`, and gives its entry. */
+    async function record(
+      registry: ConformanceRegistry,
+      id: string,
+      params: unknown,
+      results: unknown[] = [],
+      resolveRef?: ConformanceRunHost["resolveRef"],
+    ): Promise<ReplayEntry> {
+      let entry: unknown;
+      await registry
+        .run(id, params, {
+          context: (trace) => emitters(trace, results),
+          resolveRef,
+          onEntry: (e) => (entry = e),
+        })
+        .catch(() => undefined);
+      return entry as ReplayEntry;
+    }
+
+    /** A body that decides its second step from the result of its first, and calls another action. */
+    function pair() {
+      const registry = impl.createRegistry();
+      registry.register({
+        id: "demo/inner",
+        parameters: { type: "object", properties: { n: { type: "integer", default: 1 } } },
+        async run(params: { n: number }, context: ReplayContext) {
+          await context.command({ query: "thing", n: params.n });
+          return params.n * 2;
+        },
+      });
+      registry.register({
+        id: "demo/outer",
+        parameters: { type: "object", properties: { actor: { type: "string", ref: "actor" } } },
+        async run(params: { actor: string }, context: ReplayContext) {
+          const found = (await context.command({ query: "actor", key: params.actor })) as {
+            after: { id: string }[];
+          };
+          await context.command({
+            create: "thing",
+            input: { of: found.after[0].id, at: "${now()}" },
+          });
+          const doubled = await context.call("demo/inner", {});
+          return { doubled };
+        },
+      });
+      return registry;
+    }
+
+    const resolveRef = actors([{ key: "k1", id: "a1", display_name: { en: "Plant" } }]);
+    const pairResults = () => [{ after: [{ id: "x1" }] }, { after: [{ id: "t1" }] }, { after: [] }];
+
+    it("gives each command its recorded result and passes when the body emits the same steps", async () => {
+      const registry = pair();
+      const entry = await record(registry, "demo/outer", { actor: "Plant" }, pairResults(), resolveRef);
+      expect(entry.outcome).toBe("done");
+      expect(await replayEntry(impl, registry, entry)).toEqual({ matches: true });
+    });
+
+    it("compares in canonical form, whatever the order of the keys in the entry", async () => {
+      const registry = impl.createRegistry();
+      registry.register({
+        id: "demo/one",
+        async run(_params: unknown, context: ReplayContext) {
+          await context.command({ query: "thing", limit: 1 });
+        },
+      });
+      const entry: ReplayEntry = {
+        action: "demo/one",
+        parameters: "{}",
+        steps: [{ command: { limit: 1, query: "thing" }, result: "null" }],
+        outcome: "done",
+      };
+      expect(await replayEntry(impl, registry, entry)).toEqual({ matches: true });
+    });
+
+    it("fails a body that does not depend only on its inputs, at the step that differs", async () => {
+      const registry = impl.createRegistry();
+      let clock = 0;
+      registry.register({
+        id: "demo/clocked",
+        async run(_params: unknown, context: ReplayContext) {
+          await context.command({ create: "thing", input: { at: ++clock } });
+        },
+      });
+      const entry = await record(registry, "demo/clocked", {}, [{}]);
+      expect(await replayEntry(impl, registry, entry)).toEqual({
+        matches: false,
+        mismatch: {
+          path: "steps[0]",
+          expected: '{"command":{"create":"thing","input":{"at":1}},"result":"{}"}',
+          actual: '{"command":{"create":"thing","input":{"at":2}}}',
+        },
+      });
+    });
+
+    it("fails a body that emits a step more or a step less than the entry", async () => {
+      const registry = impl.createRegistry();
+      registry.register({
+        id: "demo/one",
+        async run(_params: unknown, context: ReplayContext) {
+          await context.command({ query: "thing" });
+        },
+      });
+      const step = { command: { query: "thing" }, result: "null" };
+      const base = { action: "demo/one", parameters: "{}", outcome: "done" as const };
+      expect(await replayEntry(impl, registry, { ...base, steps: [] })).toMatchObject({
+        matches: false,
+        mismatch: { path: "steps[0]", actual: '{"command":{"query":"thing"}}' },
+      });
+      expect(await replayEntry(impl, registry, { ...base, steps: [step, step] })).toMatchObject({
+        matches: false,
+        mismatch: { path: "steps[1]" },
+      });
+    });
+
+    it("replays a nested call against its own entry, and fails on another action or other steps", async () => {
+      const registry = pair();
+      const entry = await record(registry, "demo/outer", { actor: "Plant" }, pairResults(), resolveRef);
+      const outer = (steps: ReplayEntry["steps"]): ReplayEntry => ({ ...entry, steps });
+      const nested = entry.steps[2] as { call: ReplayEntry };
+
+      const otherAction = outer([
+        ...entry.steps.slice(0, 2),
+        { call: { ...nested.call, action: "demo/other" } },
+      ]);
+      expect(await replayEntry(impl, registry, otherAction)).toMatchObject({
+        matches: false,
+        mismatch: { path: "steps[2]" },
+      });
+
+      const otherSteps = outer([
+        ...entry.steps.slice(0, 2),
+        { call: { ...nested.call, steps: [{ command: { query: "other" }, result: "null" }] } },
+      ]);
+      expect(await replayEntry(impl, registry, otherSteps)).toMatchObject({
+        matches: false,
+        mismatch: { path: "steps[2].call.steps[0]" },
+      });
+
+      const otherParameters = outer([
+        ...entry.steps.slice(0, 2),
+        { call: { ...nested.call, parameters: '{"n":2}' } },
+      ]);
+      expect(await replayEntry(impl, registry, otherParameters)).toMatchObject({
+        matches: false,
+      });
+    });
+
+    it("fails on another result or another outcome", async () => {
+      const registry = pair();
+      const entry = await record(registry, "demo/outer", { actor: "Plant" }, pairResults(), resolveRef);
+      expect(
+        await replayEntry(impl, registry, { ...entry, result: '{"doubled":3}' }),
+      ).toEqual({
+        matches: false,
+        mismatch: { path: "result", expected: '{"doubled":3}', actual: '{"doubled":2}' },
+      });
+      expect(
+        await replayEntry(impl, registry, { ...entry, outcome: "refused", error: "boom" }),
+      ).toMatchObject({ matches: false, mismatch: { path: "outcome" } });
+    });
+
+    it("replays a refused entry to the same refusal, a refused nested call included", async () => {
+      const registry = impl.createRegistry();
+      registry.register({
+        id: "demo/fail",
+        run() {
+          throw Object.assign(new Error("no"), { code: "procedure_failed" });
+        },
+      });
+      registry.register({
+        id: "demo/tolerant",
+        async run(_params: unknown, context: ReplayContext) {
+          await context.call("demo/fail").catch(() => undefined);
+          return "survived";
+        },
+      });
+      const refused = await record(registry, "demo/fail", {});
+      expect(refused.outcome).toBe("refused");
+      expect(await replayEntry(impl, registry, refused)).toEqual({ matches: true });
+      const tolerant = await record(registry, "demo/tolerant", {});
+      expect(await replayEntry(impl, registry, tolerant)).toEqual({ matches: true });
+    });
+
+    it("gives a call refused by its parameters the same refusal, without running the body", async () => {
+      const registry = pair();
+      for (const params of [{ actor: "nobody" }, { actor: 1 }]) {
+        const entry = await record(registry, "demo/outer", params, [], resolveRef);
+        expect(entry).toMatchObject({ outcome: "refused", error: "invalid_parameters", steps: [] });
+        expect(await replayEntry(impl, registry, entry)).toEqual({ matches: true });
+      }
+    });
+
+    it("gives the body the shape its host uses, through the context option", async () => {
+      const registry = impl.createRegistry();
+      registry.register({
+        id: "demo/hosted",
+        async run(_params: unknown, host: { runCommand(c: unknown): Promise<unknown> }) {
+          return host.runCommand({ query: "thing" });
+        },
+      });
+      const entry: ReplayEntry = {
+        action: "demo/hosted",
+        parameters: "{}",
+        steps: [{ command: { query: "thing" }, result: "3" }],
+        outcome: "done",
+        result: "3",
+      };
+      expect(
+        await replayEntry(impl, registry, entry, {
+          context: (replay) => ({ runCommand: replay.command, call: replay.call }),
+        }),
+      ).toEqual({ matches: true });
+    });
+
+    it("refuses an entry whose action is not registered with unknown_action", async () => {
+      const entry: ReplayEntry = {
+        action: "demo/none",
+        parameters: "{}",
+        steps: [],
+        outcome: "done",
+      };
+      expect((await refusal(replayEntry(impl, impl.createRegistry(), entry))).code).toBe(
+        "unknown_action",
+      );
     });
   });
 

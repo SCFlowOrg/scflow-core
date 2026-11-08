@@ -21,7 +21,25 @@ A format that provides the optional `lock(rest)` of the persistence interface al
 
 ## Actions
 
-`runActionConformanceSuite(impl)` holds the cases of the action contract that need no dataset: the check of parameters and the resolution of `ref`, the registry, the run log in canonical JSON, the batches of calls with `${name.path}`, and the export to AI tools. An implementation of the neutral action package runs it against itself, as `packages/actions/tests/conformance.test.ts` does; the suite states the shape it uses in `ActionImplementation`, so it does not depend on `@scfloworg/actions`.
+`runActionConformanceSuite(impl)` holds the cases of the action contract that need no dataset: the check of parameters and the resolution of `ref`, the registry, the run log in canonical JSON, the replay of a body, the batches of calls with `${name.path}`, and the export to AI tools. An implementation of the neutral action package runs it against itself, as `packages/actions/tests/conformance.test.ts` does; the suite states the shape it uses in `ActionImplementation`, so it does not depend on `@scfloworg/actions`.
+
+### Replay
+
+`replayEntry(impl, registry, entry, options?)` checks a body against its run entry, the third level of the contract of a body after the bundle check and the sandbox. The body runs with the recorded parameters, each command receives its recorded result, and the report says whether the body emitted the same steps and ended with the same outcome, error and result, compared in canonical JSON.
+
+```ts
+const report = await replayEntry({ canonicalJson }, registry, entry, {
+  // Optional: the context the body expects, built from what replay emits.
+  context: (replay) => ({ runCommand: replay.command, call: replay.call }),
+});
+// { matches: true }, or { matches: false, mismatch: { path: "steps[2].call.steps[0]", expected, actual } }
+```
+
+- A nested call is replayed against the entry of its step.
+- It needs no dataset: a `ref` value stands for itself. A body that names an instance to a nested call by its id or `display_name` instead of by a key does not pass.
+- A body emits one step at a time; a body that starts several steps at once cannot be replayed.
+- An entry whose action the registry does not have rejects with `unknown_action`. A body that breaks its contract does not reject: the report gives the first mismatch.
+- A procedure is replayed by giving its host through `context`, once the engine runs procedures.
 
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.
 
