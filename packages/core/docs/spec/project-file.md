@@ -44,6 +44,13 @@ Three sections belong to the document:
 | `model` | One entry per module, by module name: its manifest, embedded |
 | `data` | The dataset: its `name`, its data versions and its `instances`, by qualified schema name, in the order of their keys |
 
+The `data` section is written in a fixed form, so an unchanged dataset gives the same bytes and a change of one instance changes the lines of that instance:
+
+- `name`, `data_major_version` and `data_minor_version` come first, the other properties of the dataset follow sorted by key, and `instances` comes next. Model versions equal to zero are left out.
+- Schemas in `instances` are sorted by name, and the instances of a schema by key, each with the keys of every object sorted. A schema with no instance is left out.
+- The key of an instance is its `id` when it has one, and its `name` otherwise. An instance stored under another key is written under `other_instances`, by schema and then by key, which is left out when empty.
+- The sections `modules` and `model` keep the order of the modules of the dataset.
+
 The **digest** of a module is `sha256:` followed by the lowercase hexadecimal SHA-256 of the canonical form of its manifest: JSON in UTF-8, with the keys of every object sorted and no white space. A reader compares it with the embedded manifest to detect a hand-edited snapshot.
 
 ## Shapes

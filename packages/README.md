@@ -9,6 +9,7 @@ These packages are the source of truth. They are developed, versioned and publis
 | `core` | The MCL engine: schema processing, commands, scripts, filters, the TypeScript API; works only against `PersistenceInterface` | none |
 | `actions` | The neutral action package: the action type aligned on MCP tools, parameters checked by Ajv, a registry, batches of calls, the export to AI tools and the run log | none (Ajv only) |
 | `format-js` | The `js` persistent format, in memory | `core` |
+| `format-file` | The `file` persistent format: a dataset stored in a project file, with a deterministic serialization | `core`, `format-js`, `project-file` |
 | `conformance` | The suite a `PersistenceInterface` implementation runs against itself | `core` |
 | `repl` | The interactive REPL | `core`, `format-js` |
 | `repl-conformance` | The same kind of suite, through the REPL command-block parser | `core`, `repl` |
