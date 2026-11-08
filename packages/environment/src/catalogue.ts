@@ -40,7 +40,9 @@ export interface ModuleCatalogue {
   /**
    * Loads the module of a folder with `modules.load` of
    * `@scfloworg/module/host`, bundle check included, then installs it. Fails
-   * as `modules.load` and `install` do.
+   * as `modules.load` and `install` do. The entry
+   * `@scfloworg/environment/browser` has no file system, and refuses with
+   * `constraint_violation`.
    */
   load(path: string): Promise<InstalledModule>;
   /** The installed module of `key`, or `undefined`. */
@@ -50,13 +52,16 @@ export interface ModuleCatalogue {
 }
 
 /** The code of a module, checked: its manifest and its bodies. */
-interface CheckedModule {
+export interface CheckedModule {
   readonly manifest: ModuleManifest;
   readonly actions: ReadonlyMap<string, ModuleBody>;
   readonly migrations: ReadonlyMap<string, ModuleBody>;
 }
 
-export function createCatalogue(): ModuleCatalogue {
+/** What `modules.load` gets from a folder: the code of a module, checked. */
+export type ModuleLoader = (path: string) => Promise<CheckedModule>;
+
+export function createCatalogue(load: ModuleLoader): ModuleCatalogue {
   const installed = new Map<string, InstalledModule>();
 
   function add(module: CheckedModule): InstalledModule {
@@ -106,12 +111,7 @@ export function createCatalogue(): ModuleCatalogue {
       const { actions, migrations } = checkModuleCode(manifest, { default: module });
       return add({ manifest, actions, migrations });
     },
-    async load(path: string): Promise<InstalledModule> {
-      // A dynamic import: the host entry reads files, and a browser bundle of
-      // the environment that only installs never loads it.
-      const { modules } = await import("@scfloworg/module/host");
-      return add(await modules.load(path));
-    },
+    load: async (path) => add(await load(path)),
     get: (key) => installed.get(key),
     list: () => [...installed.values()],
   };

@@ -55,6 +55,9 @@ env.modules.list(): readonly InstalledModule[]
 - `load` reads the module of a folder with `modules.load` of
   `@scfloworg/module/host`, bundle check included, then installs it. It is for
   a host that reads modules from disk, such as the CLI or the MCP server.
+  The entry `@scfloworg/environment/browser` gives the same `createEnvironment`
+  for a host with no file system: nothing from Node is reached from it, and
+  `load` fails with `constraint_violation`.
 - An `InstalledModule` gives the validated `manifest`, its `key` and
   `version`, the body of each action by id in `actions`, and the body of
   each migration by version in `migrations`.
