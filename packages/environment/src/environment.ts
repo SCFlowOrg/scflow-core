@@ -42,7 +42,7 @@ import {
   type RunHost,
   type RunTrace,
 } from "@scfloworg/actions";
-import { createCatalogue, type InstalledModule, type ModuleCatalogue } from "./catalogue.js";
+import { createCatalogue, type InstalledModule, type ModuleCatalogue, type ModuleLoader } from "./catalogue.js";
 
 /** What `createEnvironment` takes. */
 export interface EnvironmentOptions {
@@ -259,11 +259,11 @@ interface ActionLimit {
   readonly title: string;
 }
 
-/** Creates an environment over `formats`; it shares nothing with another one. Fails with `duplicate_name` for two formats of one name. */
-export function createEnvironment(options: EnvironmentOptions): Environment {
+/** Creates an environment whose `modules.load` is `load`. Each entry of the package gives its own. */
+export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleLoader): Environment {
   const engine = createEngine({ formats: options.formats });
   const session = engine.createApiSession();
-  const modules = createCatalogue();
+  const modules = createCatalogue(load);
   const open = new Map<string, OpenDataset>();
   // The openings under way, so that two calls for one locator upgrade it once.
   const opening = new Map<string, Promise<OpenDataset>>();

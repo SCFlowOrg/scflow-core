@@ -24,6 +24,18 @@ Files that no reader knows stay as they are on disk at the time of the save, so 
 
 `deleteDataset` forgets the dataset in memory and leaves the disk alone. A format does not remove a folder that may hold the files of other tools.
 
+## Sections in memory
+
+`createSectionsFormat({ name?, sections? })` of `@scfloworg/format-file/browser` is the same format for a host that keeps the file itself. It reaches nothing from Node, and has no `save`.
+
+| Member | Does |
+| --- | --- |
+| `load(rest, { type, title, sections })` | Makes the dataset at `rest` from the sections, read as those of a file are |
+| `content(rest)` | Gives a copy of `{ type, title, sections }`, equal to what `save` writes |
+| `project(rest)`, `release(rest)` | As above |
+
+`rest` is any name the host chooses. Nothing is read when a dataset is first used: a `rest` that was not loaded or created has no dataset.
+
 ## Limits
 
 - Between `save` calls, the changes exist only in memory, and a crash loses them.

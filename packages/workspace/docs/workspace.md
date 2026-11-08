@@ -1,6 +1,6 @@
 # The workspace
 
-A workspace holds the documents of a host, over an [environment](../../environment/docs/environment.md) and the `file` format. It has no UI. The CLI and the MCP server each create one.
+A workspace holds the documents of a host, over an [environment](../../environment/docs/environment.md) and the `file` format. It has no UI. The CLI and the MCP server each create one on disk paths; a host that keeps the file itself creates one on [sections in memory](#sections-in-memory).
 
 ```ts
 const file = createFileFormat({ sections });
@@ -31,6 +31,39 @@ A document is **read only** when the environment reports its dataset so, or when
 ## Sections
 
 `doc.type` and `doc.title` are the envelope. `doc.section(key)` reads any section, and `doc.setSection(key, value)` writes one. `modules`, `model` and `data` belong to the dataset, and writing them fails with `reserved_section`.
+
+## Sections in memory
+
+`@scfloworg/workspace/browser` is the entry of a host that reads and writes the file itself, such as a browser. It has no disk and no path, and nothing from `node:*` is reached from it. It stands on the `/browser` entries of the environment and of the format.
+
+```ts
+import { createEnvironment } from "@scfloworg/environment/browser";
+import { createSectionsFormat } from "@scfloworg/format-file/browser";
+import { createSectionsWorkspace } from "@scfloworg/workspace/browser";
+
+const file = createSectionsFormat({ sections });
+const environment = createEnvironment({ formats: [file] });
+environment.modules.install(tasksModule);
+
+const workspace = createSectionsWorkspace({ environment, file });
+const doc = await workspace.open("plan-1", { type, title, sections: new Map(entries) });
+await doc.run("tasks/create_task", { title: "Audit" });
+await doc.undo();
+const { sections: toSave } = await doc.content();
+```
+
+| Member of the workspace | Does |
+| --- | --- |
+| `create({ id, modules, type, title, name? })` | Creates a document that uses `modules` and their dependencies |
+| `open(id, { type, title, sections }, { readOnly? })` | Opens a document on sections, which are copied. An `id` already open fails with `document_open` |
+| `get(id)`, `list()` | The open documents |
+
+`id` is the name the host gives the document in this workspace, and means nothing else. A document has everything described on this page, except `path` and `save`, and adds:
+
+- `doc.id`.
+- `doc.content()` gives a copy of `{ type, title, sections }`, equal to what `save` writes for a document on disk. It writes nothing, so it is allowed on a read-only document; during a transaction it fails with `transaction_open`.
+
+The sections are read as those of a file are: the owners declared on the format migrate theirs, the digests are checked, and the modules are upgraded on opening. The modules are given to the catalogue with `install`, since `modules.load` needs a file system and fails with `constraint_violation` on this entry.
 
 ## Transactions
 
