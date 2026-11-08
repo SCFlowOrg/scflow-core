@@ -11,6 +11,8 @@ checkUpgrade(locator, upgradeLocator): Promise<{ autoUpdate: TransientValue[]; m
 upgradeDataset(locator, upgradeLocator): Promise<CommandResult>
 ```
 
+The modules of a dataset upgrade another way: see [Upgrading a module](#upgrading-a-module).
+
 1. `createUpgradeLocator(locator)` returns the upgrade locator.
 2. Run schema and scalar type commands against it, as in the opening example of
    [mcl.md](mcl.md).
@@ -80,14 +82,49 @@ not changed by schema commands: a module is replaced by another version.
 - A local module, `local:<name>`, is replaced with `setLocalModule`, which checks
   the stored instances as a compatible upgrade does and refuses an incompatible
   change with `incompatible_upgrade`.
-- A published module is carried to a newer version with
-  `upgradeModule(locator, manifest, { migrations })`. The migrations of the new
-  manifest past the embedded version run in version order: a declared form
-  rewrites the stored values under the embedded schemas, then the instances are
-  checked against the new schemas as a compatible upgrade, the module is
-  embedded at its new version, and each `body` runs through commands under the new
-  schemas. `migrations` maps the version a body reaches to its code, which the
-  bundle of the module gives. Every declared rule is checked last.
+- A published module is replaced with `upgradeModule` of an `ApiSession`, below.
+  The host decides when: `@scfloworg/environment` calls it when it opens a
+  dataset (see its `docs/environment.md`).
+- `upgradeDataset` also checks every declared rule once the new model applies,
+  and refuses the upgrade with `rule_violation` when one breaks (see
+  [rules.md](rules.md)).
+- `refreshImport` fails with `import_not_upgraded` while the imported dataset
+  uses another version of a module than the dataset (see
+  [datasets.md](datasets.md#imports)).
+
+## Upgrading a module
+
+```ts
+session.upgradeModule(locator, manifest, { migrate? }): Promise<UpgradeModuleResult>
+// UpgradeModuleResult = { module, from, to, migrations, changed, delta }
+// migrate(step: MigrationStep): Promise<boolean>, step = { module, from, to, migration }
+```
+
+`upgradeModule` carries the dataset at `locator` from the embedded version of the
+module `manifest.name` to `manifest`, as Model Upgrade in
+[the specification](spec/meta-model.md#model-upgrade) says.
+
+- `manifest` is newer than the embedded manifest, or the same version with
+  another digest: the installed module wins over a hand-edited snapshot. An
+  older version, the same version and digest, and a local module fail with
+  `constraint_violation`; a module the dataset does not use fails with
+  `key_not_found`. The new set of modules must build, as for `initDataset`.
+- **One transaction.** The session opens a transaction, or joins the one it has
+  open on `locator`. It embeds `manifest` with its digest in place of the old
+  manifest, so the commands that follow run with the new schemas, and reads
+  still return the values stored for the old ones.
+- **Migrations.** The migrations of `manifest` whose `to` is newer than the
+  embedded version and not newer than `manifest.version` run in version order,
+  and only when the version changes. Each is handed to `migrate`, which runs the
+  code the host has for it, through the same session so that its commands join
+  the transaction, and returns `true`; `false` lets the engine apply the
+  declared form of the migration: `rename_schema`, `rename_property` and
+  `delete_property` rewrite the stored values directly, by name, whatever schema
+  declares them. Their names are short names of the module, or qualified. A
+  relation to a schema `rename_schema` renames keeps its values. A
+  migration with more than one form, or an operand without its names, fails with
+  `constraint_violation`; a `body`, or an entry with no form, that `migrate`
+  does not run fails with `incompatible_upgrade`.
 
   ```yaml
   migrations:
@@ -98,16 +135,21 @@ not changed by schema commands: a module is replaced by another version.
     - to: 2.0.0
       delete_property: { schema: place, property: legacy }
   ```
-
-  The upgrade is one step: any failure undoes it. An instance the new schemas
-  cannot take, a schema that leaves the module with instances no migration moves,
-  fails with `incompatible_upgrade`; an older version, a migration without exactly
-  one form or a body with no code, with `constraint_violation`; a breach of a rule,
-  with `rule_violation` listing every instance at fault in `details.violations`.
-  Deciding when to upgrade (on open, versions and digests) is the host's.
-- `upgradeDataset` also checks every declared rule once the new model applies,
-  and refuses the upgrade with `rule_violation` when one breaks (see
-  [rules.md](rules.md)).
-- `refreshImport` fails with `import_not_upgraded` while the imported dataset
-  uses another version of a module than the dataset (see
-  [datasets.md](datasets.md#imports)).
+- **The check at the end.** Every instance of the schemas of the module, old
+  and new, is then checked against the new schemas: a missing property takes
+  its default, a property the schema no longer declares is dropped, a value
+  that breaks a constraint or no longer fits a changed type, and an instance of
+  a schema that leaves the module, fail with `incompatible_upgrade`. A
+  migration that converted a value lets it pass.
+- **Rules.** Every declared rule is then checked on every instance, the data
+  the upgrade did not write included: a breach fails with `rule_violation`,
+  listing the instances at fault in `details.violations`.
+- **Atomic.** A refusal, or an error a migration throws, rolls everything back:
+  the instances, the versions and the embedded manifest. Otherwise the
+  transaction commits; `data_minor_version` moves when an instance changed,
+  `changed` says whether one did, and `delta` is the delta of the transaction,
+  or `null` when it joined one. Observers get a reset.
+- **Without transactions.** On a format that does not support them, an
+  upgrade with no migration is checked before anything is written, so a
+  refusal changes nothing, and `delta` is `null`; an upgrade that would run a
+  migration fails with `transactions_not_supported`.

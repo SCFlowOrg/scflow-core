@@ -82,8 +82,10 @@ export const ErrorCode = {
   upgrade_locator: "upgrade_locator",
   /**
    * A model change cannot be applied to the stored instances
-   * (`upgradeDataset`), or an instance cannot take the current definition of a
-   * built-in schema (`restoreDataset`). Nothing is changed.
+   * (`upgradeDataset`, `setLocalModule`, and `upgradeModule` after its
+   * migrations, or a migration it cannot run), or an instance cannot take the
+   * current definition of a built-in schema (`restoreDataset`). Nothing is
+   * changed.
    */
   incompatible_upgrade: "incompatible_upgrade",
 
@@ -94,7 +96,7 @@ export const ErrorCode = {
   procedure_failed: "procedure_failed",
   /** A step of a script or a procedure is not exactly one of a command, a `call`, an `each` with its `do`, or a `fail`. */
   invalid_script_step: "invalid_script_step",
-  /** An action that writes runs on a dataset a host opened read only, because a module it uses is not installed at its version (see Model Upgrade, Opening a dataset, in `docs/spec/meta-model.md`). */
+  /** An action that writes runs on a dataset a host opened read only, on request or because a module it uses is not installed at its version (see Model Upgrade, Opening a dataset, in `docs/spec/meta-model.md`). */
   read_only_dataset: "read_only_dataset",
 
   // Rules

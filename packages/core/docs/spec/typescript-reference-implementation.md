@@ -109,6 +109,53 @@ function refreshImport(locator: string, importKey: Key): Promise<RefreshResult>
 | `key_not_found`             | Import does not exist                                                                        |
 | `import_not_upgraded`       | The imported dataset uses a version of a module the dataset has not upgraded to             |
 
+## API Model Upgrade
+
+*Definition.*
+
+**Upgrading a module.** A session upgrades one module of a dataset to a newer manifest, or to the same version with another digest, as [Model Upgrade](meta-model.md#model-upgrade) says. Opening a dataset, comparing its modules with the installed ones and choosing to open it read only belong to the host, which calls this function for each module to upgrade.
+
+```ts
+interface MigrationStep {
+  module: string            // the key of the module
+  from: string              // the version embedded before the upgrade
+  to: string                // the version this migration reaches
+  migration: TransientValue // the entry of the manifest
+}
+
+interface UpgradeModuleOptions {
+  // Runs a migration the host has code for and returns true; returns false
+  // to let the engine apply the declared form of the migration.
+  migrate?: (step: MigrationStep) => Promise<boolean>
+}
+
+interface UpgradeModuleResult {
+  module: string
+  from: string
+  to: string
+  migrations: string[]      // the `to` of each migration that ran, in order
+  changed: boolean          // whether an instance changed
+  delta: Delta | null       // the delta of the transaction, or null on a format without transactions or in a joined transaction
+}
+
+ApiSession.upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<UpgradeModuleResult>
+```
+
+- The upgrade runs in a transaction of its own, which the session opens, or joins the transaction the session has open on `locator`, and then `delta` is `null`. `migrate` runs its code through the same session, so its commands join that transaction. Each migration whose `migrate` returns false runs its declared form.
+- On a format without transactions, an upgrade with no migration is checked before anything is written, so a refusal changes nothing. An upgrade that needs a migration fails with `transactions_not_supported`.
+- The upgrade records the new manifest and its digest in the dataset, and bumps `data_minor_version` when an instance changed.
+
+*Exceptions.*
+
+| exception                    | thrown when                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `unknown_persistent_format`  | `locator` format prefix has no registered Persistence Interface                             |
+| `dataset_not_found`          | `locator` does not resolve to an existing dataset                                           |
+| `key_not_found`              | The dataset does not use the module                                                         |
+| `constraint_violation`       | The manifest breaks the `module` schema, names a local module, or is older than the embedded one, or is the same version with the same digest |
+| `transactions_not_supported` | The upgrade needs a migration and the format does not support transactions                  |
+| `incompatible_upgrade`       | After the migrations, an instance does not match the installed schemas; nothing is changed  |
+
 ## Persistence Interface
 
 *Definition.*
@@ -124,3 +171,35 @@ A format provides:
 - optionally a write `lock` and support for transactions.
 
 The contract is stated by the doc comments of `PersistenceInterface` in `@scfloworg/core` (`src/types.ts`), and the rules of locators by its `docs/formats.md`.
+
+## Action Package
+
+*Definition.*
+
+`@scfloworg/actions` holds the part of the [action](meta-model.md#action) contract that does not need the engine: the action type, the check of parameters, a registry, the batches made only of calls, the export to AI tools and the run log. It is neutral: it depends on no other package of SCFlow and knows no model, so a host that is not MCL, such as an application framework, uses it as it is. Its only dependency is the standard JSON Schema validator Ajv.
+
+**The engine keeps what needs a dataset.** The package does not read instances and does not evaluate filters, so two parts of the contract are given to it by the engine, which plugs them in:
+
+| Part | In the package | Given by the engine |
+| --- | --- | --- |
+| `ref` in `parameters` | Accepted as a keyword; applies the rule of resolution: an id wins over a name that equals it, and no instance or several are refused with `invalid_parameters` | A resolver that, for a schema and a value, gives the key of the instance whose id is the value, and the keys of the instances whose `display_name` is the value in any language |
+| Body context | Records each command of a body, with its result, and each nested call, as the steps of the run entry | The context a body receives, which emits the commands |
+| Batch | Runs a batch whose steps are `call` steps with `with` and `as`, resolving `${name.path}` from the results named so far | `when`, `each` and `fail`, run by the script runner of the engine, like a command step of a procedure |
+| Transaction | Nothing: a batch is a sequence of calls | The one transaction of an action or of a batch, and its rollback when a call is refused |
+
+A step of a batch given to the package that is not a `call` with `with` and `as` is refused with `invalid_script_step`; the engine runs such a batch through its script runner instead. In a batch run by the package, a placeholder `${name.path}` whose first segment is not an `as` name already set is refused with `unknown_reference`; a placeholder that is not a path, such as `${now()}`, is passed on unchanged to the called action.
+
+**Export.** The export of an action to an AI tool maps its `id` to the tool name, with the slash replaced by a hyphen (`scflow/create_actor` gives `scflow-create_actor`), because AI clients accept only letters, digits, `_` and `-` in a tool name, and a hyphen never appears in an identifier, so the mapping goes back. `title`, `description` and `parameters` are kept as they are, `kind: read` gives `readOnlyHint` and `destructive` gives `destructiveHint`. An action whose `exposure` is `hidden` is not exported.
+
+**Run log.** The run entries follow the [run log](meta-model.md#action): `parameters` and `result` are in the canonical form of JSON, and the `error` of a refused call is the code of its exception. A call refused by its parameters is recorded too, with the parameters it was given.
+
+*Exceptions.*
+
+| exception | thrown when |
+| --- | --- |
+| `invalid_parameters` | the parameters break the JSON Schema of the action, or a `ref` matches no instance or several |
+| `unknown_action` | an id names no action of the registry |
+| `duplicate_name` | an action is registered with the id of another one |
+| `constraint_violation` | an action is registered with an id that is not a namespace, a slash and a name, both identifiers, or with `parameters` that are not a valid JSON Schema object |
+| `invalid_script_step` | a step of a batch is not a `call` with only `with` and `as`, or a batch has `parameters` |
+| `unknown_reference` | a placeholder of a batch names an `as` name that is not set yet |

@@ -10,9 +10,10 @@
   dataset and clears the relations of own instances to removed ones, mandatory
   ones included; it leaves no review to the host before it writes.
 - **A module upgrade runs when the host asks.** `upgradeModule` carries a dataset
-  to a newer version of a module; nothing compares the versions and digests when a
-  dataset opens. A migration body runs under the new schemas only, so it cannot
-  read the values of a schema the new version drops.
+  to a newer version of a module; `@scfloworg/core` compares no versions or digests
+  when a dataset opens, which is the host's part. On a format without transactions
+  the declared rules are not checked by `upgradeModule`: nothing could undo the
+  upgrade once a rule is found broken.
 - **Rules of a facet are not evaluated.** `checks` and `unique` declared on a
   facet are accepted and ignored.
 - **Rule paths do not cross virtual relations.** A path in a rule or a filter

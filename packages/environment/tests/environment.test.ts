@@ -3,7 +3,7 @@ import { load } from "js-yaml";
 import { MCL_CORE_KEY, readModuleManifest, type PersistenceInterface } from "@scfloworg/core";
 import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import { defineModule, type ModuleBody } from "@scfloworg/module";
-import { createEnvironment, type ActionContext } from "../src/index.js";
+import { createEnvironment, type ActionContext, type MigrationContext } from "../src/index.js";
 
 /** The rules of `docs/environment.md`, on small modules of their own. */
 
@@ -335,10 +335,51 @@ describe("opening against the catalogue", () => {
     return dataset.dump("json");
   }
 
-  const restoreIn = async (dump: string, ...modules: ReturnType<typeof defineModule>[]) => {
+  const environmentWith = (...modules: ReturnType<typeof defineModule>[]) => {
     const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
     for (const module of modules) env.modules.install(module);
-    return env.datasets.restore("js:plant", dump, "json");
+    return env;
+  };
+
+  const restoreIn = async (dump: string, ...modules: ReturnType<typeof defineModule>[]) =>
+    environmentWith(...modules).datasets.restore("js:plant", dump, "json");
+
+  const DONE = "      - name: done\n        type: boolean";
+  const TITLE = "      - name: title\n        type: string";
+
+  /** `acme:tasks` at `version`, with `title` replaced by `properties`, and code for the migrations of `migrations`. */
+  const tasksWithMigrations = (
+    version: string,
+    properties: string,
+    migrations: Record<string, ModuleBody>,
+  ) =>
+    defineModule(
+      manifest(
+        tasksYaml(version).replace(TITLE, properties) +
+          `migrations:\n${Object.keys(migrations)
+            .map((to) => `  - to: ${to}`)
+            .join("\n")}\n`,
+      ),
+      { actions: tasksCode, migrations },
+    );
+
+  /** A migration body that moves `title` to `label`, and records its context. */
+  const moveTitle = (seen: Row[]) => async (context: MigrationContext, params: unknown) => {
+    seen.push({
+      locator: context.locator,
+      module: context.module,
+      from: context.from,
+      to: context.to,
+      params,
+    });
+    const { after } = await context.runCommand(context.locator, { query: "tasks.task" });
+    for (const task of after as Row[]) {
+      await context.runCommand(context.locator, {
+        update: "tasks.task",
+        filters: { id: task.id as string },
+        input: { label: task.title as string },
+      });
+    }
   };
 
   it("opens read only a dataset whose module is missing", async () => {
@@ -347,39 +388,180 @@ describe("opening against the catalogue", () => {
     expect(dataset.modules).toEqual([
       { module: "acme:tasks", version: "1.0.0", installed: null, state: "missing" },
     ]);
+    expect(dataset.upgrades).toEqual([]);
     expect((await dataset.query({ query: "tasks.task" })).after).toHaveLength(1);
     await expect(dataset.run("tasks/add_task", { title: "x" })).rejects.toMatchObject({
       code: "unknown_action",
     });
   });
 
-  it("opens read only a dataset behind, ahead of or beside the installed version", async () => {
-    const outdated = await restoreIn(await savedWith(tasksModule()), tasksModule("1.1.0"));
-    expect(outdated.modules[0]).toMatchObject({
-      version: "1.0.0",
-      installed: "1.1.0",
-      state: "outdated",
-    });
+  it("opens read only a dataset ahead of the installed version", async () => {
     const ahead = await restoreIn(await savedWith(tasksModule("2.0.0")), tasksModule("1.1.0"));
     expect(ahead.modules[0]).toMatchObject({
       version: "2.0.0",
       installed: "1.1.0",
       state: "ahead",
     });
-    const changed = await restoreIn(
-      await savedWith(tasksModule()),
-      tasksModule("1.0.0", "      - name: done\n        type: boolean"),
+    expect(ahead.readOnly).toBe(true);
+  });
+
+  it("upgrades a dataset behind the installed version with a compatible change", async () => {
+    const newer = tasksModule(
+      "1.1.0",
+      "      - name: done\n        type: boolean\n        default_value: false",
     );
-    expect(changed.modules[0]).toMatchObject({
+    const dataset = await restoreIn(await savedWith(tasksModule()), newer);
+    expect(dataset.readOnly).toBe(false);
+    expect(dataset.modules).toEqual([
+      { module: "acme:tasks", version: "1.1.0", installed: "1.1.0", state: "current" },
+    ]);
+    expect(dataset.upgrades).toEqual([
+      { module: "acme:tasks", from: "1.0.0", to: "1.1.0", migrations: [], changed: true },
+    ]);
+    expect(await dataset.info()).toMatchObject({
+      modules: [{ module: "acme:tasks", version: "1.1.0" }],
+    });
+    expect((await dataset.query({ query: "tasks.task" })).after).toEqual([
+      expect.objectContaining({ title: "Ship", done: false }),
+    ]);
+    await dataset.run("tasks/add_task", { title: "Again" });
+  });
+
+  it("lets the installed module win over a snapshot of the same version with another digest", async () => {
+    const dataset = await restoreIn(await savedWith(tasksModule()), tasksModule("1.0.0", DONE));
+    expect(dataset.modules[0]).toMatchObject({
       version: "1.0.0",
       installed: "1.0.0",
-      state: "changed",
+      state: "current",
     });
-    for (const dataset of [outdated, ahead, changed]) expect(dataset.readOnly).toBe(true);
+    expect(dataset.upgrades).toEqual([
+      expect.objectContaining({ module: "acme:tasks", from: "1.0.0", to: "1.0.0" }),
+    ]);
+    expect(dataset.readOnly).toBe(false);
+  });
+
+  it("opens read only on request, without upgrading", async () => {
+    const env = environmentWith(tasksModule("1.1.0"));
+    const dataset = await env.datasets.restore("js:plant", await savedWith(tasksModule()), "json", {
+      readOnly: true,
+    });
+    expect(dataset.readOnly).toBe(true);
+    expect(dataset.modules[0]).toMatchObject({
+      version: "1.0.0",
+      installed: "1.1.0",
+      state: "outdated",
+    });
+    expect(dataset.upgrades).toEqual([]);
+    expect(await dataset.info()).toMatchObject({ modules: [{ version: "1.0.0" }] });
+    expect((await dataset.run("tasks/count_tasks")).result).toBe(1);
+    await expect(dataset.run("tasks/add_task", { title: "x" })).rejects.toMatchObject({
+      code: "read_only_dataset",
+    });
+    // a current dataset opened read only refuses writes as well
+    await dataset.close();
+    const current = await env.datasets.open("js:plant");
+    expect(current.modules[0]).toMatchObject({ state: "current" });
+    await current.close();
+    const readOnly = await env.datasets.open("js:plant", { readOnly: true });
+    expect(readOnly.modules[0]).toMatchObject({ state: "current" });
+    expect(readOnly.readOnly).toBe(true);
+    await expect(readOnly.run("tasks/add_task", { title: "x" })).rejects.toMatchObject({
+      code: "read_only_dataset",
+    });
+  });
+
+  it("runs the coded migrations of a module in version order, in the transaction of the upgrade", async () => {
+    const seen: Row[] = [];
+    const v2 = tasksWithMigrations("2.0.0", "      - name: label\n        type: string", {
+      "1.5.0": async (context: MigrationContext) => {
+        seen.push({ to: context.to });
+      },
+      "2.0.0": moveTitle(seen),
+      "3.0.0": async () => {
+        throw new Error("not reached: newer than the installed version");
+      },
+    });
+    const dataset = await restoreIn(await savedWith(tasksModule()), v2);
+    expect(seen).toEqual([
+      { to: "1.5.0" },
+      { locator: "js:plant", module: "acme:tasks", from: "1.0.0", to: "2.0.0", params: undefined },
+    ]);
+    expect(dataset.upgrades).toEqual([
+      {
+        module: "acme:tasks",
+        from: "1.0.0",
+        to: "2.0.0",
+        migrations: ["1.5.0", "2.0.0"],
+        changed: true,
+      },
+    ]);
+    const { after } = await dataset.query({ query: "tasks.task" });
+    expect(after).toEqual([expect.objectContaining({ label: "Ship" })]);
+    expect(after[0]).not.toHaveProperty("title");
+  });
+
+  it("upgrades the modules one by one, a dependency first", async () => {
+    const notes11 = defineModule(manifest(notesYaml.replace("version: 1.0.0", "version: 1.1.0")), {
+      actions: notesModule().actions,
+    });
+    const dataset = await restoreIn(
+      await savedWith(tasksModule(), notesModule()),
+      notes11,
+      tasksModule("1.1.0"),
+    );
+    expect(dataset.upgrades.map((upgrade) => [upgrade.module, upgrade.to])).toEqual([
+      ["acme:tasks", "1.1.0"],
+      ["acme:notes", "1.1.0"],
+    ]);
+    expect(dataset.modules.map((module) => module.state)).toEqual(["current", "current"]);
+  });
+
+  it("refuses to open a dataset whose upgrade is refused, and opens it read only", async () => {
+    const dump = await savedWith(tasksModule());
+    const env = environmentWith(incompatible());
+    await env.datasets.restore("js:plant", dump, "json", { readOnly: true }).then((d) => d.close());
+    await expect(env.datasets.open("js:plant")).rejects.toMatchObject({
+      code: "incompatible_upgrade",
+    });
+    expect(env.datasets.get("js:plant")).toBeUndefined();
+    const readOnly = await env.datasets.open("js:plant", { readOnly: true });
+    expect(readOnly.modules[0]).toMatchObject({ version: "1.0.0", state: "outdated" });
+    expect((await readOnly.query({ query: "tasks.task" })).after).toEqual([
+      expect.objectContaining({ title: "Ship" }),
+    ]);
+
+    function incompatible() {
+      return defineModule(
+        manifest(tasksYaml("2.0.0").replace(TITLE, "      - name: title\n        type: integer")),
+        {
+          actions: tasksCode,
+        },
+      );
+    }
+  });
+
+  it("rolls back the upgrade of a module whose migration fails", async () => {
+    const dump = await savedWith(tasksModule());
+    const env = environmentWith(
+      tasksWithMigrations("2.0.0", "      - name: label\n        type: string", {
+        "2.0.0": async (context: MigrationContext) => {
+          await moveTitle([])(context, undefined);
+          throw new Error("the migration failed");
+        },
+      }),
+    );
+    await expect(env.datasets.restore("js:plant", dump, "json")).rejects.toThrow(
+      "the migration failed",
+    );
+    const readOnly = await env.datasets.open("js:plant", { readOnly: true });
+    expect(await readOnly.info()).toMatchObject({ modules: [{ version: "1.0.0" }] });
+    const { after } = await readOnly.query({ query: "tasks.task" });
+    expect(after).toEqual([expect.objectContaining({ title: "Ship" })]);
+    expect(after[0]).not.toHaveProperty("label");
   });
 
   it("runs read actions on a read-only dataset and refuses the others", async () => {
-    const dataset = await restoreIn(await savedWith(tasksModule()), tasksModule("1.1.0"));
+    const dataset = await restoreIn(await savedWith(tasksModule("2.0.0")), tasksModule("1.1.0"));
     expect((await dataset.run("tasks/count_tasks")).result).toBe(1);
     await expect(dataset.run("tasks/add_task", { title: "x" })).rejects.toMatchObject({
       code: "read_only_dataset",

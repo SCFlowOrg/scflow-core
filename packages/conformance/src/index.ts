@@ -24,6 +24,7 @@ import {
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
+import { moduleUpgradeCases } from "./moduleUpgrade.js";
 import { procedureCases } from "./procedures.js";
 import { ruleCases } from "./rules.js";
 
@@ -2484,6 +2485,17 @@ schemas:
 
   datasetModuleCases(formatPrefix, newLocator);
   facetCases(formatPrefix, newLocator);
+  moduleUpgradeCases(impl, formatPrefix, newLocator);
   ruleCases(formatPrefix, newLocator);
   procedureCases(formatPrefix, newLocator);
 }
+
+export { runActionConformanceSuite } from "./actions.js";
+export type {
+  ActionImplementation,
+  ConformanceAction,
+  ConformanceRefMatches,
+  ConformanceRegistry,
+  ConformanceRunHost,
+  ConformanceRunTrace,
+} from "./actions.js";

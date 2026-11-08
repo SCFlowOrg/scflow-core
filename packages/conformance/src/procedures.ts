@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { initDataset, readModuleManifest, runCommand, runProcedure, upgradeModule, queryDataset } from "@scfloworg/core";
+import { createApiSession, initDataset, readModuleManifest, runCommand, runProcedure, queryDataset } from "@scfloworg/core";
+import type { ModuleManifest, UpgradeModuleOptions } from "@scfloworg/core";
 import type { AuthoredCommand, ProcedureHost } from "@scfloworg/core";
+
+/** Runs a module upgrade through a session of its own. */
+const upgradeModule = (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) =>
+  createApiSession().upgradeModule(locator, manifest, options);
 
 type Row = Record<string, unknown>;
 
@@ -157,17 +162,18 @@ migrations:
       expect((info.modules as Row[])[0]).toMatchObject({ module: "acme:shop", version: "2.0.0" });
     });
 
-    it("runs a migration body through commands, under the installed schemas", async () => {
+    it("runs a migration the host has code for through the session of the upgrade", async () => {
       const locator = await dataset();
       await runCommand(locator, { create: "shop.stock", input: [{ count: 2 }, { count: 5 }] });
       const v11 = readModuleManifest(shopModule("1.1.0", v1Schemas, `migrations:\n  - to: 1.1.0\n    body: double\n`));
-      const migrations = new Map([
-        ["1.1.0", async (context: { runCommand(command: AuthoredCommand): Promise<unknown> }) => {
-          const stock = (await context.runCommand({ query: "shop.stock" })) as { after: Row[] };
-          for (const s of stock.after) await context.runCommand({ update: "shop.stock", filters: { id: s.id }, input: { count: (s.count as number) * 2 } });
-        }],
-      ]);
-      await upgradeModule(locator, v11, { migrations });
+      const session = createApiSession();
+      await session.upgradeModule(locator, v11, {
+        migrate: async () => {
+          const stock = (await session.runCommand(locator, { query: "shop.stock" })) as { after: Row[] };
+          for (const s of stock.after) await session.runCommand(locator, { update: "shop.stock", filters: { id: s.id }, input: { count: (s.count as number) * 2 } });
+          return true;
+        },
+      });
       const counts = ((await runCommand(locator, { query: "shop.stock" })).after as Row[]).map((r) => r.count).sort();
       expect(counts).toEqual([10, 4].sort());
     });
@@ -178,22 +184,44 @@ migrations:
       const renamedNoMigration = readModuleManifest(shopModule("2.0.0", v2Schemas));
       expect(await codeOf(upgradeModule(locator, renamedNoMigration))).toBe("incompatible_upgrade");
       const withBody = readModuleManifest(shopModule("1.1.0", v1Schemas, `migrations:\n  - to: 1.1.0\n    body: double\n`));
-      expect(await codeOf(upgradeModule(locator, withBody))).toBe("constraint_violation");
+      expect(await codeOf(upgradeModule(locator, withBody))).toBe("incompatible_upgrade");
       expect(await codeOf(upgradeModule(locator, readModuleManifest(shopModule("0.9.0", v1Schemas))))).toBe("constraint_violation");
       expect((await runCommand(locator, { query: "shop.site" })).after).toMatchObject([{ name: "paris", label: "Paris" }]);
+    });
+
+    it("rolls a rename back when the rules of the new version refuse it", async () => {
+      const locator = await dataset();
+      await runCommand(locator, { create: "shop.site", input: [{ name: "paris", label: "Paris" }] });
+      const strict = readModuleManifest(
+        shopModule(
+          "2.0.0",
+          v2Schemas.replace(
+            "  - name: stock\n",
+            "    checks:\n      - name: place_is_named_lyon\n        require: { title: { eq: Lyon } }\n  - name: stock\n",
+          ),
+          v2Migrations,
+        ),
+      );
+      const error = (await upgradeModule(locator, strict).catch((e) => e)) as { code: string; details: { violations: Row[] } };
+      expect(error.code).toBe("rule_violation");
+      expect(error.details.violations.map((v) => v.key)).toEqual(["paris"]);
+      expect((await runCommand(locator, { query: "shop.site" })).after).toMatchObject([{ name: "paris", label: "Paris" }]);
+      expect(((await queryDataset(locator)) as Row).modules as Row[]).toMatchObject([{ version: "1.0.0" }]);
     });
 
     it("rolls a failed body back", async () => {
       const locator = await dataset();
       await runCommand(locator, { create: "shop.stock", input: [{ count: 2 }] });
       const v11 = readModuleManifest(shopModule("1.1.0", v1Schemas, `migrations:\n  - to: 1.1.0\n    body: broken\n`));
-      const migrations = new Map([
-        ["1.1.0", async (context: { runCommand(command: AuthoredCommand): Promise<unknown> }) => {
-          await context.runCommand({ update: "shop.stock", input: { count: 9 } });
-          throw new Error("broken body");
-        }],
-      ]);
-      await expect(upgradeModule(locator, v11, { migrations })).rejects.toThrow("broken body");
+      const session = createApiSession();
+      await expect(
+        session.upgradeModule(locator, v11, {
+          migrate: async () => {
+            await session.runCommand(locator, { update: "shop.stock", input: { count: 9 } });
+            throw new Error("broken body");
+          },
+        }),
+      ).rejects.toThrow("broken body");
       expect((await runCommand(locator, { query: "shop.stock" })).after).toMatchObject([{ count: 2 }]);
       const info = (await queryDataset(locator)) as Row;
       expect((info.modules as Row[])[0]).toMatchObject({ version: "1.0.0" });

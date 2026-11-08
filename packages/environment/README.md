@@ -21,14 +21,14 @@ const { result, delta } = await dataset.run("carbon/update_actor_emissions", { i
 
 const dump = await dataset.dump("yaml");            // both modules embedded
 const copy = await createEnvironment({ formats: [createJsPersistenceInterface()] })
-  .datasets.restore("js:copy", dump, "yaml");       // read only unless its modules are installed
+  .datasets.restore("js:copy", dump, "yaml");       // upgraded to the installed modules, or read only
 ```
 
 | Part | Holds |
 | --- | --- |
 | `createEnvironment({ formats })` | An engine of its own, made by `createEngine` of `@scfloworg/core`: two environments share nothing |
 | `env.modules` | One active version of each module, with its code: `install`, `load`, `get`, `list` |
-| `env.datasets` | `create`, `open`, `restore`, `get`, `list`; an open dataset knows the state of each of its modules |
+| `env.datasets` | `create`, `open`, `restore`, `get`, `list`; `open` upgrades a dataset to the installed modules, with their migrations, unless it is opened read only |
 | `dataset.run(id, params)` | One action, in one transaction the environment opens; its body receives an `ActionContext` |
 | `dataset.query`, `info`, `dump`, `close` | Reads and saving, outside any action |
 
@@ -39,5 +39,5 @@ the only way a body reaches the engine. The body imports only types from
 `@scfloworg/core` and this package.
 
 Not here yet: the validation of parameters, procedures and the run log (the
-action package), model upgrades, the refusal of writes outside an action
+action package), the declared forms of migrations and the check of rules after an upgrade, the refusal of writes outside an action
 (piece 1.8 of the engine), and documents, files and undo (the workspace).

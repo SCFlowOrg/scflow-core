@@ -16,6 +16,7 @@ import {
   type Delta,
   type Engine,
   type MclAccess,
+  type MigrationStep,
   type ModuleManifest,
   type PersistenceInterface,
   type TransientObject,
@@ -57,14 +58,46 @@ export interface DatasetRegistry {
    * module that is not installed, and as `initDataset` does.
    */
   create(options: CreateDatasetOptions): Promise<OpenDataset>;
-  /** Opens the dataset at `locator`, or returns it when it is open. Fails with `dataset_not_found`. */
-  open(locator: string): Promise<OpenDataset>;
-  /** Restores a dump at `locator`, as `restoreDataset` does, and opens it. */
-  restore(locator: string, dump: string, format: DumpFormat): Promise<OpenDataset>;
+  /**
+   * Opens the dataset at `locator`, or returns it when it is open, whatever
+   * `options`. Unless `options.readOnly`, first upgrades each module whose
+   * installed version is newer, or the same with another digest, one by one in
+   * the order of the dataset's modules (see `docs/environment.md`, Opening a
+   * dataset). Fails with `dataset_not_found`, and with the error of an upgrade
+   * that is refused: the dataset is not opened then, and the modules upgraded
+   * before stay upgraded.
+   */
+  open(locator: string, options?: OpenOptions): Promise<OpenDataset>;
+  /** Restores a dump at `locator`, as `restoreDataset` does, and opens it as `open` does. */
+  restore(
+    locator: string,
+    dump: string,
+    format: DumpFormat,
+    options?: OpenOptions,
+  ): Promise<OpenDataset>;
   /** The open dataset at `locator`, or `undefined`. */
   get(locator: string): OpenDataset | undefined;
   /** The open datasets, in the order they were opened. */
   list(): readonly OpenDataset[];
+}
+
+/** What `datasets.open` and `datasets.restore` take. */
+export interface OpenOptions {
+  /** Opens the dataset read only: nothing is upgraded, and an action that writes is refused. */
+  readOnly?: boolean;
+}
+
+/** A module upgraded when its dataset was opened. */
+export interface ModuleUpgrade {
+  readonly module: string;
+  /** The version embedded before the upgrade. */
+  readonly from: string;
+  /** The version embedded now, the installed one. */
+  readonly to: string;
+  /** The `to` of each migration that ran, in order. */
+  readonly migrations: readonly string[];
+  /** Whether an instance changed. */
+  readonly changed: boolean;
 }
 
 /** The format of a dump. */
@@ -98,7 +131,12 @@ export interface OpenDataset {
   readonly locator: string;
   /** The modules the dataset uses, each with its state. */
   readonly modules: readonly ModuleState[];
-  /** Whether a module is neither `current` nor `local`: an action that writes is then refused. */
+  /** The modules upgraded when the dataset was opened, in order. */
+  readonly upgrades: readonly ModuleUpgrade[];
+  /**
+   * Whether an action that writes is refused: the dataset was opened read
+   * only, or a module is neither `current` nor `local`.
+   */
   readonly readOnly: boolean;
   /**
    * Runs the action `id` with `params`, in one transaction unless it is a
@@ -143,6 +181,29 @@ export interface ActionContext extends MclAccess {
 /** The body of an action, as the environment calls it. */
 export type ActionBody = (context: ActionContext, params: unknown) => unknown;
 
+/**
+ * The context a migration receives: an `MclAccess` limited to the dataset it
+ * upgrades, inside the transaction of the upgrade, with the installed schemas
+ * of the module (see `docs/environment.md`, Migrations).
+ */
+export interface MigrationContext extends MclAccess {
+  /** The locator of the dataset being upgraded. */
+  readonly locator: string;
+  /** The key of the module being upgraded. */
+  readonly module: string;
+  /** The version embedded before the upgrade. */
+  readonly from: string;
+  /** The version this migration reaches. */
+  readonly to: string;
+  /** Runs a command on the dataset; another locator fails with `dataset_not_found`. */
+  runCommand(locator: string, command: AuthoredCommand): Promise<CommandResult>;
+  /** Runs a script on the dataset; another locator fails with `dataset_not_found`. */
+  runScript(locator: string, script: AuthoredScript): Promise<CommandResult>;
+}
+
+/** The body of a migration, as the environment calls it: with no parameters. */
+export type MigrationBody = (context: MigrationContext, params: undefined) => unknown;
+
 /** An action found in the modules of a dataset. */
 interface FoundAction {
   readonly id: string;
@@ -158,6 +219,8 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
   const session = engine.createApiSession();
   const modules = createCatalogue();
   const open = new Map<string, OpenDataset>();
+  // The openings under way, so that two calls for one locator upgrade it once.
+  const opening = new Map<string, Promise<OpenDataset>>();
 
   const datasets: DatasetRegistry = {
     async create(create: CreateDatasetOptions): Promise<OpenDataset> {
@@ -166,31 +229,110 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       await engine.initDataset(locator, create.name ?? "dataset", { modules: manifests });
       return openAt(locator);
     },
-    open: (locator) => openAt(locator),
-    async restore(locator: string, dump: string, format: DumpFormat): Promise<OpenDataset> {
+    open: (locator, options) => openAt(locator, options),
+    async restore(
+      locator: string,
+      dump: string,
+      format: DumpFormat,
+      options?: OpenOptions,
+    ): Promise<OpenDataset> {
       await engine.restoreDataset(locator, dump, format);
-      return openAt(locator);
+      return openAt(locator, options);
     },
     get: (locator) => open.get(locator),
     list: () => [...open.values()],
   };
 
-  async function openAt(locator: string): Promise<OpenDataset> {
+  function openAt(locator: string, options: OpenOptions = {}): Promise<OpenDataset> {
     const known = open.get(locator);
-    if (known) return known;
-    const info = await session.queryDataset(locator);
-    if (info === null) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
-    const states = await moduleStates(modules, info as TransientObject);
-    // Opened by a concurrent call while this one read the dataset.
-    const raced = open.get(locator);
-    if (raced) return raced;
-    const dataset = openDataset(locator, states);
+    if (known) return Promise.resolve(known);
+    const pending = opening.get(locator);
+    if (pending) return pending;
+    const run = readAndUpgrade(locator, options.readOnly === true).finally(() =>
+      opening.delete(locator),
+    );
+    opening.set(locator, run);
+    return run;
+  }
+
+  async function readAndUpgrade(locator: string, readOnly: boolean): Promise<OpenDataset> {
+    const read = async () => {
+      const info = await session.queryDataset(locator);
+      if (info === null) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
+      return moduleStates(modules, info as TransientObject);
+    };
+    let states = await read();
+    const upgrades: ModuleUpgrade[] = [];
+    if (!readOnly) {
+      for (const state of states) {
+        if (state.state !== "outdated" && state.state !== "changed") continue;
+        const module = modules.get(state.module)!;
+        const { from, to, migrations, changed } = await session.upgradeModule(
+          locator,
+          module.manifest,
+          {
+            migrate: (step) => runMigration(locator, module, step),
+          },
+        );
+        upgrades.push(
+          Object.freeze({
+            module: module.key,
+            from,
+            to,
+            migrations: Object.freeze([...migrations]),
+            changed,
+          }),
+        );
+      }
+      if (upgrades.length > 0) states = await read();
+    }
+    const dataset = openDataset(locator, states, upgrades, readOnly);
     open.set(locator, dataset);
     return dataset;
   }
 
-  function openDataset(locator: string, states: ModuleState[]): OpenDataset {
-    const readOnly = states.some((state) => state.state !== "current" && state.state !== "local");
+  /** Runs the code of the migration `step` of `module`, if it has some, and tells whether it did. */
+  async function runMigration(
+    locator: string,
+    module: InstalledModule,
+    step: MigrationStep,
+  ): Promise<boolean> {
+    const body = module.migrations.get(step.to) as MigrationBody | undefined;
+    if (!body) return false;
+    const reach = (target: string) => {
+      if (target !== locator)
+        throw modelError(
+          "dataset_not_found",
+          `the migration of "${module.key}" to ${step.to} reaches only "${locator}", not "${target}"`,
+        );
+    };
+    const context: MigrationContext = Object.freeze({
+      locator,
+      module: module.key,
+      from: step.from,
+      to: step.to,
+      async runCommand(target: string, command: AuthoredCommand) {
+        reach(target);
+        return session.runCommand(locator, command);
+      },
+      async runScript(target: string, script: AuthoredScript) {
+        reach(target);
+        return session.runScript(locator, script);
+      },
+    });
+    await body(context, undefined);
+    return true;
+  }
+
+  function openDataset(
+    locator: string,
+    states: ModuleState[],
+    upgrades: ModuleUpgrade[],
+    openedReadOnly: boolean,
+  ): OpenDataset {
+    const readOnly =
+      openedReadOnly ||
+      states.some((state) => state.state !== "current" && state.state !== "local");
     // The modules of the dataset whose code the environment runs.
     const usable = states
       .filter((state) => state.installed !== null)
@@ -272,7 +414,7 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       if (readOnly)
         throw modelError(
           "read_only_dataset",
-          `"${locator}" is open read only, so the action "${id}" cannot run: ${reasons(states)}`,
+          `"${locator}" is open read only, so the action "${id}" cannot run: ${openedReadOnly ? "it was opened read only" : reasons(states)}`,
         );
       if (!(await session.supportsTransactions(locator))) {
         const before = await dataVersions();
@@ -299,6 +441,7 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
     const dataset: OpenDataset = Object.freeze({
       locator,
       modules: Object.freeze(states),
+      upgrades: Object.freeze(upgrades),
       readOnly,
       run: (id: string, params?: unknown) => inTurn(() => run(id, params)),
       query: (command: AuthoredCommand) => inTurn(() => session.runCommand(locator, command)),

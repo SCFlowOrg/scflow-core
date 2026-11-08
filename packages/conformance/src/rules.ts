@@ -8,9 +8,12 @@ import {
   runCommand,
   runScript,
   upgradeDataset,
-  upgradeModule,
 } from "@scfloworg/core";
-import type { ModuleManifest } from "@scfloworg/core";
+
+/** Runs a module upgrade through a session of its own. */
+const upgradeModule = (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) =>
+  createApiSession().upgradeModule(locator, manifest, options);
+import type { ModuleManifest, UpgradeModuleOptions } from "@scfloworg/core";
 
 type Row = Record<string, unknown>;
 

@@ -25,6 +25,9 @@ import {
   readModuleManifests,
   writeModules,
 } from "./datasetModules.js";
+import type { DatasetModel } from "./datasetModules.js";
+import { applyDeclaredMigration, compareVersions, migrationsBetween } from "./migrations.js";
+import type { UpgradeModuleOptions, UpgradeModuleResult } from "./migrations.js";
 import { listImports, performImport, performRefreshImport, performRemoveImport, planImport } from "./imports.js";
 import type { CheckImportResult, DatasetRef, RefreshResult } from "./imports.js";
 import type { ModuleManifest } from "./mclCore.js";
@@ -770,33 +773,7 @@ async function setLocalModuleIn(scope: EngineScope, locator: string, manifest: M
     const after = index < 0 ? [...before, local] : before.map((m, i) => (i === index ? local : m));
     const oldModel = await loadDatasetModel(impl, rest);
     const newModel = buildDatasetModel(after);
-    const where = `changing "${local.name}" of "${locator}"`;
-
-    const datasetValue = await impl.getDataset(rest);
-    const ctx: TypeResolutionContext = {
-      resolveSchema: (n) => newModel.schemas.get(n),
-      resolveScalarType: (n) => newModel.scalarTypes.get(n),
-    };
-    const importNamespaces = (await listImports(impl, rest)).map((i) => i.namespace);
-    const changes: { schema: NormalizedSchema; key: string; instance: TransientObject }[] = [];
-    for (const [key, oldSchema] of oldModel?.schemas ?? []) {
-      if (oldModel?.set.resolveSchema(key)?.module.key !== local.name) continue;
-      const keyProp = keyPropertyName(oldSchema);
-      if (!keyProp) continue;
-      const stored = await impl.listInstances(rest, key, derivePropertyRoles(oldSchema));
-      if (stored.length === 0) continue;
-      const schema = newModel.schemas.get(key);
-      if (!schema) throw modelError("incompatible_upgrade", `${where}: schema "${key}" leaves the module but the dataset holds instances of it`);
-      for (const raw of stored) {
-        // The key of an imported instance carries the namespace of its import,
-        // which its own type does not allow for: it is checked without it.
-        const key = (raw as TransientObject)[keyProp] as string;
-        const ns = importNamespaceOf(key, importNamespaces) ?? "";
-        const bare = { ...(raw as TransientObject), [keyProp]: key.slice(ns.length) };
-        const reconciled = reconcileInstanceAgainstSchema(schema, bare, ctx, datasetValue, where);
-        if (reconciled) changes.push({ schema, key, instance: { ...reconciled, [keyProp]: key } });
-      }
-    }
+    const changes = await reconcileModuleInstances(impl, rest, oldModel, newModel, local.name, `changing "${local.name}" of "${locator}"`);
 
     await writeModules(impl, rest, after);
     for (const change of changes) {
@@ -813,193 +790,109 @@ async function setLocalModuleIn(scope: EngineScope, locator: string, manifest: M
   return datasetTransientForm(impl, rest);
 }
 
-// ---------------------------------------------------------------------------
-// Module upgrade — see `docs/model-upgrade.md`, Module upgrade
-// ---------------------------------------------------------------------------
-
-/** What a migration body runs its commands through: the dataset being upgraded, under the installed schemas of the module. */
-export interface MigrationContext {
-  /** The locator of the dataset being upgraded. */
-  readonly locator: string;
-  /** Runs a command on the dataset; a target, when given first, must be `locator`. */
-  runCommand(targetOrCommand: string | AuthoredCommand, command?: AuthoredCommand): Promise<CommandResult>;
-}
-
-/** The body of a migration: a bundle, under the contract of a body, which emits commands only. */
-export type MigrationBody = (context: MigrationContext, params?: unknown) => unknown;
-
-/** What `upgradeModule` takes beside the manifest. */
-export interface UpgradeModuleOptions {
-  /** The body of each migration of the module, by the version it reaches: the code its bundle gives. */
-  migrations?: ReadonlyMap<string, MigrationBody>;
-}
-
-const MIGRATION_FORMS = ["rename_property", "rename_schema", "delete_property", "body"] as const;
-
-function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
-  return 0;
+/** An instance to write back after a module changed: the reconciled form of a stored instance. */
+interface ModuleInstanceChange {
+  schema: NormalizedSchema;
+  key: string;
+  instance: TransientObject;
 }
 
 /**
- * Carries the dataset at `locator` from the embedded manifest of a module it
- * uses to `manifest`, a newer version of the same module, and returns the
- * dataset's transient form; observers get a reset. The migrations of
- * `manifest` past the embedded version, up to its own, run in version order
- * and in the order written: a declared form (`rename_property`,
- * `rename_schema`, `delete_property`) rewrites the stored values under the
- * embedded schemas, then the stored instances are checked against the
- * installed schemas as an automatic upgrade (a property missing from an
- * instance takes its default), the module is embedded at its new version, and
- * each `body`, given by `options.migrations`, runs through commands under the
- * installed schemas. Every declared rule is then checked on every instance.
- *
- * It all happens as one step: a failure undoes everything. Throws
- * `constraint_violation` for a manifest that is not a newer version of a
- * published module the dataset uses, or a migration that has not exactly one
- * form or whose body the options do not give; `incompatible_upgrade` when a
- * stored instance cannot take the installed schemas; `rule_violation`, with
- * every instance at fault in `details.violations`, when a rule breaks; what
- * `createModuleSet` throws for the new set of modules, and what a body throws.
+ * Checks the instances stored for the schemas of the module `moduleKey`
+ * against `newModel`, without writing anything, and returns those to write
+ * back: a property missing from an instance takes its default, one the schema
+ * no longer declares is dropped (see `reconcileInstanceAgainstSchema`). Throws
+ * `incompatible_upgrade` for a value the new schema no longer accepts and for
+ * an instance of a schema that leaves the module. The schemas of the module
+ * are those of `oldModel` and of `newModel`. `renames` gives the schemas a
+ * declared migration renamed: a relation that follows one keeps its values.
  */
-async function upgradeModuleIn(scope: EngineScope, locator: string, manifest: ModuleManifest, options: UpgradeModuleOptions = {}): Promise<TransientValue> {
-  const { impl, rest } = resolveImpl(scope, locator);
-  const next = validateModuleManifest(manifest);
-  if (isLocalModule(next.name)) {
-    throw modelError("constraint_violation", `"${next.name}" is a local module: it changes with setLocalModule`);
+async function reconcileModuleInstances(
+  impl: PersistenceInterface,
+  rest: string,
+  oldModel: DatasetModel | null,
+  newModel: DatasetModel,
+  moduleKey: string,
+  where: string,
+  renames?: ReadonlyMap<string, string>,
+): Promise<ModuleInstanceChange[]> {
+  const datasetValue = await impl.getDataset(rest);
+  const ctx: TypeResolutionContext = {
+    resolveSchema: (n) => newModel.schemas.get(n),
+    resolveScalarType: (n) => newModel.scalarTypes.get(n),
+  };
+  const importNamespaces = (await listImports(impl, rest)).map((i) => i.namespace);
+  const ofModule = (model: DatasetModel | null) =>
+    [...(model?.schemas ?? new Map<string, NormalizedSchema>())].filter(([key]) => model?.set.resolveSchema(key)?.module.key === moduleKey);
+  const schemas = new Map<string, NormalizedSchema>([...ofModule(newModel), ...ofModule(oldModel)]);
+  const changes: ModuleInstanceChange[] = [];
+  for (const [key, declared] of schemas) {
+    const stored = oldModel?.schemas.get(key) ?? declared;
+    const keyProp = keyPropertyName(stored);
+    if (!keyProp) continue;
+    const instances = await impl.listInstances(rest, key, derivePropertyRoles(stored));
+    if (instances.length === 0) continue;
+    const schema = newModel.schemas.get(key);
+    if (!schema) throw modelError("incompatible_upgrade", `${where}: schema "${key}" leaves the module but the dataset holds instances of it`);
+    for (const raw of instances) {
+      // The key of an imported instance carries the namespace of its import,
+      // which its own type does not allow for: it is checked without it.
+      const instanceKey = (raw as TransientObject)[keyProp] as string;
+      const ns = importNamespaceOf(instanceKey, importNamespaces) ?? "";
+      const bare = { ...(raw as TransientObject), [keyProp]: instanceKey.slice(ns.length) };
+      const reconciled = reconcileInstanceAgainstSchema(schema, bare, ctx, datasetValue, where);
+      checkRetypedValues(stored === schema ? undefined : stored, schema, reconciled ?? bare, ctx, where, renames);
+      if (reconciled) changes.push({ schema, key: instanceKey, instance: { ...reconciled, [keyProp]: instanceKey } });
+    }
   }
-  await withLock(impl, rest, async () => {
-    if (!(await impl.datasetExists(rest))) throw modelError("dataset_not_found", `no dataset at "${locator}"`);
-    const before = await readModuleManifests(impl, rest);
-    const index = before.findIndex((m) => m.name === next.name);
-    if (index < 0) throw modelError("constraint_violation", `"${locator}" does not use the module "${next.name}"`);
-    const embedded = before[index];
-    if (compareVersions(next.version, embedded.version) < 0) {
-      throw modelError("constraint_violation", `"${next.name}" ${next.version} is older than ${embedded.version}, the version "${locator}" uses`);
-    }
-    const where = `upgrading "${next.name}" of "${locator}" from ${embedded.version} to ${next.version}`;
-    const steps = (next.migrations as unknown[])
-      .map((raw, order) => ({ raw: raw as TransientObject, order }))
-      .filter(({ raw }) => raw !== null && typeof raw === "object" && typeof raw.to === "string")
-      .filter(({ raw }) => compareVersions(raw.to as string, embedded.version) > 0 && compareVersions(raw.to as string, next.version) <= 0)
-      .sort((a, b) => compareVersions(a.raw.to as string, b.raw.to as string) || a.order - b.order)
-      .map(({ raw }) => {
-        const forms = MIGRATION_FORMS.filter((f) => raw[f] !== undefined && raw[f] !== null);
-        if (forms.length !== 1) throw modelError("constraint_violation", `${where}: the migration to ${String(raw.to)} has ${forms.length} forms, and a migration has exactly one`);
-        const form = forms[0];
-        if (form === "body" && !options.migrations?.has(raw.to as string)) {
-          throw modelError("constraint_violation", `${where}: the migration to ${String(raw.to)} is a body, which the code of the module does not give`);
-        }
-        return { to: raw.to as string, form, operand: raw[form] as TransientValue };
-      });
+  return changes;
+}
 
-    const after = before.map((m, i) => (i === index ? next : m));
-    const oldModel = await loadDatasetModel(impl, rest);
-    const newModel = buildDatasetModel(after);
-    const resolversBefore = await loadResolvers(impl, rest);
-    const captured: OpenTransaction = { id: "module-upgrade", depth: 1, delta: new Map(), versionsAtBegin: {} };
-    const writer = wrapForDeltaCapture(impl, locator, new Map([[locator, captured]]), async () => resolversBefore);
-    const qualify = (short: unknown) => `${next.namespace}.${String(short)}`;
-    const rolesOf = (name: string) => {
-      const schema = newModel.schemas.get(name) ?? oldModel?.schemas.get(name);
-      return schema ? derivePropertyRoles(schema) : NO_ROLES;
+/**
+ * Checks the values of the properties whose type or array-ness changed from
+ * `oldSchema` to `schema`: a scalar value must have the shape of its new base
+ * type (`string`, `number`, `integer`, `boolean`) and of its new array-ness,
+ * and a relation that changed its target, other than to the new name of its
+ * schema in `renames`, must have no value. Throws
+ * `incompatible_upgrade`. A value a migration converted passes.
+ */
+function checkRetypedValues(
+  oldSchema: NormalizedSchema | undefined,
+  schema: NormalizedSchema,
+  instance: TransientObject,
+  ctx: TypeResolutionContext,
+  where: string,
+  renames?: ReadonlyMap<string, string>,
+): void {
+  if (!oldSchema) return;
+  for (const prop of schema.properties) {
+    if (prop.constraints.__generated === true || !isOwnProperty(prop)) continue;
+    const old = oldSchema.properties.find((p) => p.name === prop.name);
+    const isArray = prop.constraints.is_array === true;
+    if (!old || ((renames?.get(old.type) ?? old.type) === prop.type && (old.constraints.is_array === true) === isArray)) continue;
+    const value = instance[prop.name];
+    if (value === null || value === undefined) continue;
+    const resolved = resolveType(prop.type, ctx);
+    const fits = (v: TransientValue): boolean => {
+      if (resolved.kind !== "scalar") return false;
+      switch (resolved.base) {
+        case "string":
+          return typeof v === "string";
+        case "number":
+          return typeof v === "number" && Number.isFinite(v);
+        case "integer":
+          return typeof v === "number" && Number.isInteger(v);
+        case "boolean":
+          return typeof v === "boolean";
+        default:
+          return true;
+      }
     };
-    const operandOf = (step: { to: string; form: string; operand: TransientValue }, keys: string[]): TransientObject => {
-      const operand = step.operand;
-      if (operand === null || typeof operand !== "object" || Array.isArray(operand) || keys.some((k) => typeof (operand as TransientObject)[k] !== "string")) {
-        throw modelError("constraint_violation", `${where}: ${step.form} of the migration to ${step.to} takes ${keys.join(", ")}`);
-      }
-      return operand as TransientObject;
-    };
-
-    try {
-      // the declared forms rewrite the stored values, still under the embedded schemas
-      for (const step of steps) {
-        if (step.form === "rename_schema") {
-          const { from, to } = operandOf(step, ["from", "to"]);
-          for (const raw of await impl.listInstances(rest, qualify(from), rolesOf(qualify(from)))) {
-            const instance = raw as TransientObject;
-            const key = (instance.name ?? instance.id) as string;
-            await writer.putInstance(rest, qualify(to), key, instance, rolesOf(qualify(to)));
-            await writer.deleteInstance(rest, qualify(from), key);
-          }
-        } else if (step.form === "rename_property" || step.form === "delete_property") {
-          const operand = operandOf(step, step.form === "rename_property" ? ["schema", "from", "to"] : ["schema", "property"]);
-          const name = qualify(operand.schema);
-          for (const raw of await impl.listInstances(rest, name, rolesOf(name))) {
-            const instance = { ...(raw as TransientObject) };
-            const from = (step.form === "rename_property" ? operand.from : operand.property) as string;
-            if (!Object.prototype.hasOwnProperty.call(instance, from)) continue;
-            if (step.form === "rename_property") instance[operand.to as string] = instance[from];
-            delete instance[from];
-            await writer.putInstance(rest, name, (instance.name ?? instance.id) as string, instance, rolesOf(name));
-          }
-        }
-      }
-
-      // what no migration covers is an automatic upgrade
-      const datasetValue = await impl.getDataset(rest);
-      const ctx: TypeResolutionContext = { resolveSchema: (n) => newModel.schemas.get(n), resolveScalarType: (n) => newModel.scalarTypes.get(n) };
-      const importNamespaces = (await listImports(impl, rest)).map((i) => i.namespace);
-      const names = new Set<string>();
-      for (const [key] of oldModel?.schemas ?? []) if (oldModel?.set.resolveSchema(key)?.module.key === next.name) names.add(key);
-      for (const [key] of newModel.schemas) if (newModel.set.resolveSchema(key)?.module.key === next.name) names.add(key);
-      for (const key of names) {
-        const schema = newModel.schemas.get(key);
-        const stored = await impl.listInstances(rest, key, rolesOf(key));
-        if (stored.length === 0) continue;
-        if (!schema) throw modelError("incompatible_upgrade", `${where}: schema "${key}" leaves the module but the dataset holds instances of it, and no migration moves them`);
-        const keyProp = keyPropertyName(schema);
-        if (!keyProp) continue;
-        for (const raw of stored) {
-          const instanceKey = (raw as TransientObject)[keyProp] as string;
-          const ns = importNamespaceOf(instanceKey, importNamespaces) ?? "";
-          const bare = { ...(raw as TransientObject), [keyProp]: instanceKey.slice(ns.length) };
-          const reconciled = reconcileInstanceAgainstSchema(schema, bare, ctx, datasetValue, where);
-          if (reconciled) await writer.putInstance(rest, key, instanceKey, { ...reconciled, [keyProp]: instanceKey }, derivePropertyRoles(schema));
-        }
-      }
-
-      await writeModules(writer, rest, after);
-
-      // a body runs through commands, under the installed schemas
-      for (const step of steps) {
-        if (step.form !== "body") continue;
-        const body = options.migrations?.get(step.to) as MigrationBody;
-        const context: MigrationContext = Object.freeze({
-          locator,
-          async runCommand(targetOrCommand: string | AuthoredCommand, command?: AuthoredCommand) {
-            if (typeof targetOrCommand === "string" && targetOrCommand !== locator) {
-              throw modelError("dataset_not_found", `a migration of "${locator}" reaches only that dataset, not "${targetOrCommand}"`);
-            }
-            const authored = typeof targetOrCommand === "string" ? (command as AuthoredCommand) : targetOrCommand;
-            const resolved = resolveCommandForm(authored) as unknown as Command;
-            return runCommandEngine(writer, rest, resolved, await loadResolvers(writer, rest));
-          },
-        });
-        await body(context, {});
-      }
-
-      const violations = await evaluateRules(impl, rest, await loadResolvers(impl, rest), "all");
-      if (violations.length > 0) throw ruleViolationError(violations, `the upgrade of "${next.name}" to ${next.version}`);
-    } catch (error) {
-      await applyEntries(impl, rest, resolversBefore, [...captured.delta.values()], true);
-      await writeModules(impl, rest, before);
-      throw error;
+    const ok = isArray ? Array.isArray(value) && value.every(fits) : !Array.isArray(value) && fits(value);
+    if (!ok) {
+      throw modelError("incompatible_upgrade", `${where}: an existing "${schema.name}" instance's "${prop.name}" does not fit its new type "${prop.type}"${isArray ? " (an array)" : ""}`);
     }
-
-    const dataChanged = [...captured.delta.values()].some((e) => e.schema !== MODULE_STORE);
-    const patch: TransientObject = { updated_at: new Date().toISOString() };
-    if (dataChanged) {
-      const info = (await impl.getDataset(rest)) as TransientObject;
-      patch.data_minor_version = (typeof info.data_minor_version === "number" ? info.data_minor_version : 0) + 1;
-    }
-    await impl.updateDataset(rest, patch);
-  });
-  notifyObservable(scope, locator, { kind: "reset" });
-  return datasetTransientForm(impl, rest);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1910,6 +1803,34 @@ export interface ApiSession {
   dumpDataset(locator: string, format: "json" | "yaml"): Promise<string>;
   /** Also drops the locator's cache and rolls back its open transaction, as `invalidate` does, before deleting. */
   deleteDataset(locator: string): Promise<TransientValue>;
+
+  // -------------------------------------------------------------------------
+  // Model upgrade of a module — see `docs/model-upgrade.md`, Upgrading a module.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Upgrades the module `manifest.name` of the dataset at `locator` to
+   * `manifest`: a newer version, or the same version with another digest. In
+   * one transaction, which joins the one this session has open on `locator`:
+   * embeds `manifest` in place of the embedded manifest, runs the migrations
+   * whose `to` is newer than the embedded version and not newer than
+   * `manifest.version`, in version order (each through `options.migrate`,
+   * or its declared form when `migrate` returns `false`), then checks every
+   * instance of the schemas of the module against the new schemas, as a
+   * compatible change: a missing property takes its default and an undeclared
+   * one is dropped. Bumps `data_minor_version` when an instance changed;
+   * observers get a reset. On a format without transactions, an upgrade
+   * without migrations is checked before anything is written.
+   *
+   * Throws `dataset_not_found`; `key_not_found` when the dataset does not use
+   * the module; `constraint_violation` for a manifest that breaks the `module`
+   * schema, a local module, an older version, or the embedded version and
+   * digest; `transactions_not_supported` for migrations on a format without
+   * transactions; `incompatible_upgrade` when an instance does not match the
+   * new schemas after the migrations; and what a migration throws. A refused
+   * upgrade changes nothing.
+   */
+  upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<UpgradeModuleResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -2356,6 +2277,115 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
   }
 
   /**
+   * Writes the reconciled instances of a module upgrade through `target` (the
+   * delta-capturing wrapper inside a transaction), records `updated_at`, and
+   * bumps `data_minor_version` when there is one.
+   */
+  async function writeReconciled(target: PersistenceInterface, impl: PersistenceInterface, rest: string, changes: ModuleInstanceChange[]): Promise<void> {
+    for (const change of changes) {
+      await target.putInstance(rest, change.schema.name, change.key, change.instance, derivePropertyRoles(change.schema));
+    }
+    await impl.updateDataset(rest, { updated_at: new Date().toISOString() });
+    if (changes.length > 0) await bumpVersion(impl, rest, "data_minor_version");
+  }
+
+  async function upgradeModule(locator: string, manifest: ModuleManifest, options: UpgradeModuleOptions = {}): Promise<UpgradeModuleResult> {
+    const { impl, rest } = resolveImpl(scope, locator);
+    const installed = validateModuleManifest(manifest);
+    const key = installed.name;
+    if (isLocalModule(key)) {
+      throw modelError("constraint_violation", `"${key}" is a local module: it changes with setLocalModule, not by a model upgrade`);
+    }
+    const plan = await serialize(locator, async () => {
+      await requireDataset(impl, rest, locator);
+      refuseIfPrepared(locator);
+      const entries = await readModuleEntries(impl, rest);
+      const entry = entries.find((e) => e.module === key);
+      if (!entry) throw modelError("key_not_found", `"${locator}" does not use the module "${key}"`);
+      const order = compareVersions(installed.version, entry.version);
+      if (order < 0) {
+        throw modelError("constraint_violation", `"${locator}" embeds "${key}" ${entry.version}, newer than ${installed.version}: a module is never downgraded`);
+      }
+      if (order === 0 && (await moduleDigest(installed)) === entry.digest) {
+        throw modelError("constraint_violation", `"${locator}" already embeds "${key}" ${entry.version}, with the same digest`);
+      }
+      const before = await readModuleManifests(impl, rest, entries);
+      const after = before.map((m) => (m.name === key ? installed : m));
+      // the new set of modules must build before anything is written
+      const models = { before: buildDatasetModel(before), after: buildDatasetModel(after) };
+      const resolversBefore = await getResolvers(impl, rest, locator);
+      return { from: entry.version, before, after, models, resolversBefore, steps: order === 0 ? [] : migrationsBetween(installed, entry.version) };
+    });
+    const { from, before, after, models, resolversBefore, steps } = plan;
+    const where = `upgrading "${key}" of "${locator}" from ${from} to ${installed.version}`;
+    const done = (migrations: string[], changed: boolean, delta: Delta | null): UpgradeModuleResult => {
+      notifyObservable(scope, locator, { kind: "reset" });
+      return { module: key, from, to: installed.version, migrations, changed, delta };
+    };
+
+    if (impl.supportsTransactions !== true) {
+      if (steps.length > 0) {
+        throw modelError("transactions_not_supported", `${where}: the upgrade runs migrations, and the format of "${locator}" does not support transactions`);
+      }
+      const changed = await serialize(locator, () =>
+        withWriteLock(locator, impl, rest, async () => {
+          const changes = await reconcileModuleInstances(impl, rest, models.before, models.after, key, where);
+          await writeModules(impl, rest, after);
+          resolversCache.delete(locator);
+          await writeReconciled(impl, impl, rest, changes);
+          return changes.length > 0;
+        }),
+      );
+      return done([], changed, null);
+    }
+
+    const outermost = !openTx.has(locator);
+    const tx = await session.beginTransaction(locator, `upgrade ${key} to ${installed.version}`);
+    try {
+      await serialize(locator, async () => {
+        await writeModules(impl, rest, after);
+        resolversCache.delete(locator);
+      });
+      const ran: string[] = [];
+      const renames = new Map<string, string>();
+      for (const step of steps) {
+        const handled = options.migrate ? await options.migrate(step) : false;
+        if (!handled) {
+          const renamed = await serialize(locator, () =>
+            // the wrapper resolves the roles of a deleted instance under the embedded schemas: a renamed schema is gone from the installed ones
+            applyDeclaredMigration(wrapForDeltaCapture(impl, locator, openTx, async () => resolversBefore), rest, locator, installed.namespace, step, models),
+          );
+          if (renamed) renames.set(renamed.from, renamed.to);
+        }
+        ran.push(step.to);
+      }
+      const touched = await serialize(locator, async () => {
+        const changes = await reconcileModuleInstances(impl, rest, models.before, models.after, key, where, renames);
+        const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
+        await writeReconciled(deltaImpl, impl, rest, changes);
+        // every instance, not only those written: the new version can bring a rule the stored data breaks
+        const violations = await evaluateRules(impl, rest, await getResolvers(impl, rest, locator), "all");
+        if (violations.length > 0) throw ruleViolationError(violations, `the upgrade of "${key}" to ${installed.version}`);
+        return changes.length > 0;
+      });
+      if (!outermost) {
+        await session.commitTransaction(locator, tx);
+        return done(ran, touched || ran.length > 0, null);
+      }
+      const prepared = await session.prepareTransaction(locator, tx);
+      await session.commitTransaction(locator, tx);
+      return done(ran, prepared.changed, prepared.delta);
+    } catch (error) {
+      await serialize(locator, async () => {
+        await writeModules(impl, rest, before);
+        resolversCache.delete(locator);
+      });
+      if (openTx.get(locator)?.id === tx) await session.rollbackTransaction(locator, tx);
+      throw error;
+    }
+  }
+
+  /**
    * The prepare phase proper, reached only at depth one: computes everything
    * the finalize phase needs that can still fail — the observable delta, the
    * transaction's delta and the versions the dataset will have — and marks
@@ -2378,7 +2408,7 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
     return result;
   }
 
-  return {
+  const session: ApiSession = {
     runCommand(locator: string, command: AuthoredCommand): Promise<CommandResult> {
       return serialize(locator, async () => {
         refuseIfPrepared(locator);
@@ -2622,7 +2652,10 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
         return deleteDatasetIn(scope, locator);
       });
     },
+
+    upgradeModule,
   };
+  return session;
 }
 
 // ---------------------------------------------------------------------------
@@ -2653,7 +2686,6 @@ export interface Engine {
   dumpDataset(locator: string, format: DumpFormat): Promise<string>;
   restoreDataset(locator: string, dump: string, format: DumpFormat): Promise<RestoreResult>;
   setLocalModule(locator: string, manifest: ModuleManifest): Promise<TransientValue>;
-  upgradeModule(locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions): Promise<TransientValue>;
   checkImport(locator: string, importedLocator: string): Promise<CheckImportResult>;
   createImport(locator: string, importedLocator: string): Promise<TransientValue>;
   removeImport(locator: string, importKey: Key): Promise<TransientValue>;
@@ -2679,7 +2711,6 @@ function engineOf(scope: EngineScope): Engine {
     dumpDataset: (locator: string, format: DumpFormat) => dumpDatasetIn(scope, locator, format),
     restoreDataset: (locator: string, dump: string, format: DumpFormat) => restoreDatasetIn(scope, locator, dump, format),
     setLocalModule: (locator: string, manifest: ModuleManifest) => setLocalModuleIn(scope, locator, manifest),
-    upgradeModule: (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) => upgradeModuleIn(scope, locator, manifest, options),
     checkImport: (locator: string, importedLocator: string) => checkImportIn(scope, locator, importedLocator),
     createImport: (locator: string, importedLocator: string) => createImportIn(scope, locator, importedLocator),
     removeImport: (locator: string, importKey: Key) => removeImportIn(scope, locator, importKey),
@@ -2718,7 +2749,6 @@ export const {
   dumpDataset,
   restoreDataset,
   setLocalModule,
-  upgradeModule,
   checkImport,
   createImport,
   removeImport,

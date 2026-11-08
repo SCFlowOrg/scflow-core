@@ -76,8 +76,8 @@ open.
 
 ```ts
 env.datasets.create({ modules, locator?, name? }): Promise<OpenDataset>
-env.datasets.open(locator): Promise<OpenDataset>
-env.datasets.restore(locator, dump, format): Promise<OpenDataset>
+env.datasets.open(locator, { readOnly? }): Promise<OpenDataset>
+env.datasets.restore(locator, dump, format, { readOnly? }): Promise<OpenDataset>
 env.datasets.get(locator): OpenDataset | undefined
 env.datasets.list(): readonly OpenDataset[]
 ```
@@ -91,32 +91,77 @@ env.datasets.list(): readonly OpenDataset[]
 - Without a `locator`, `create` takes the first format of the environment and
   the first free rest of `dataset-1`, `dataset-2`, and so on. `name` defaults
   to `dataset`.
-- `open` opens an existing dataset and compares each module it embeds with the
-  catalogue. `restore` restores a dump, as `restoreDataset` does, then opens
-  it. Opening a dataset already open returns the same `OpenDataset`.
+- `open` opens an existing dataset, compares each module it embeds with the
+  catalogue and upgrades it (see Opening a dataset below). `restore` restores a
+  dump, as `restoreDataset` does, then opens it. Opening a dataset already
+  open, or being opened, returns the same `OpenDataset`, whatever the options.
 - The ranges of versions of `dependencies` and `mcl` are not checked yet: the
   specification does not yet say what a range accepts.
 
 ### Opening a dataset
 
 Each module of an open dataset has a state, from its embedded version and the
-installed one. The installed module wins over the embedded snapshot, so a
-dataset whose modules are not all installed at their version is read only.
+installed one. The installed module wins over the embedded snapshot: `open`
+upgrades the dataset to it when it can, and a dataset whose modules are not all
+at their installed version is read only.
 
-| State | Embedded and installed | Dataset |
+| State before the upgrade | Embedded and installed | On open |
 | --- | --- | --- |
-| `current` | The same version and digest | Writable |
-| `local` | A local module, embedded and editable | Writable |
+| `current` | The same version and digest | Nothing to do |
+| `local` | A local module, embedded and editable | Nothing to do |
+| `outdated` | The installed version is newer | Upgraded, with its migrations |
+| `changed` | The same version with another digest | Upgraded, with no migration |
 | `missing` | The module is not installed | Read only |
-| `outdated` | The installed version is newer | Read only, until a model upgrade |
 | `ahead` | The installed version is older than the file | Read only |
-| `changed` | The same version with another digest | Read only |
 
-`OpenDataset.modules` lists `{ module, version, installed, state }` for each,
-where `installed` is the installed version or `null`, and `readOnly` is `true`
-when one module is not `current` or `local`. A read-only dataset runs `read`
-actions, answers queries and dumps; an action that writes fails with
-`read_only_dataset`. The upgrade of an `outdated` dataset is a later piece.
+- **Upgrade on open.** `open` upgrades each `outdated` or `changed` module with
+  `upgradeModule` of `@scfloworg/core` (see its `docs/model-upgrade.md`), one by
+  one in the order of the modules of the dataset, where a dependency comes
+  before the module that needs it. Each module upgrades in one transaction:
+  compatible changes are applied, then the migrations run, then the instances
+  are checked against the installed schemas.
+- **A refused upgrade refuses the opening**: `open` fails with the error of the
+  upgrade, typically `incompatible_upgrade` or what a migration threw, and the
+  dataset is not open. The modules upgraded before it stay upgraded, and that
+  module is left as it was.
+- **Read only on request.** `open(locator, { readOnly: true })` upgrades
+  nothing: the modules keep their state, the data is read with the embedded
+  schemas, and every action that writes is refused, whatever the states. It is
+  how a host shows a dataset it cannot or will not upgrade.
+- `OpenDataset.modules` lists `{ module, version, installed, state }` for each,
+  after the upgrades, where `installed` is the installed version or `null`.
+  `OpenDataset.upgrades` lists `{ module, from, to, migrations, changed }` for
+  each module upgraded on open, in order. `readOnly` is `true` when the dataset
+  was opened read only or when one module is not `current` or `local`.
+- A read-only dataset runs `read` actions, answers queries and dumps; an action
+  that writes fails with `read_only_dataset`.
+
+### Migrations
+
+The migrations of a module are listed in its manifest. The environment runs the
+code a module has for a migration, by its version in `migrations` of
+`defineModule`; a migration with no code is left to the engine, which applies
+its declared form.
+
+```ts
+interface MigrationContext extends MclAccess {
+  readonly locator: string;   // the dataset being upgraded
+  readonly module: string;    // the module being upgraded
+  readonly from: string;      // the version embedded before the upgrade
+  readonly to: string;        // the version this migration reaches
+}
+// A migration body: (context: MigrationContext, params: undefined) => unknown
+```
+
+- A migration body runs inside the transaction of the upgrade, with the
+  installed schemas: it reads the values stored for the embedded ones and
+  writes the new ones. A value the installed schema no longer declares is
+  dropped at the end of the upgrade.
+- Its context is an `MclAccess` limited to the dataset: a command on another
+  locator fails with `dataset_not_found`. It has no parameters and calls no
+  action.
+- When the body throws, the upgrade of its module is rolled back and `open`
+  fails with that error.
 
 ## Running an action
 

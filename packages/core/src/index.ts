@@ -18,14 +18,13 @@ export {
   createApiSession,
   subscribeObservable,
   setLocalModule,
-  upgradeModule,
   checkImport,
   createImport,
   removeImport,
   refreshImport,
   createEngine,
 } from "./api.js";
-export type { Engine, EngineOptions, InitDatasetOptions, MigrationBody, MigrationContext, UpgradeModuleOptions } from "./api.js";
+export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
 export { runProcedure } from "./procedure.js";
 export type { Procedure, ProcedureHost } from "./procedure.js";
 export type { RuleViolation } from "./rules.js";
@@ -33,6 +32,7 @@ export type { CheckRule, UniqueGroup } from "./ruleDeclarations.js";
 export type { CheckImportResult, RefreshResult } from "./imports.js";
 export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
 export type { DatasetModule } from "./datasetModules.js";
+export type { MigrationStep, UpgradeModuleOptions, UpgradeModuleResult } from "./migrations.js";
 export type { RestoreResult, CheckUpgradeResult, ApiSession, TransactionId, DatasetVersions, Delta, PreparedTransaction, ObservableChange, ObservableDelta, ObservableListener } from "./api.js";
 export type { ModelActionDefinition, ModelActionParamsSchema } from "./action.js";
 export { resolveCommandForm } from "./command.js";

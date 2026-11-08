@@ -261,7 +261,7 @@ Naming is only needed when the value isn't already known ahead of time — a gen
 
 **Errors.** `fail` refuses the whole script with `procedure_failed` and its message, and the transaction is rolled back. Its message may hold placeholders.
 
-**Batches.** A batch is a script whose steps are `call` steps, with no `parameters`: a user interface, an AI assistant, MCP or the CLI runs it to make several actions one transaction, which can be undone as one. Its `as` names and `${name.path}` references work as in any script. Its steps may also hold `when`, `each` and `fail`, and its writes go through the actions it calls only, so a command step in a batch run outside an action is refused with `write_outside_action`.
+**Batches.** A batch is a script whose steps are `call` steps, with no `parameters`: a user interface, an AI assistant, MCP or the CLI runs it to make several actions one transaction, which can be undone as one. Its `as` names and `${name.path}` references work as in any script. Its steps may also hold `when`, `each` and `fail`, and its writes go through the actions it calls only, so a command step in a batch run outside an action is refused with `write_outside_action`. The neutral [action package](typescript-reference-implementation.md#action-package) runs a batch whose steps are only calls; a batch with `when`, `each` or `fail` runs through the script runner of the engine.
 
 ```yaml
 commands:

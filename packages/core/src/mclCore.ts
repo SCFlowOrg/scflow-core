@@ -220,7 +220,7 @@ export interface ModuleManifest {
   scalar_types: Array<Record<string, TransientValue>>;
   /** The actions the module declares, their `id`, `kind` and `exposure` checked, the rest as authored. */
   actions: Array<Record<string, TransientValue>>;
-  /** The migrations of the module, as authored: not read by the engine yet. */
+  /** The migrations of the module, as authored; `upgradeModule` runs those it needs, by their `to` (see `migrations.ts`). */
   migrations: TransientValue[];
 }
 

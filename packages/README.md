@@ -7,6 +7,7 @@ These packages are the source of truth. They are developed, versioned and publis
 | Package | Role | Depends on |
 | --- | --- | --- |
 | `core` | The MCL engine: schema processing, commands, scripts, filters, the TypeScript API; works only against `PersistenceInterface` | none |
+| `actions` | The neutral action package: the action type aligned on MCP tools, parameters checked by Ajv, a registry, batches of calls, the export to AI tools and the run log | none (Ajv only) |
 | `format-js` | The `js` persistent format, in memory | `core` |
 | `conformance` | The suite a `PersistenceInterface` implementation runs against itself | `core` |
 | `repl` | The interactive REPL | `core`, `format-js` |
@@ -16,7 +17,7 @@ These packages are the source of truth. They are developed, versioned and publis
 | `environment` | The environment: the catalogue of modules with their code, formats given at creation, open datasets, the context of actions and the transaction of one action | `core`, `module` |
 | `scflow-core` | The supply chain flow model: schemas and domain logic, the module `scflow:core` | `core`, `module` (at build), `environment` (in tests) |
 
-Every package depends on `core`, so a change to `core` is built and tested on the whole repo.
+Every package but `actions`, which is neutral, depends on `core`, so a change to `core` is built and tested on the whole repo.
 
 Rules:
 - Packages must never import from `src/`, which holds the UI harness.
