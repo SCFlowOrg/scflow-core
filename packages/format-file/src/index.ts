@@ -38,6 +38,8 @@ export interface FileFormatOptions {
 export interface FileFormat extends PersistenceInterface {
   /** The project of a dataset already read, to reach its other sections. */
   project(rest: string): Project;
+  /** Forgets a dataset held in memory, without touching the disk: its next use reads the disk again. */
+  release(rest: string): void;
   /**
    * Writes the dataset to its project, with every other section kept. Nothing is
    * written when nothing changed.
@@ -280,6 +282,10 @@ export function createFileFormat(options: FileFormatOptions = {}): FileFormat {
 
     project(rest) {
       return requireFile(rest).project;
+    },
+
+    release(rest) {
+      if (files.delete(rest)) void inner.deleteDataset(rest);
     },
 
     async save(rest, saveOptions = {}) {

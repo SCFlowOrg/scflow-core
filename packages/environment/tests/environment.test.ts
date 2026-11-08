@@ -735,3 +735,48 @@ actions:
     expect((after[0] as Row).at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
+
+describe("a transaction driven by the host", () => {
+  const open = () => environment().datasets.create({ locator: "js:plant", modules: ["acme:tasks"] });
+  const count = async (dataset: Awaited<ReturnType<typeof open>>) =>
+    (await dataset.query({ query: "tasks.task" })).after.length;
+
+  it("groups runs in one delta, which reverts as one", async () => {
+    const dataset = await open();
+    await dataset.begin("Two");
+    expect((await dataset.run("tasks/add_task", { title: "A" })).delta).toBeNull();
+    await dataset.run("tasks/add_task", { title: "B" });
+    const { changed, delta } = await dataset.prepare();
+    await dataset.commit();
+    expect(changed).toBe(true);
+    expect(await count(dataset)).toBe(2);
+    await dataset.begin("Undo");
+    await dataset.revert(delta);
+    await dataset.commit();
+    expect(await count(dataset)).toBe(0);
+  });
+
+  it("rolls the whole transaction back when an action is refused inside", async () => {
+    const dataset = await open();
+    await dataset.begin("Mixed");
+    await dataset.run("tasks/add_task", { title: "A" });
+    await expect(dataset.run("tasks/fail", { title: "B" })).rejects.toBeDefined();
+    expect(await count(dataset)).toBe(0);
+    await expect(dataset.commit()).rejects.toMatchObject({ code: "no_transaction" });
+  });
+
+  it("refuses a second transaction, and the phases with none", async () => {
+    const dataset = await open();
+    await expect(dataset.rollback()).rejects.toMatchObject({ code: "no_transaction" });
+    await dataset.begin("One");
+    await expect(dataset.begin("Two")).rejects.toMatchObject({ code: "transaction_open" });
+    await dataset.rollback();
+  });
+
+  it("refuses a transaction on a read-only dataset", async () => {
+    const env = environment();
+    await (await env.datasets.create({ locator: "js:plant", modules: ["acme:tasks"] })).close();
+    const dataset = await env.datasets.open("js:plant", { readOnly: true });
+    await expect(dataset.begin("No")).rejects.toMatchObject({ code: "read_only_dataset" });
+  });
+});

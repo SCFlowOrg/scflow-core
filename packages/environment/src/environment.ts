@@ -29,6 +29,7 @@ import {
   type ModuleManifest,
   type PersistenceInterface,
   type Procedure,
+  type TransactionId,
   type TransientObject,
   type TransientValue,
 } from "@scfloworg/core";
@@ -169,6 +170,21 @@ export interface OpenDataset {
    * back.
    */
   run(id: string, params?: unknown): Promise<ActionOutcome>;
+  /**
+   * Opens a transaction that the next runs join, so that they are one step. A
+   * joined run gives `changed: false` and `delta: null`: `prepare` tells for
+   * all of them. Fails with `transaction_open` when one is open, and with
+   * `read_only_dataset` on a read-only dataset.
+   */
+  begin(label?: string): Promise<void>;
+  /** The failable phase of the open transaction. Fails with `no_transaction` when none is open. */
+  prepare(): Promise<{ changed: boolean; delta: Delta }>;
+  /** Finalizes the open transaction. Fails with `no_transaction` when none is open. */
+  commit(): Promise<void>;
+  /** Discards the open transaction. Fails with `no_transaction` when none is open. */
+  rollback(): Promise<void>;
+  /** Applies the inverse of `delta` in the open transaction, as `revert` of the engine does. */
+  revert(delta: Delta): Promise<void>;
   /** The actions of the dataset, declared and generated, that it can run. */
   actions(): readonly Action<ActionContext>[];
   /**
@@ -378,6 +394,13 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       return run;
     };
 
+    let openTransaction: TransactionId | null = null;
+    const requireTransaction = (): TransactionId => {
+      if (openTransaction === null)
+        throw modelError("no_transaction", `"${locator}" has no open transaction`);
+      return openTransaction;
+    };
+
     const limitOf = (id: string) => limits.get(id) as ActionLimit;
     const resolveRef = model
       ? createRefResolver(model, (command) => session.runCommand(locator, command))
@@ -445,6 +468,17 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
           "read_only_dataset",
           `"${locator}" is open read only, so the action "${id}" cannot run: ${openedReadOnly ? "it was opened read only" : reasons(states)}`,
         );
+      if (openTransaction !== null) {
+        try {
+          const { result, entry } = await registry.run(id, params, host);
+          return { result, changed: false, delta: null, entry };
+        } catch (error) {
+          // A transaction is all or nothing: the writes of this action cannot be undone alone.
+          await session.rollbackTransaction(locator, openTransaction);
+          openTransaction = null;
+          throw error;
+        }
+      }
       if (!(await session.supportsTransactions(locator))) {
         const before = await dataVersions();
         const { result, entry } = await registry.run(id, params, host);
@@ -473,6 +507,34 @@ export function createEnvironment(options: EnvironmentOptions): Environment {
       upgrades: Object.freeze(upgrades),
       readOnly,
       run: (id: string, params?: unknown) => inTurn(() => run(id, params)),
+      begin: (label?: string) =>
+        inTurn(async () => {
+          if (readOnly)
+            throw modelError("read_only_dataset", `"${locator}" is read only: no transaction can open`);
+          if (openTransaction !== null)
+            throw modelError("transaction_open", `"${locator}" already has an open transaction`);
+          openTransaction = await session.beginTransaction(locator, label);
+        }),
+      prepare: () =>
+        inTurn(async () => {
+          const { changed, delta } = await session.prepareTransaction(locator, requireTransaction());
+          return { changed, delta };
+        }),
+      commit: () =>
+        inTurn(async () => {
+          await session.commitTransaction(locator, requireTransaction());
+          openTransaction = null;
+        }),
+      rollback: () =>
+        inTurn(async () => {
+          await session.rollbackTransaction(locator, requireTransaction());
+          openTransaction = null;
+        }),
+      revert: (delta: Delta) =>
+        inTurn(async () => {
+          requireTransaction();
+          await session.revert(locator, delta);
+        }),
       actions: () => registry.list(),
       deleteImpact: (schema: string, filters?: unknown) =>
         inTurn(() => session.deleteImpact(locator, schema, filters as Filter | undefined)),
