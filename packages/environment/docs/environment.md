@@ -188,6 +188,15 @@ dataset.run(id: string, params?: unknown): Promise<ActionOutcome>
   moved.
 - The runs of one dataset take turns: a run begins when the one before it has
   settled, so two actions never share a transaction.
+- **A host can group actions in one transaction** with `dataset.begin(label)`,
+  then `dataset.prepare()`, which gives `{ changed, delta }`, and
+  `dataset.commit()`, or `dataset.rollback()`. A `run` while one is open joins
+  it, and its `delta` is `null`. An action refused inside it rolls the whole
+  transaction back, since a transaction is all or nothing. `begin` on a dataset
+  that has one open, or on a read-only dataset, is refused
+  (`transaction_open`, `read_only_dataset`).
+- `dataset.revert(delta)` applies the inverse of a delta inside the open
+  transaction, as `revert` of `@scfloworg/core` does.
 - A declaration with a `body` procedure and no code runs that procedure with
   `runProcedure` of `@scfloworg/core`. Its commands are held to the write limit
   of the action, and each `call` step goes through the registry, so its

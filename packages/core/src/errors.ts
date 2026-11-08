@@ -121,6 +121,8 @@ export const ErrorCode = {
   transaction_not_outermost: "transaction_not_outermost",
   /** A command, script, script session, `revert`, `beginTransaction` or `prepareTransaction` on a locator whose open transaction is already prepared. */
   transaction_prepared: "transaction_prepared",
+  transaction_open: "transaction_open",
+  no_transaction: "no_transaction",
   /** `revert` with a value that is not a delta returned by `prepareTransaction`. */
   invalid_delta: "invalid_delta",
   /** `revert` when the dataset's versions differ from the versions the delta embeds. */

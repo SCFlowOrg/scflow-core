@@ -6,6 +6,7 @@
 | --- | --- |
 | `save(rest, { shape? })` | Writes the dataset to its project, and gives `{ written, removed }` |
 | `project(rest)` | Gives the `Project` of a dataset already read, to reach its other sections |
+| `release(rest)` | Forgets a dataset held in memory, without touching the disk, so its next use reads the disk again |
 
 ## Reading and saving
 
