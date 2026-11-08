@@ -18,6 +18,7 @@ schemas:
         minimum: 0
 actions:
   - id: carbon/update_actor_emissions
+    writes: [actor_emissions]
     title: Set the emissions of an actor
     description: Sets the CO2 of an actor, in tonnes, and returns its emissions.
   - id: carbon/get_actor_emissions

@@ -2491,6 +2491,8 @@ schemas:
 }
 
 export { runActionConformanceSuite } from "./actions.js";
+export { runModuleActionConformanceSuite } from "./moduleActions.js";
+export type { ConformanceActionContext, ConformanceDataset, ConformanceEnvironment, ModuleActionImplementation } from "./moduleActions.js";
 export type {
   ActionImplementation,
   ConformanceAction,

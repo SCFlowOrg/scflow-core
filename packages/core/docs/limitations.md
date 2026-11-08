@@ -23,10 +23,10 @@
 - **A default across a relation is not backfilled.** A property added by an
   upgrade whose `default_value` crosses a relation fails to resolve on the
   existing instances.
-- **Facets have no actions yet.** The engine does not generate the
-  `<namespace>/update_<facet>` and `<namespace>/get_<facet>` actions, and does not
-  hold the write limit of a facet to the actions of its module: any command may
-  write the values of a facet through its target.
+- **The write limit holds in the context of an action only.** A command run
+  outside an action is not refused yet, so it may write any schema and any facet.
+- **Singletons are seeded when a dataset is created.** A singleton schema added
+  to a module by a later upgrade gets no instance.
 - **Extensions stay beside facets.** The `extension` relation still works; it is
   removed once the graph styles of `scflow-plugins` use facets.
 - **Embedded schemas are not command targets.** An embedded schema is a data shape

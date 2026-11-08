@@ -14,6 +14,8 @@ import {
 } from "./facets.js";
 import { resolveCreateId } from "./ids.js";
 import { checkFilter, checkFilterOnCandidates, matchFilter, valueOnPath } from "./filter.js";
+import type { Filter as CommandFilter } from "./types.js";
+import { facetNamesOf as facetNamesOfSchema } from "./facets.js";
 import { isModelSchema, getUpgradeMarker, runSchemaCommand } from "./modelUpgrade.js";
 import { substitutePlaceholders } from "./placeholders.js";
 import { isPlainObject, resolveTextOperation } from "./textOperations.js";
@@ -1121,6 +1123,63 @@ async function assertDeletable(
       );
     }
   }
+}
+
+/** An instance named by the impact of a delete. */
+export interface ImpactedInstance {
+  schema: string;
+  key: Key;
+}
+
+/** A `restrict` reference that refuses a delete: from an instance that stays to one it would remove. */
+export interface BlockingReference extends ImpactedInstance {
+  property: string;
+  target: ImpactedInstance;
+}
+
+/** What a delete would do, given before it runs (see Action, Impact of a delete, in `docs/spec/meta-model.md`). */
+export interface DeleteImpact {
+  /** Each instance and facet instance the delete would remove. */
+  removed: ImpactedInstance[];
+  /** The references that refuse the delete; it runs only when there is none. */
+  blocked: BlockingReference[];
+}
+
+/**
+ * The impact of deleting the instances of `schemaName` matched by `filters`.
+ * Writes nothing. Throws what a `query` of them throws.
+ */
+export async function deleteImpact(
+  impl: PersistenceInterface,
+  rest: string,
+  resolvers: Resolvers,
+  schemaName: string,
+  filters: CommandFilter | undefined,
+): Promise<DeleteImpact> {
+  const { after } = await runCommand(impl, rest, { kind: "query", schema: schemaName, filters }, resolvers);
+  const declared = resolvers.schemas.get(schemaName) as NormalizedSchema;
+  const roots: { schema: NormalizedSchema; key: Key }[] = [];
+  for (const instance of after) {
+    const key = keyOf(declared, instance);
+    const found = await findInstanceByKey(impl, rest, resolvers, declared, key);
+    roots.push({ schema: found ? found.schema : declared, key });
+  }
+  // the impact is what the delete would remove with `cascade: true`, so `confirm` relations are followed
+  const plan = await planRemoval(impl, rest, resolvers, roots, true);
+  const removed: ImpactedInstance[] = [];
+  const blocked: BlockingReference[] = [];
+  for (const { schema, key, referrers } of plan.values()) {
+    removed.push({ schema: schema.name, key });
+    for (const facetName of facetNamesOfSchema(schema)) {
+      const facet = resolvers.ctx.resolveSchema(facetName);
+      if (facet && (await impl.getInstance(rest, facetName, key, derivePropertyRoles(facet))) !== null) removed.push({ schema: facetName, key });
+    }
+    for (const referrer of referrers) {
+      if (referrer.mode !== "restrict" || plan.has(removalId(referrer.schema, referrer.key))) continue;
+      blocked.push({ schema: referrer.schema.name, key: referrer.key, property: referrer.prop.name, target: { schema: schema.name, key } });
+    }
+  }
+  return { removed, blocked };
 }
 
 /**

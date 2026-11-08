@@ -92,6 +92,8 @@ export const ErrorCode = {
   // Actions
   /** An action id names no action that the caller can reach: no module of the dataset declares it, or it belongs to a module the calling action does not depend on. */
   unknown_action: "unknown_action",
+  /** An action writes a schema outside its `writes`, or a property of a facet of another module (see Action, Write limit, in `docs/spec/meta-model.md`). */
+  write_not_declared: "write_not_declared",
   /** A `fail` step of a procedure runs: the procedure, and its transaction, are refused with its message. */
   procedure_failed: "procedure_failed",
   /** A step of a script or a procedure is not exactly one of a command, a `call`, an `each` with its `do`, or a `fail`. */

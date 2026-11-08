@@ -30,6 +30,7 @@ const copy = await createEnvironment({ formats: [createJsPersistenceInterface()]
 | `env.modules` | One active version of each module, with its code: `install`, `load`, `get`, `list` |
 | `env.datasets` | `create`, `open`, `restore`, `get`, `list`; `open` upgrades a dataset to the installed modules, with their migrations, unless it is opened read only |
 | `dataset.run(id, params)` | One action, in one transaction the environment opens; its body receives an `ActionContext` |
+| `dataset.actions()`, `deleteImpact(schema, filters)` | The declared and generated actions of the dataset, and what a delete would remove |
 | `dataset.query`, `info`, `dump`, `close` | Reads and saving, outside any action |
 
 An action body is a function `(context, params) => result`. Its
@@ -38,6 +39,5 @@ An action body is a function `(context, params) => result`. Its
 the only way a body reaches the engine. The body imports only types from
 `@scfloworg/core` and this package.
 
-Not here yet: the validation of parameters, procedures and the run log (the
-action package), the declared forms of migrations and the check of rules after an upgrade, the refusal of writes outside an action
+Not here yet: the declared forms of migrations and the check of rules after an upgrade, the refusal of writes outside an action
 (piece 1.8 of the engine), and documents, files and undo (the workspace).

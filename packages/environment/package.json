@@ -25,10 +25,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@scfloworg/actions": "^0.1.0",
     "@scfloworg/core": "^0.1.0",
     "@scfloworg/module": "^0.1.0"
   },
   "devDependencies": {
+    "@scfloworg/conformance": "^0.1.0",
     "@scfloworg/format-js": "^0.1.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",

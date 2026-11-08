@@ -167,12 +167,14 @@ interface MigrationContext extends MclAccess {
 
 ```ts
 dataset.run(id: string, params?: unknown): Promise<ActionOutcome>
-// ActionOutcome = { result, changed, delta }
+// ActionOutcome = { result, changed, delta, entry }
 ```
 
-- The action is found by the namespace of its id among the modules of the
-  dataset that are installed, and its declaration is the one of the installed
-  manifest. An id that matches no declared action fails with `unknown_action`.
+- The actions of a dataset are those its modules declare with code, and those
+  generated from their schemas (see Generated actions in the specification);
+  a declared action takes the place of a generated one of the same id.
+  `dataset.actions()` lists them. An id that matches none fails with
+  `unknown_action`.
 - **An action run on a dataset is one transaction**, which the environment
   opens: it begins a transaction labelled with the `title` of the action, runs
   the body, prepares and commits it, and returns the `result` of the body,
@@ -186,10 +188,19 @@ dataset.run(id: string, params?: unknown): Promise<ActionOutcome>
   moved.
 - The runs of one dataset take turns: a run begins when the one before it has
   settled, so two actions never share a transaction.
-- A body whose declaration has a `body` procedure and no code fails with
-  `unknown_action`: procedures run with the action package.
-- The parameters are given to the body as they are. Their validation against
-  `parameters` and the run log come with the action package.
+- A declaration with a `body` procedure and no code runs that procedure with
+  `runProcedure` of `@scfloworg/core`. Its commands are held to the write limit
+  of the action, and each `call` step goes through the registry, so its
+  parameters are checked and it reaches only the module and its dependencies.
+- The parameters are checked against `parameters` by `@scfloworg/actions`
+  before the body runs, and each `ref` is resolved to a key: a breach fails with
+  `invalid_parameters`. An action that declares no `parameters` receives what it
+  is given.
+- `entry` is the run entry of the call, with the commands and nested calls of
+  the body as its steps.
+- `dataset.deleteImpact(schema, filters)` gives what a delete would remove and
+  what refuses it, without writing anything (see Impact of a delete in the
+  specification).
 
 ## The context of an action
 
@@ -216,6 +227,11 @@ interface ActionContext extends MclAccess {
 - Time and ids come from MCL: a body uses `${now()}` and the keys of the
   engine, and reads no clock (see the contract of a body in the
   specification).
+- A command that writes beyond the limit of the action fails with
+  `write_not_declared`: it writes only the schemas of its `writes`, which name
+  schemas of its module, and a property of a facet only if that facet is in its
+  `writes`. A `read` action writes nothing. Each step of a script is checked
+  before the script runs.
 - A write outside an action is not refused yet; `query` below runs any
   command.
 
