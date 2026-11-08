@@ -19,6 +19,10 @@ The suite also holds the cases of modules and names: a `module.yaml` read as an 
 
 A format that provides the optional `lock(rest)` of the persistence interface also runs a lock case: a second holder waits for the first, two sessions writing at once lose no version increment, and the lock is released after a failed command and after a rolled-back transaction. The case is skipped for a format without `lock`.
 
+## Actions
+
+`runActionConformanceSuite(impl)` holds the cases of the action contract that need no dataset: the check of parameters and the resolution of `ref`, the registry, the run log in canonical JSON, the batches of calls with `${name.path}`, and the export to AI tools. An implementation of the neutral action package runs it against itself, as `packages/actions/tests/conformance.test.ts` does; the suite states the shape it uses in `ActionImplementation`, so it does not depend on `@scfloworg/actions`.
+
 `@scfloworg/repl-conformance` runs the same kind of check through the REPL's command-block parser.
 
 ## Sample projects
