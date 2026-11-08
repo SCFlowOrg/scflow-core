@@ -32,7 +32,7 @@ This specification is normative: the code follows it. The other files of [`docs/
 - [Scalar Types](meta-model.md#scalar-types): Scalar value for properties
 - [Relations](meta-model.md#relations): A property relating to another entity
 - [Facet](meta-model.md#facet): A schema that adds qualified, optional properties to the instances of another schema, stored apart and assembled per dataset
-- [On Delete](meta-model.md#on-delete): The on_delete relation constraint sets what happens to an instance when the target of its relation is deleted: restrict, cascade or set_null
+- [On Delete](meta-model.md#on-delete): The on_delete relation constraint sets what happens to an instance when the target of its relation is deleted: restrict, cascade, set_null or confirm
 - [Rules](meta-model.md#rules): What must be true of the instances of a schema: checks, unique, acyclic and set_once, checked at the end of every transaction
 - [Ownership](meta-model.md#ownership): Each instance has an owner in the dataset
 - [Dataset](meta-model.md#dataset): A unit for persistence

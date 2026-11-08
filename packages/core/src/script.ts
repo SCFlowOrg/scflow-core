@@ -63,8 +63,10 @@ export async function createScriptSession(
       const command: Command = {
         kind: scriptCommand.kind,
         schema: scriptCommand.schema,
+        // A `${this...}` operand is a path on the instance being tested, resolved
+        // per instance by the filter (see Filter, *Paths on the right*): left as is.
         filters: scriptCommand.filters
-          ? (substitutePlaceholders(scriptCommand.filters as unknown as TransientValue, context) as unknown as Filter)
+          ? (substituteKeepingThis(scriptCommand.filters as unknown as TransientValue, context) as unknown as Filter)
           : undefined,
         // A `schema`/`scalar_type` command's input is a description, and a
         // `${...}` in one of its `default_value`s belongs to the instances
@@ -103,6 +105,16 @@ export async function createScriptSession(
       return result;
     },
   };
+}
+
+/** `substitutePlaceholders`, leaving every string that names a path on `this` as it is. */
+function substituteKeepingThis(value: TransientValue, context: Record<string, TransientValue>): TransientValue {
+  if (typeof value === "string") return /\$\{\s*this[.}\s]/.test(value) ? value : substitutePlaceholders(value, context);
+  if (Array.isArray(value)) return value.map((v) => substituteKeepingThis(v, context));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substituteKeepingThis(v, context)]));
+  }
+  return value;
 }
 
 export async function runScript(

@@ -194,6 +194,7 @@ deleted.
 | `restrict` | The `delete` fails with `constraint_violation` and removes nothing |
 | `cascade` | The instance is deleted too, and reported in `cascade-deleted` |
 | `set_null` | The relation is cleared; the instance comes back in `updated-before` and `updated-after` |
+| `confirm` | A plain `delete` fails with `constraint_violation`; a `delete` with `cascade: true` removes the instance, as `cascade` does |
 
 ```ts
 { name: "member", properties: [{ name: "team", type: "team", mandatory: true }] }                       // restrict
@@ -203,9 +204,12 @@ deleted.
 
 - Without `on_delete`, a `mandatory` relation is `restrict` and any other relation
   is `set_null`.
-- `set_null` on a `mandatory` relation, `on_delete` on an `owner` or `extension`
-  relation (its owner already removes the instance), `on_delete` on a property that
-  is not a relation and a value other than the three are refused with
+- On an `owner` relation, `confirm` is the only value: the owned instance then
+  asks for consent before it goes with its owner, while an owned part without it
+  goes silently.
+- `set_null` on a `mandatory` relation, any other `on_delete` on an `owner`
+  relation, `on_delete` on an `extension` relation, `on_delete` on a property that
+  is not a relation and a value other than the four are refused with
   `constraint_violation` when the schema is created or updated.
 - A `restrict` is checked before anything is written, over everything the `delete`
   removes. An instance the same `delete` removes, an owned one or one reached by
@@ -270,3 +274,20 @@ A `${...}` placeholder in a `default_value` resolves when an instance is
 created, in the order of the properties. A path starts at `this` (the instance
 under construction) and the functions are `to_display_name(s)`, `now()`,
 `year(d)`, `month(d)` and `day(d)`.
+
+- A path crosses single-valued relations: `${this.type.default_scope}` reads
+  `default_scope` on the instance `type` points at. A path that meets a null
+  relation gives the ordinary default of the property.
+- A `default_value` that is exactly one placeholder keeps the type of its value,
+  so a relation can default to a key: `{ name: region, type: region,
+  default_value: "${this.type.default_region}" }`.
+- An array takes a list as its default, `default_value: [new]`, and a map a
+  mapping; each can also be one placeholder giving one.
+- A value given in the `input` wins, and an explicit `null` means none. A default
+  applies once, at creation, and is copied: changing the related instance later
+  changes nothing.
+- The relations of an instance are computed before its other properties, so a
+  scalar default can read a relation, not the other way round.
+
+The rules a schema declares, `checks`, `unique`, `acyclic` and `set_once`, are in
+[rules.md](rules.md).

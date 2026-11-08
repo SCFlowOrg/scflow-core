@@ -92,8 +92,21 @@ export const ErrorCode = {
   // Actions
   /** An action id names no action that the caller can reach: no module of the dataset declares it, or it belongs to a module the calling action does not depend on. */
   unknown_action: "unknown_action",
+  /** A `fail` step of a procedure runs: the procedure, and its transaction, are refused with its message. */
+  procedure_failed: "procedure_failed",
+  /** A step of a script or a procedure is not exactly one of a command, a `call`, an `each` with its `do`, or a `fail`. */
+  invalid_script_step: "invalid_script_step",
   /** An action that writes runs on a dataset a host opened read only, on request or because a module it uses is not installed at its version (see Model Upgrade, Opening a dataset, in `docs/spec/meta-model.md`). */
   read_only_dataset: "read_only_dataset",
+
+  // Rules
+  /**
+   * The end of a transaction finds a declared rule broken (`checks`, `unique`,
+   * `acyclic`, see `docs/rules.md`). `details` gives the first breach as `rule`,
+   * `schema` and `key`, and every breach found in `violations`. Nothing the
+   * transaction wrote is kept.
+   */
+  rule_violation: "rule_violation",
 
   // Transactions
   /** A transaction or `revert` call on a locator whose format does not set `supportsTransactions`. */
@@ -165,18 +178,24 @@ export const ErrorCode = {
 /** The name of one code of `ErrorCode`. */
 export type ErrorCodeName = keyof typeof ErrorCode;
 
-/** The error the engine throws: `code` names the cause (see `ErrorCode`), `message` describes it. */
+/**
+ * The error the engine throws: `code` names the cause (see `ErrorCode`),
+ * `message` describes it, and `details`, when a code defines it, holds what a
+ * caller reads without parsing the message (see `rule_violation`).
+ */
 export class ModelError extends Error {
   readonly code: ErrorCodeName;
+  readonly details?: Readonly<Record<string, unknown>>;
 
-  constructor(code: ErrorCodeName, message?: string) {
+  constructor(code: ErrorCodeName, message?: string, details?: Record<string, unknown>) {
     super(message ?? code);
     this.name = "ModelError";
     this.code = code;
+    if (details !== undefined) this.details = details;
   }
 }
 
 /** Builds a `ModelError`; `message` defaults to the code. */
-export function modelError(code: ErrorCodeName, message?: string): ModelError {
-  return new ModelError(code, message);
+export function modelError(code: ErrorCodeName, message?: string, details?: Record<string, unknown>): ModelError {
+  return new ModelError(code, message, details);
 }
