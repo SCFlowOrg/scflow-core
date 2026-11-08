@@ -1,14 +1,6 @@
-import type { MclAccess, ModelActionDefinition } from "@scfloworg/core";
+import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { deleteItems, loadSnapshot } from "./delete-impact.js";
-import {
-  localizedTextParam,
-  optionalBoolean,
-  optionalStringList,
-  refParam,
-  requireDomain,
-  tagsParam,
-} from "./params.js";
-import { labelOf, resolveRef, type Instance } from "./refs.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -16,46 +8,51 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_item_type`. */
 export interface CreateItemTypeParams {
-  name: Text;
+  display_name: Text;
   domain: string;
   description?: Text;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/create_item`. */
 export interface CreateItemParams {
-  name: Text;
+  display_name: Text;
   type: string;
+  description?: Text;
   tags?: string[];
 }
 
 /** Parameters of `scflow/update_item`. */
 export interface UpdateItemParams {
-  item: string;
-  name?: Text;
+  id: string;
+  display_name?: Text;
   description?: Text;
   type?: string;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/hold_item`. */
 export interface HoldItemParams {
   actor: string;
   item: string;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/release_held_item`. */
 export interface ReleaseHeldItemParams {
-  item_at_actor: string;
+  id: string;
+  cascade?: boolean;
 }
 
 /** Parameters of `scflow/delete_item`. */
 export interface DeleteItemParams {
-  item: string;
+  id: string;
   cascade?: boolean;
 }
 
 /** Parameters of `scflow/delete_item_type`. */
 export interface DeleteItemTypeParams {
-  type: string;
+  id: string;
   cascade?: boolean;
 }
 
@@ -81,70 +78,81 @@ export interface HeldItemSummary {
 }
 
 /** Creates an item type; see `scflow/create_item_type` in `docs/actions.md`. */
-export const createItemTypeAction: ModelActionDefinition<CreateItemTypeParams, ItemTypeSummary> = {
+export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, ItemTypeSummary> = {
   id: "scflow/create_item_type",
+  writes: ["item_type"],
   title: "Create an item type",
   description:
     "Creates an item type, a category of items bound to one flow domain (physical, information, financial or service), and returns it.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the item type, a string or a map of language to string."),
+      display_name: localizedTextParam("Display name of the item type, a string or a map of language to string."),
       domain: {
         type: "string",
         enum: ["physical", "information", "financial", "service"],
         description: "The flow domain of the items of this type.",
       },
       description: localizedTextParam("Markdown description of the item type."),
+      tags: tagsParam("Tags of the item type."),
     },
-    required: ["name", "domain"],
+    required: ["display_name", "domain"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const display_name = toLocalized(params.name, "name");
-    const domain = requireDomain(params.domain, "domain");
+  async run(params, context) {
+    const display_name = toLocalized(params.display_name);
+    const domain = params.domain;
     const input: Record<string, unknown> = { display_name, domain };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description, "description");
+      input.description = toLocalized(params.description);
     }
-    const { after } = await access.runCommand(locator, { kind: "create", schema: "item_type", input });
+    const tags = unique(params.tags);
+    if (tags !== undefined) {
+      input.tags = tags;
+    }
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.item_type", input });
     const type = after[0] as unknown as Instance;
     return { id: type.id, display_name: type.display_name as Record<string, string>, domain: type.domain as string };
   },
 };
 
 /** Creates an item; see `scflow/create_item` in `docs/actions.md`. */
-export const createItemAction: ModelActionDefinition<CreateItemParams, ItemSummary> = {
+export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSummary> = {
   id: "scflow/create_item",
+  writes: ["item"],
   title: "Create an item",
   description: "Creates an item, a family of things the network moves and holds, of a given item type, and returns it.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the item, a string or a map of language to string."),
-      type: refParam("Id or name of the item type."),
+      display_name: localizedTextParam("Display name of the item, a string or a map of language to string."),
+      type: refParam("item_type", "Id or name of the item type."),
+      description: localizedTextParam("Markdown description of the item."),
       tags: tagsParam("Tags of the item."),
     },
-    required: ["name", "type"],
+    required: ["display_name", "type"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const display_name = toLocalized(params.name, "name");
-    const type = await resolveRef(access, locator, "item_type", params.type, "type");
-    const input: Record<string, unknown> = { display_name, type: type.id };
-    const tags = optionalStringList(params.tags, "tags");
+  async run(params, context) {
+    const display_name = toLocalized(params.display_name);
+    const input: Record<string, unknown> = { display_name, type: params.type };
+    if (params.description !== undefined) {
+      input.description = toLocalized(params.description);
+    }
+    const tags = unique(params.tags);
     if (tags !== undefined) {
       input.tags = tags;
     }
-    const { after } = await access.runCommand(locator, { kind: "create", schema: "item", input });
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.item", input });
     const item = after[0] as unknown as Instance;
     return { id: item.id, display_name: item.display_name as Record<string, string>, type: item.type as string };
   },
 };
 
 /** Updates an item; see `scflow/update_item` in `docs/actions.md`. */
-export const updateItemAction: ModelActionDefinition<UpdateItemParams, ItemSummary> = {
+export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSummary> = {
   id: "scflow/update_item",
+  writes: ["item"],
   title: "Update an item",
   description:
     "Changes the name, description or type of an item and returns it. Only the given properties change. " +
@@ -153,35 +161,37 @@ export const updateItemAction: ModelActionDefinition<UpdateItemParams, ItemSumma
   parameters: {
     type: "object",
     properties: {
-      item: refParam("Id or name of the item to update."),
-      name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
+      id: refParam("item", "Id or name of the item to update."),
+      display_name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
       description: localizedTextParam("New Markdown description; same language rule as name."),
-      type: refParam("Id or name of the new item type."),
+      type: refParam("item_type", "Id or name of the new item type."),
+      tags: tagsParam("New tags; they replace the current ones."),
     },
-    required: ["item"],
+    required: ["id"],
+    minProperties: 2,
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const item = await resolveRef(access, locator, "item", params.item, "item");
+  async run(params, context) {
     const patch: Record<string, unknown> = {};
 
-    if (params.name !== undefined) {
-      patch.display_name = { set: toLocalized(params.name, "name") };
+    if (params.display_name !== undefined) {
+      patch.display_name = { set: toLocalized(params.display_name) };
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description, "description") };
+      patch.description = { set: toLocalized(params.description) };
     }
     if (params.type !== undefined) {
-      patch.type = (await resolveRef(access, locator, "item_type", params.type, "type")).id;
+      patch.type = params.type;
     }
-    if (Object.keys(patch).length === 0) {
-      throw new Error('scflow/update_item: give at least one property to change besides "item" (name, description, type)');
+    const tags = unique(params.tags);
+    if (tags !== undefined) {
+      patch.tags = tags;
     }
 
-    const { after } = await access.runCommand(locator, {
+    const { after } = await context.runCommand(context.locator, {
       kind: "update",
-      schema: "item",
-      filters: { id: item.id },
+      schema: "scflow.item",
+      filters: { id: params.id },
       input: patch,
     });
     const updated = after[0] as unknown as Instance;
@@ -194,8 +204,9 @@ export const updateItemAction: ModelActionDefinition<UpdateItemParams, ItemSumma
 };
 
 /** Makes an actor hold an item; see `scflow/hold_item` in `docs/actions.md`. */
-export const holdItemAction: ModelActionDefinition<HoldItemParams, HeldItemSummary> = {
+export const holdItemAction: ScflowActionDefinition<HoldItemParams, HeldItemSummary> = {
   id: "scflow/hold_item",
+  writes: ["item_at_actor"],
   title: "Hold an item at an actor",
   description:
     "Makes an actor hold an item (inventory, queue, cash or backlog) and returns the record. The domain of the item must be " +
@@ -203,56 +214,65 @@ export const holdItemAction: ModelActionDefinition<HoldItemParams, HeldItemSumma
   parameters: {
     type: "object",
     properties: {
-      actor: refParam("Id or name of the actor."),
-      item: refParam("Id or name of the item."),
+      actor: refParam("actor", "Id or name of the actor."),
+      item: refParam("item", "Id or name of the item."),
+      tags: tagsParam("Tags of the record, when the action creates it."),
     },
     required: ["actor", "item"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
-    const item = await resolveRef(access, locator, "item", params.item, "item");
+  async run(params, context) {
+    const actor = await loadInstance(context, "scflow.actor", params.actor);
+    const item = await loadInstance(context, "scflow.item", params.item);
 
-    await assertHoldable(access, locator, actor, item, "item");
-    return summarizeHeld(await holdItem(access, locator, actor, item));
+    await assertHoldable(context, actor, item, "item");
+    return summarizeHeld(await holdItem(context, actor, item, unique(params.tags)));
   },
 };
 
 /** Removes an item from an actor; see `scflow/release_held_item` in `docs/actions.md`. */
-export const releaseHeldItemAction: ModelActionDefinition<ReleaseHeldItemParams, { id: string }> = {
+export const releaseHeldItemAction: ScflowActionDefinition<ReleaseHeldItemParams, { id: string }> = {
   id: "scflow/release_held_item",
+  writes: ["item_at_actor", "transformation_line"],
+  destructive: true,
   title: "Release a held item",
   description:
     "Removes an item from the actor that holds it, and returns the id of the removed record. It is refused while a " +
-    "transformation line uses the record. Give the id of the record returned by hold_item.",
+    "transformation line uses the record, unless cascade is true, which deletes those lines first. Give the id of the record returned by hold_item.",
   parameters: {
     type: "object",
     properties: {
-      item_at_actor: refParam("Id of the item-at-actor record to remove."),
+      id: refParam("item_at_actor", "Id of the item-at-actor record to remove."),
+      cascade: cascadeParam("When true, also deletes the transformation lines that use the record."),
     },
-    required: ["item_at_actor"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const held = await resolveRef(access, locator, "item_at_actor", params.item_at_actor, "item_at_actor");
-    const lines = await access.runCommand(locator, {
+  async run(params, context) {
+    const held = await loadInstance(context, "scflow.item_at_actor", params.id);
+    const lines = await context.runCommand(context.locator, {
       kind: "query",
-      schema: "transformation_line",
+      schema: "scflow.transformation_line",
       filters: { held_item: held.id },
     });
-    if (lines.after.length > 0) {
+    if (lines.after.length > 0 && params.cascade !== true) {
       throw new Error(
-        `parameter "item_at_actor": the record is used by ${lines.after.length} transformation line(s); remove them first`,
+        `parameter "id": the record is used by ${lines.after.length} transformation line(s); remove them first or use cascade: true`,
       );
     }
-    await access.runCommand(locator, { kind: "delete", schema: "item_at_actor", filters: { id: held.id } });
+    if (lines.after.length > 0) {
+      await context.runCommand(context.locator, { kind: "delete", schema: "scflow.transformation_line", filters: { held_item: held.id } });
+    }
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.item_at_actor", filters: { id: held.id } });
     return { id: held.id };
   },
 };
 
 /** Deletes an item; see `scflow/delete_item` in `docs/actions.md`. */
-export const deleteItemAction: ModelActionDefinition<DeleteItemParams, { id: string }> = {
+export const deleteItemAction: ScflowActionDefinition<DeleteItemParams, { id: string }> = {
   id: "scflow/delete_item",
+  writes: ["item", "flow", "item_at_actor", "transformation_line", "conversion"],
+  destructive: true,
   title: "Delete an item",
   description:
     "Deletes an item. It is refused while actors hold it, flows carry it or conversions reference it, unless cascade is true, which " +
@@ -261,21 +281,16 @@ export const deleteItemAction: ModelActionDefinition<DeleteItemParams, { id: str
   parameters: {
     type: "object",
     properties: {
-      item: refParam("Id or name of the item to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description:
-          "When true, also deletes the held records, the flows that carry the item, the conversions, the transformation lines and the notes.",
-      },
+      id: refParam("item", "Id or name of the item to delete."),
+      cascade: cascadeParam("When true, also deletes the held records, the flows that carry the item, the conversions, the transformation lines and the notes."),
     },
-    required: ["item"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const item = await resolveRef(access, locator, "item", params.item, "item");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const item = await loadInstance(context, "scflow.item", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
 
     if (!cascade) {
       const references = [
@@ -292,18 +307,20 @@ export const deleteItemAction: ModelActionDefinition<DeleteItemParams, { id: str
         .map(([n, what]) => `${n} ${what}(s)`);
       if (references.length > 0) {
         throw new Error(
-          `parameter "item": "${labelOf(item)}" is still used by ${references.join(", ")}; use cascade: true to delete them`,
+          `parameter "id": "${labelOf(item)}" is still used by ${references.join(", ")}; use cascade: true to delete them`,
         );
       }
     }
-    await deleteItems(access, locator, snapshot, [item.id]);
+    await deleteItems(context, snapshot, [item.id]);
     return { id: item.id };
   },
 };
 
 /** Deletes an item type; see `scflow/delete_item_type` in `docs/actions.md`. */
-export const deleteItemTypeAction: ModelActionDefinition<DeleteItemTypeParams, { id: string }> = {
+export const deleteItemTypeAction: ScflowActionDefinition<DeleteItemTypeParams, { id: string }> = {
   id: "scflow/delete_item_type",
+  writes: ["item", "item_type", "flow", "item_at_actor", "transformation_line", "conversion"],
+  destructive: true,
   title: "Delete an item type",
   description:
     "Deletes an item type. It is refused while items have this type, unless cascade is true, which deletes those items first, " +
@@ -311,29 +328,25 @@ export const deleteItemTypeAction: ModelActionDefinition<DeleteItemTypeParams, {
   parameters: {
     type: "object",
     properties: {
-      type: refParam("Id or name of the item type to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description: "When true, also deletes the items of this type with their held records, flows, lines and notes.",
-      },
+      id: refParam("item_type", "Id or name of the item type to delete."),
+      cascade: cascadeParam("When true, also deletes the items of this type with their held records, flows, lines and notes."),
     },
-    required: ["type"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const type = await resolveRef(access, locator, "item_type", params.type, "type");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const type = await loadInstance(context, "scflow.item_type", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
     const items = snapshot.items.filter((item) => item.type === type.id);
 
     if (items.length > 0 && !cascade) {
       throw new Error(
-        `parameter "type": "${labelOf(type)}" is used by ${items.length} item(s); use cascade: true to delete them`,
+        `parameter "id": "${labelOf(type)}" is used by ${items.length} item(s); use cascade: true to delete them`,
       );
     }
-    await deleteItems(access, locator, snapshot, items.map((item) => item.id));
-    await access.runCommand(locator, { kind: "delete", schema: "item_type", filters: { id: type.id } });
+    await deleteItems(context, snapshot, items.map((item) => item.id));
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.item_type", filters: { id: type.id } });
     return { id: type.id };
   },
 };
@@ -357,14 +370,13 @@ export const ITEM_ACTIONS = [
  * @throws When the domain of the item is not among the domains of the actor.
  */
 export async function assertHoldable(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   actor: Instance,
   item: Instance,
   param: string,
 ): Promise<void> {
-  const domain = await domainOfItem(access, locator, item);
-  const actorType = await resolveRef(access, locator, "actor_type", actor.type, "actor");
+  const domain = await domainOfItem(context, item);
+  const actorType = await loadInstance(context, "scflow.actor_type", actor.type);
   const actorDomains = actorType.domains as string[];
   if (!actorDomains.includes(domain)) {
     throw new Error(
@@ -383,18 +395,17 @@ export async function assertHoldable(
  * @throws When the domain of the item is not among the domains of an end of the flow.
  */
 export async function assertCarryable(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   source: Instance,
   destination: Instance,
   item: Instance,
 ): Promise<void> {
-  const domain = await domainOfItem(access, locator, item);
+  const domain = await domainOfItem(context, item);
   for (const [role, actor] of [
     ["source", source],
     ["destination", destination],
   ] as const) {
-    const actorType = await resolveRef(access, locator, "actor_type", actor.type, "flow");
+    const actorType = await loadInstance(context, "scflow.actor_type", actor.type);
     const actorDomains = actorType.domains as string[];
     if (!actorDomains.includes(domain)) {
       throw new Error(
@@ -408,26 +419,26 @@ export async function assertCarryable(
  * Returns the `item_at_actor` record of an actor and an item, and creates it when the
  * actor does not hold the item yet. It checks nothing: call {@link assertHoldable} first.
  */
-export async function holdItem(access: MclAccess, locator: string, actor: Instance, item: Instance): Promise<Instance> {
-  const existing = await access.runCommand(locator, {
+export async function holdItem(context: ActionAccess, actor: Instance, item: Instance, tags?: string[]): Promise<Instance> {
+  const existing = await context.runCommand(context.locator, {
     kind: "query",
-    schema: "item_at_actor",
+    schema: "scflow.item_at_actor",
     filters: { actor: actor.id, item: item.id },
   });
   if (existing.after.length > 0) {
     return existing.after[0] as unknown as Instance;
   }
-  const { after } = await access.runCommand(locator, {
+  const { after } = await context.runCommand(context.locator, {
     kind: "create",
-    schema: "item_at_actor",
-    input: { actor: actor.id, item: item.id },
+    schema: "scflow.item_at_actor",
+    input: { actor: actor.id, item: item.id, ...(tags === undefined ? {} : { tags }) },
   });
   return after[0] as unknown as Instance;
 }
 
 /** The flow domain of an item, which is the domain of its type. */
-export async function domainOfItem(access: MclAccess, locator: string, item: Instance): Promise<string> {
-  const type = await resolveRef(access, locator, "item_type", item.type, "item");
+export async function domainOfItem(context: ActionAccess, item: Instance): Promise<string> {
+  const type = await loadInstance(context, "scflow.item_type", item.type);
   return type.domain as string;
 }
 

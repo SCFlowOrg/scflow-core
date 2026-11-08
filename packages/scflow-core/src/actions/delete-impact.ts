@@ -1,5 +1,5 @@
-import type { MclAccess } from "@scfloworg/core";
-import type { Instance } from "./refs.js";
+import { type Instance } from "./refs.js";
+import { type ActionAccess } from "./params.js";
 
 /**
  * Every instance that a deletion can reach, read once so that the dependency
@@ -30,20 +30,20 @@ export interface DeletionSet {
 }
 
 /** Reads the instances that a deletion can reach. */
-export async function loadSnapshot(access: MclAccess, locator: string): Promise<Snapshot> {
+export async function loadSnapshot(context: ActionAccess): Promise<Snapshot> {
   const all = async (schema: string): Promise<Instance[]> => {
-    const { after } = await access.runCommand(locator, { kind: "query", schema });
+    const { after } = await context.runCommand(context.locator, { kind: "query", schema });
     return after as unknown as Instance[];
   };
   return {
-    actors: await all("actor"),
-    flows: await all("flow"),
-    items: await all("item"),
-    held: await all("item_at_actor"),
-    transformations: await all("transformation"),
-    lines: await all("transformation_line"),
-    conversions: await all("conversion"),
-    notes: await all("note"),
+    actors: await all("scflow.actor"),
+    flows: await all("scflow.flow"),
+    items: await all("scflow.item"),
+    held: await all("scflow.item_at_actor"),
+    transformations: await all("scflow.transformation"),
+    lines: await all("scflow.transformation_line"),
+    conversions: await all("scflow.conversion"),
+    notes: await all("scflow.note"),
   };
 }
 
@@ -125,8 +125,7 @@ export function closeDeletionSet(snapshot: Snapshot, set: DeletionSet): void {
 
 /** Deletes items with the held records and the flows that reference them and the lines of those records. */
 export async function deleteItems(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   snapshot: Snapshot,
   itemIds: readonly string[],
 ): Promise<void> {
@@ -135,13 +134,12 @@ export async function deleteItems(
     set.items.add(id);
   }
   closeDeletionSet(snapshot, set);
-  await executeDeletion(access, locator, snapshot, set);
+  await executeDeletion(context, snapshot, set);
 }
 
 /** Deletes transformations with their lines. */
 export async function deleteTransformations(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   snapshot: Snapshot,
   transformationIds: readonly string[],
 ): Promise<void> {
@@ -150,13 +148,12 @@ export async function deleteTransformations(
     set.transformations.add(id);
   }
   closeDeletionSet(snapshot, set);
-  await executeDeletion(access, locator, snapshot, set);
+  await executeDeletion(context, snapshot, set);
 }
 
 /** Deletes conversions. */
 export async function deleteConversions(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   snapshot: Snapshot,
   conversionIds: readonly string[],
 ): Promise<void> {
@@ -164,7 +161,7 @@ export async function deleteConversions(
   for (const id of conversionIds) {
     set.conversions.add(id);
   }
-  await executeDeletion(access, locator, snapshot, set);
+  await executeDeletion(context, snapshot, set);
 }
 
 /** The ids of every instance of the set, whatever its kind. */
@@ -191,25 +188,24 @@ export function notesOn(snapshot: Snapshot, ids: ReadonlySet<string>): Instance[
  * instance go with it.
  */
 export async function executeDeletion(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   snapshot: Snapshot,
   set: DeletionSet,
 ): Promise<void> {
   const remove = async (schema: string, ids: readonly string[]): Promise<void> => {
     if (ids.length > 0) {
-      await access.runCommand(locator, { kind: "delete", schema, filters: { id: { in: ids } } });
+      await context.runCommand(context.locator, { kind: "delete", schema, filters: { id: { in: ids } } });
     }
   };
-  await remove("transformation_line", [...set.lines]);
-  await remove("conversion", [...set.conversions]);
-  await remove("item_at_actor", [...set.held]);
-  await remove("transformation", [...set.transformations]);
-  await remove("flow", [...set.flows]);
+  await remove("scflow.transformation_line", [...set.lines]);
+  await remove("scflow.conversion", [...set.conversions]);
+  await remove("scflow.item_at_actor", [...set.held]);
+  await remove("scflow.transformation", [...set.transformations]);
+  await remove("scflow.flow", [...set.flows]);
   for (const level of actorsByDepth(snapshot, set.actors)) {
-    await remove("actor", level);
+    await remove("scflow.actor", level);
   }
-  await remove("item", [...set.items]);
+  await remove("scflow.item", [...set.items]);
 }
 
 /** The actors of the set grouped by depth in the `parent_actor` tree, the deepest group first. */

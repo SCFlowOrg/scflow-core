@@ -41,7 +41,7 @@ export async function createActor(
 
   const types = await mcl.runCommand(locator, {
     kind: "query",
-    schema: "actor_type",
+    schema: "scflow.actor_type",
     filters: { id: type },
   });
   if (types.after.length === 0) {
@@ -56,7 +56,7 @@ export async function createActor(
 
   const { after } = await mcl.runCommand(locator, {
     kind: "create",
-    schema: "actor",
+    schema: "scflow.actor",
     input: { ...rest, type, ...(actorScope === undefined ? {} : { scope: actorScope }) },
   });
   return after[0] as unknown as Record<string, unknown>;
@@ -65,7 +65,7 @@ export async function createActor(
 async function assertScopeExists(mcl: MclAccess, locator: string, scope: string): Promise<void> {
   const scopes = await mcl.runCommand(locator, {
     kind: "query",
-    schema: "scope",
+    schema: "scflow.scope",
     filters: { id: scope },
   });
   if (scopes.after.length === 0) {

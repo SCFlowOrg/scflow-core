@@ -1,8 +1,7 @@
-import type { MclAccess, ModelActionDefinition } from "@scfloworg/core";
+import { labelOf, loadInstance, type Instance } from "./refs.js";
+import { cascadeParam, unique, tagsParam, type ActionAccess, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
 import { deleteTransformations, loadSnapshot } from "./delete-impact.js";
 import { assertHoldable, holdItem } from "./items.js";
-import { localizedTextParam, optionalBoolean, optionalStringList, refParam, requireRole } from "./params.js";
-import { labelOf, resolveRef, type Instance } from "./refs.js";
 import { toLocalized } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
@@ -10,15 +9,18 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_transformation_type`. */
 export interface CreateTransformationTypeParams {
-  name: Text;
+  display_name: Text;
   description?: Text;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/create_transformation`. */
 export interface CreateTransformationParams {
   actor: string;
   type: string;
-  name?: Text;
+  display_name?: Text;
+  description?: Text;
+  tags?: string[];
 }
 
 /** Parameters of `scflow/connect_transformation_line`. */
@@ -26,6 +28,7 @@ export interface ConnectTransformationLineParams {
   transformation: string;
   held_item: string;
   role: "consumed" | "produced";
+  tags?: string[];
 }
 
 /** Parameters of `scflow/define_process`. */
@@ -38,13 +41,13 @@ export interface DefineProcessParams {
 
 /** Parameters of `scflow/delete_transformation`. */
 export interface DeleteTransformationParams {
-  transformation: string;
+  id: string;
   cascade?: boolean;
 }
 
 /** Parameters of `scflow/delete_transformation_type`. */
 export interface DeleteTransformationTypeParams {
-  type: string;
+  id: string;
   cascade?: boolean;
 }
 
@@ -77,37 +80,44 @@ export interface DefinedProcess {
 }
 
 /** Creates a transformation type; see `scflow/create_transformation_type` in `docs/actions.md`. */
-export const createTransformationTypeAction: ModelActionDefinition<
+export const createTransformationTypeAction: ScflowActionDefinition<
   CreateTransformationTypeParams,
   TransformationTypeSummary
 > = {
   id: "scflow/create_transformation_type",
+  writes: ["transformation_type"],
   title: "Create a transformation type",
   description:
     "Creates a transformation type, a kind of operation such as assembly, machining, packaging or inspection, and returns it.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Display name of the transformation type, a string or a map of language to string."),
+      display_name: localizedTextParam("Display name of the transformation type, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the transformation type."),
+      tags: tagsParam("Tags of the transformation type."),
     },
-    required: ["name"],
+    required: ["display_name"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const input: Record<string, unknown> = { display_name: toLocalized(params.name, "name") };
+  async run(params, context) {
+    const input: Record<string, unknown> = { display_name: toLocalized(params.display_name) };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description, "description");
+      input.description = toLocalized(params.description);
     }
-    const { after } = await access.runCommand(locator, { kind: "create", schema: "transformation_type", input });
+    const tags = unique(params.tags);
+    if (tags !== undefined) {
+      input.tags = tags;
+    }
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.transformation_type", input });
     const type = after[0] as unknown as Instance;
     return { id: type.id, display_name: type.display_name as Record<string, string> };
   },
 };
 
 /** Creates a transformation; see `scflow/create_transformation` in `docs/actions.md`. */
-export const createTransformationAction: ModelActionDefinition<CreateTransformationParams, TransformationSummary> = {
+export const createTransformationAction: ScflowActionDefinition<CreateTransformationParams, TransformationSummary> = {
   id: "scflow/create_transformation",
+  writes: ["transformation"],
   title: "Create a transformation",
   description:
     "Creates a transformation of a given type inside an actor, with no line yet, and returns it. " +
@@ -115,27 +125,33 @@ export const createTransformationAction: ModelActionDefinition<CreateTransformat
   parameters: {
     type: "object",
     properties: {
-      actor: refParam("Id or name of the actor that executes the transformation."),
-      type: refParam("Id or name of the transformation type."),
-      name: localizedTextParam("Display name of the transformation; the name of its type when omitted."),
+      actor: refParam("actor", "Id or name of the actor that executes the transformation."),
+      type: refParam("transformation_type", "Id or name of the transformation type."),
+      display_name: localizedTextParam("Display name of the transformation; the name of its type when omitted."),
+      description: localizedTextParam("Markdown description of the transformation."),
+      tags: tagsParam("Tags of the transformation."),
     },
     required: ["actor", "type"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
-    const type = await resolveRef(access, locator, "transformation_type", params.type, "type");
-    const name = params.name === undefined ? undefined : toLocalized(params.name, "name");
-    return insertTransformation(access, locator, actor, type, name);
+  async run(params, context) {
+    const actor = await loadInstance(context, "scflow.actor", params.actor);
+    const type = await loadInstance(context, "scflow.transformation_type", params.type);
+    return insertTransformation(context, actor, type, {
+      ...(params.display_name === undefined ? {} : { display_name: toLocalized(params.display_name) }),
+      ...(params.description === undefined ? {} : { description: toLocalized(params.description) }),
+      ...(params.tags === undefined ? {} : { tags: unique(params.tags) }),
+    });
   },
 };
 
 /** Connects a held item to a transformation; see `scflow/connect_transformation_line` in `docs/actions.md`. */
-export const connectTransformationLineAction: ModelActionDefinition<
+export const connectTransformationLineAction: ScflowActionDefinition<
   ConnectTransformationLineParams,
   TransformationLineSummary
 > = {
   id: "scflow/connect_transformation_line",
+  writes: ["transformation_line"],
   title: "Connect a transformation line",
   description:
     "Connects an item held by the actor of a transformation to that transformation, as an input (consumed) or an output " +
@@ -143,32 +159,34 @@ export const connectTransformationLineAction: ModelActionDefinition<
   parameters: {
     type: "object",
     properties: {
-      transformation: refParam("Id or name of the transformation."),
-      held_item: refParam("Id of the item-at-actor record, held by the actor of the transformation."),
+      transformation: refParam("transformation", "Id or name of the transformation."),
+      held_item: refParam("item_at_actor", "Id of the item-at-actor record, held by the actor of the transformation."),
       role: { type: "string", enum: ["consumed", "produced"], description: "Whether the transformation consumes or produces the item." },
+      tags: tagsParam("Tags of the line, when the action creates it."),
     },
     required: ["transformation", "held_item", "role"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const transformation = await resolveRef(access, locator, "transformation", params.transformation, "transformation");
-    const held = await resolveRef(access, locator, "item_at_actor", params.held_item, "held_item");
-    const role = requireRole(params.role, "role");
+  async run(params, context) {
+    const transformation = await loadInstance(context, "scflow.transformation", params.transformation);
+    const held = await loadInstance(context, "scflow.item_at_actor", params.held_item);
+    const role = params.role;
 
     if (held.actor !== transformation.actor) {
-      const owner = await resolveRef(access, locator, "actor", held.actor, "held_item");
-      const executor = await resolveRef(access, locator, "actor", transformation.actor, "transformation");
+      const owner = await loadInstance(context, "scflow.actor", held.actor);
+      const executor = await loadInstance(context, "scflow.actor", transformation.actor);
       throw new Error(
         `parameter "held_item": the record is held by "${labelOf(owner)}", not by "${labelOf(executor)}", the actor of the transformation`,
       );
     }
-    return summarizeLine(await insertLine(access, locator, transformation.id, held.id, role));
+    return summarizeLine(await insertLine(context, transformation.id, held.id, role, unique(params.tags)));
   },
 };
 
 /** Defines a whole process in one step; see `scflow/define_process` in `docs/actions.md`. */
-export const defineProcessAction: ModelActionDefinition<DefineProcessParams, DefinedProcess> = {
+export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, DefinedProcess> = {
   id: "scflow/define_process",
+  writes: ["transformation", "item_at_actor", "transformation_line"],
   title: "Define a process",
   description:
     "Creates a transformation of a given type at an actor, makes the actor hold the consumed and produced items that it does not " +
@@ -177,52 +195,46 @@ export const defineProcessAction: ModelActionDefinition<DefineProcessParams, Def
   parameters: {
     type: "object",
     properties: {
-      actor: refParam("Id or name of the actor."),
-      transformation_type: refParam("Id or name of the transformation type."),
+      actor: refParam("actor", "Id or name of the actor."),
+      transformation_type: refParam("transformation_type", "Id or name of the transformation type."),
       consumed_items: {
         type: "array",
-        items: { type: "string" },
+        items: { type: "string", ref: "item" },
         description: "Ids or names of the items consumed.",
       },
       produced_items: {
         type: "array",
-        items: { type: "string" },
+        items: { type: "string", ref: "item" },
         description: "Ids or names of the items produced.",
       },
     },
     required: ["actor", "transformation_type"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const actor = await resolveRef(access, locator, "actor", params.actor, "actor");
-    const type = await resolveRef(
-      access,
-      locator,
-      "transformation_type",
-      params.transformation_type,
-      "transformation_type",
-    );
-    const consumed = await resolveItems(access, locator, params.consumed_items, "consumed_items");
-    const produced = await resolveItems(access, locator, params.produced_items, "produced_items");
+  async run(params, context) {
+    const actor = await loadInstance(context, "scflow.actor", params.actor);
+    const type = await loadInstance(context, "scflow.transformation_type", params.transformation_type);
+    const consumed = await loadItems(context, params.consumed_items);
+    const produced = await loadItems(context, params.produced_items);
 
     for (const [param, items] of [
       ["consumed_items", consumed],
       ["produced_items", produced],
     ] as const) {
       for (const item of items) {
-        await assertHoldable(access, locator, actor, item, param);
+        await assertHoldable(context, actor, item, param);
       }
     }
 
-    const transformation = await insertTransformation(access, locator, actor, type, undefined);
+    const transformation = await insertTransformation(context, actor, type, {});
     const lines: TransformationLineSummary[] = [];
     for (const [role, items] of [
       ["consumed", consumed],
       ["produced", produced],
     ] as const) {
       for (const item of items) {
-        const held = await holdItem(access, locator, actor, item);
-        lines.push(summarizeLine(await insertLine(access, locator, transformation.id, held.id, role)));
+        const held = await holdItem(context, actor, item);
+        lines.push(summarizeLine(await insertLine(context, transformation.id, held.id, role)));
       }
     }
     return { transformation, lines };
@@ -230,8 +242,10 @@ export const defineProcessAction: ModelActionDefinition<DefineProcessParams, Def
 };
 
 /** Deletes a transformation; see `scflow/delete_transformation` in `docs/actions.md`. */
-export const deleteTransformationAction: ModelActionDefinition<DeleteTransformationParams, { id: string }> = {
+export const deleteTransformationAction: ScflowActionDefinition<DeleteTransformationParams, { id: string }> = {
   id: "scflow/delete_transformation",
+  writes: ["transformation", "transformation_line"],
+  destructive: true,
   title: "Delete a transformation",
   description:
     "Deletes a transformation with its lines and notes, and returns its id. The held items that its lines used are kept. " +
@@ -239,29 +253,26 @@ export const deleteTransformationAction: ModelActionDefinition<DeleteTransformat
   parameters: {
     type: "object",
     properties: {
-      transformation: refParam("Id or name of the transformation to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description: "Has no effect: the lines and the notes of a transformation are always deleted with it.",
-      },
+      id: refParam("transformation", "Id or name of the transformation to delete."),
+      cascade: cascadeParam("Has no effect: the lines and the notes of a transformation are always deleted with it."),
     },
-    required: ["transformation"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const transformation = await resolveRef(access, locator, "transformation", params.transformation, "transformation");
-    optionalBoolean(params.cascade, "cascade");
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const transformation = await loadInstance(context, "scflow.transformation", params.id);
+    const snapshot = await loadSnapshot(context);
 
-    await deleteTransformations(access, locator, snapshot, [transformation.id]);
+    await deleteTransformations(context, snapshot, [transformation.id]);
     return { id: transformation.id };
   },
 };
 
 /** Deletes a transformation type; see `scflow/delete_transformation_type` in `docs/actions.md`. */
-export const deleteTransformationTypeAction: ModelActionDefinition<DeleteTransformationTypeParams, { id: string }> = {
+export const deleteTransformationTypeAction: ScflowActionDefinition<DeleteTransformationTypeParams, { id: string }> = {
   id: "scflow/delete_transformation_type",
+  writes: ["transformation", "transformation_line", "transformation_type"],
+  destructive: true,
   title: "Delete a transformation type",
   description:
     "Deletes a transformation type. It is refused while transformations have this type, unless cascade is true, which deletes " +
@@ -269,29 +280,25 @@ export const deleteTransformationTypeAction: ModelActionDefinition<DeleteTransfo
   parameters: {
     type: "object",
     properties: {
-      type: refParam("Id or name of the transformation type to delete."),
-      cascade: {
-        type: "boolean",
-        default: false,
-        description: "When true, also deletes the transformations of this type with their lines and notes.",
-      },
+      id: refParam("transformation_type", "Id or name of the transformation type to delete."),
+      cascade: cascadeParam("When true, also deletes the transformations of this type with their lines and notes."),
     },
-    required: ["type"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const type = await resolveRef(access, locator, "transformation_type", params.type, "type");
-    const cascade = optionalBoolean(params.cascade, "cascade") ?? false;
-    const snapshot = await loadSnapshot(access, locator);
+  async run(params, context) {
+    const type = await loadInstance(context, "scflow.transformation_type", params.id);
+    const cascade = params.cascade === true;
+    const snapshot = await loadSnapshot(context);
     const transformations = snapshot.transformations.filter((transformation) => transformation.type === type.id);
 
     if (transformations.length > 0 && !cascade) {
       throw new Error(
-        `parameter "type": "${labelOf(type)}" is used by ${transformations.length} transformation(s); use cascade: true to delete them`,
+        `parameter "id": "${labelOf(type)}" is used by ${transformations.length} transformation(s); use cascade: true to delete them`,
       );
     }
-    await deleteTransformations(access, locator, snapshot, transformations.map((transformation) => transformation.id));
-    await access.runCommand(locator, { kind: "delete", schema: "transformation_type", filters: { id: type.id } });
+    await deleteTransformations(context, snapshot, transformations.map((transformation) => transformation.id));
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.transformation_type", filters: { id: type.id } });
     return { id: type.id };
   },
 };
@@ -308,16 +315,15 @@ export const TRANSFORMATION_ACTIONS = [
 
 /** Creates a transformation, named after its type unless a name is given. */
 async function insertTransformation(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   actor: Instance,
   type: Instance,
-  name: Record<string, string> | undefined,
+  extra: Record<string, unknown>,
 ): Promise<TransformationSummary> {
-  const { after } = await access.runCommand(locator, {
+  const { after } = await context.runCommand(context.locator, {
     kind: "create",
-    schema: "transformation",
-    input: { display_name: name ?? { ...(type.display_name as Record<string, string>) }, type: type.id, actor: actor.id },
+    schema: "scflow.transformation",
+    input: { display_name: { ...(type.display_name as Record<string, string>) }, ...extra, type: type.id, actor: actor.id },
   });
   const transformation = after[0] as unknown as Instance;
   return {
@@ -330,42 +336,33 @@ async function insertTransformation(
 
 /** Returns the line of a transformation for a held item and a role, and creates it when it does not exist. */
 async function insertLine(
-  access: MclAccess,
-  locator: string,
+  context: ActionAccess,
   transformation: string,
   heldItem: string,
   role: string,
+  tags?: string[],
 ): Promise<Instance> {
-  const existing = await access.runCommand(locator, {
+  const existing = await context.runCommand(context.locator, {
     kind: "query",
-    schema: "transformation_line",
+    schema: "scflow.transformation_line",
     filters: { transformation, held_item: heldItem, role },
   });
   if (existing.after.length > 0) {
     return existing.after[0] as unknown as Instance;
   }
-  const { after } = await access.runCommand(locator, {
+  const { after } = await context.runCommand(context.locator, {
     kind: "create",
-    schema: "transformation_line",
-    input: { transformation, held_item: heldItem, role },
+    schema: "scflow.transformation_line",
+    input: { transformation, held_item: heldItem, role, ...(tags === undefined ? {} : { tags }) },
   });
   return after[0] as unknown as Instance;
 }
 
-/** Resolves a list of item references to distinct items, in the order given. */
-async function resolveItems(
-  access: MclAccess,
-  locator: string,
-  refs: unknown,
-  param: string,
-): Promise<Instance[]> {
-  const list = optionalStringList(refs, param) ?? [];
+/** Reads the given items, each once, in the order given. */
+async function loadItems(context: ActionAccess, ids: string[] | undefined): Promise<Instance[]> {
   const items: Instance[] = [];
-  for (const ref of list) {
-    const item = await resolveRef(access, locator, "item", ref, param);
-    if (!items.some((known) => known.id === item.id)) {
-      items.push(item);
-    }
+  for (const id of unique(ids) ?? []) {
+    items.push(await loadInstance(context, "scflow.item", id));
   }
   return items;
 }

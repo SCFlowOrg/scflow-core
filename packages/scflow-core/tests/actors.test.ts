@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createTestDocument } from "@scfloworg/core-plugin-core/testing";
-import { SCHEMAS, createActor } from "../src/index.js";
+import { setupActions } from "./actions-helpers.js";
+import { createActor } from "../src/index.js";
 
 async function setup() {
-  return createTestDocument(SCHEMAS);
+  return setupActions();
 }
 
 type Mcl = Awaited<ReturnType<typeof setup>>["mcl"];

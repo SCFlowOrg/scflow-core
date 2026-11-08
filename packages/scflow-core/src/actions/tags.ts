@@ -1,6 +1,5 @@
-import type { MclAccess, ModelActionDefinition } from "@scfloworg/core";
-import { optionalStringList, refParam, tagsParam } from "./params.js";
-import { resolveEntity, type Instance } from "./refs.js";
+import { loadInstance, type Instance } from "./refs.js";
+import { unique, type ActionAccess, type ScflowActionDefinition, refParam, tagsParam } from "./params.js";
 
 /** Parameters of `scflow/add_tags`. */
 export interface AddTagsParams {
@@ -20,34 +19,17 @@ export interface TaggedSummary {
   tags: string[];
 }
 
-/**
- * Reads the required list of tags.
- *
- * @returns The tags without duplicates.
- * @throws When the value is missing, is not a list of non-empty strings, or is empty.
- */
-function requireTags(value: unknown): string[] {
-  const tags = optionalStringList(value, "tags");
-  if (tags === undefined) {
-    throw new Error('parameter "tags": expected a list of non-empty strings');
-  }
-  if (tags.length === 0) {
-    throw new Error('parameter "tags": give at least one tag');
-  }
-  return tags;
-}
-
 /** The tags of an instance. */
 function tagsOf(instance: Instance): string[] {
   return Array.isArray(instance.tags) ? (instance.tags as string[]) : [];
 }
 
 /** Writes the tags of an entity, unless they did not change, and summarizes it. */
-async function writeTags(access: MclAccess, locator: string, entity: Instance, tags: string[]): Promise<TaggedSummary> {
+async function writeTags(context: ActionAccess, entity: Instance, tags: string[]): Promise<TaggedSummary> {
   if (tags.length !== tagsOf(entity).length) {
-    await access.runCommand(locator, {
+    await context.runCommand(context.locator, {
       kind: "update",
-      schema: "annotable",
+      schema: "scflow.annotable",
       filters: { id: entity.id },
       input: { tags },
     });
@@ -56,8 +38,9 @@ async function writeTags(access: MclAccess, locator: string, entity: Instance, t
 }
 
 /** Appends tags to an entity; see `scflow/add_tags` in `docs/actions.md`. */
-export const addTagsAction: ModelActionDefinition<AddTagsParams, TaggedSummary> = {
+export const addTagsAction: ScflowActionDefinition<AddTagsParams, TaggedSummary> = {
   id: "scflow/add_tags",
+  writes: ["annotable"],
   title: "Add tags",
   description:
     "Appends tags to an entity of the model (actor, flow, item, scope, type, transformation, conversion...) without removing its existing tags, " +
@@ -65,24 +48,25 @@ export const addTagsAction: ModelActionDefinition<AddTagsParams, TaggedSummary> 
   parameters: {
     type: "object",
     properties: {
-      entity: refParam("Id of the entity to tag, whatever its kind."),
-      tags: tagsParam("Tags to add, at least one."),
+      entity: refParam("annotable", "Id of the entity to tag, whatever its kind."),
+      tags: { ...tagsParam("Tags to add, at least one."), minItems: 1 },
     },
     required: ["entity", "tags"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const entity = await resolveEntity(access, locator, params.entity, "entity");
-    const tags = requireTags(params.tags);
+  async run(params, context) {
+    const entity = await loadInstance(context, "scflow.annotable", params.entity);
+    const tags = unique(params.tags) as string[];
 
     const current = tagsOf(entity);
-    return writeTags(access, locator, entity, [...current, ...tags.filter((tag) => !current.includes(tag))]);
+    return writeTags(context, entity, [...current, ...tags.filter((tag) => !current.includes(tag))]);
   },
 };
 
 /** Removes tags from an entity; see `scflow/remove_tags` in `docs/actions.md`. */
-export const removeTagsAction: ModelActionDefinition<RemoveTagsParams, TaggedSummary> = {
+export const removeTagsAction: ScflowActionDefinition<RemoveTagsParams, TaggedSummary> = {
   id: "scflow/remove_tags",
+  writes: ["annotable"],
   title: "Remove tags",
   description:
     "Removes the given tags from an entity of the model (actor, flow, item, scope, type, transformation, conversion...) and returns { id, tags }. " +
@@ -90,17 +74,17 @@ export const removeTagsAction: ModelActionDefinition<RemoveTagsParams, TaggedSum
   parameters: {
     type: "object",
     properties: {
-      entity: refParam("Id of the entity to untag, whatever its kind."),
-      tags: tagsParam("Tags to remove, at least one."),
+      entity: refParam("annotable", "Id of the entity to untag, whatever its kind."),
+      tags: { ...tagsParam("Tags to remove, at least one."), minItems: 1 },
     },
     required: ["entity", "tags"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const entity = await resolveEntity(access, locator, params.entity, "entity");
-    const tags = requireTags(params.tags);
+  async run(params, context) {
+    const entity = await loadInstance(context, "scflow.annotable", params.entity);
+    const tags = unique(params.tags) as string[];
 
-    return writeTags(access, locator, entity, tagsOf(entity).filter((tag) => !tags.includes(tag)));
+    return writeTags(context, entity, tagsOf(entity).filter((tag) => !tags.includes(tag)));
   },
 };
 

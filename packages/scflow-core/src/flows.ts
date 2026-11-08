@@ -1,4 +1,5 @@
 import type { MclAccess } from "@scfloworg/core";
+import type { ActionAccess } from "./actions/params.js";
 import { assertCarryable, holdItem } from "./actions/items.js";
 import { labelOf, type Instance } from "./actions/refs.js";
 
@@ -87,22 +88,22 @@ export async function createFlow(
 ): Promise<Record<string, unknown>> {
   const { source, destination, item, bidirectional = false, display_name, description, tags } = input;
 
-  const sourceActor = await loadInstance(mcl, locator, "actor", source);
-  const destinationActor = await loadInstance(mcl, locator, "actor", destination);
+  const sourceActor = await loadInstance(mcl, locator, "scflow.actor", source);
+  const destinationActor = await loadInstance(mcl, locator, "scflow.actor", destination);
 
   if (item === undefined && isParentChild(sourceActor, destinationActor)) {
     throw new Error(
       `a flow between "${labelOf(sourceActor)}" and "${labelOf(destinationActor)}", one being the parent of the other, must carry an item`,
     );
   }
-  const itemInstance = item === undefined ? undefined : await loadInstance(mcl, locator, "item", item);
+  const itemInstance = item === undefined ? undefined : await loadInstance(mcl, locator, "scflow.item", item);
   if (itemInstance !== undefined) {
-    await assertCarryable(mcl, locator, sourceActor, destinationActor, itemInstance);
+    await assertCarryable(onDataset(mcl, locator), sourceActor, destinationActor, itemInstance);
   }
 
   const { after } = await mcl.runCommand(locator, {
     kind: "create",
-    schema: "flow",
+    schema: "scflow.flow",
     input: {
       source,
       destination,
@@ -114,8 +115,8 @@ export async function createFlow(
     },
   });
   if (itemInstance !== undefined) {
-    await holdItem(mcl, locator, sourceActor, itemInstance);
-    await holdItem(mcl, locator, destinationActor, itemInstance);
+    await holdItem(onDataset(mcl, locator), sourceActor, itemInstance);
+    await holdItem(onDataset(mcl, locator), destinationActor, itemInstance);
   }
   return after[0] as unknown as Record<string, unknown>;
 }
@@ -138,8 +139,8 @@ export async function setFlowItem(
   locator: string,
   input: SetFlowItemInput,
 ): Promise<Record<string, unknown>> {
-  const flow = await loadInstance(mcl, locator, "flow", input.flow);
-  const item = await loadInstance(mcl, locator, "item", input.item);
+  const flow = await loadInstance(mcl, locator, "scflow.flow", input.flow);
+  const item = await loadInstance(mcl, locator, "scflow.item", input.item);
 
   const current = flow.item as string | undefined | null;
   if (current === item.id) {
@@ -149,19 +150,24 @@ export async function setFlowItem(
     throw new Error(`flow "${flow.id}" already carries an item: the item of a flow never changes and is never removed`);
   }
 
-  const source = await loadInstance(mcl, locator, "actor", flow.source as string);
-  const destination = await loadInstance(mcl, locator, "actor", flow.destination as string);
-  await assertCarryable(mcl, locator, source, destination, item);
+  const source = await loadInstance(mcl, locator, "scflow.actor", flow.source as string);
+  const destination = await loadInstance(mcl, locator, "scflow.actor", flow.destination as string);
+  await assertCarryable(onDataset(mcl, locator), source, destination, item);
 
   const { after } = await mcl.runCommand(locator, {
     kind: "update",
-    schema: "flow",
+    schema: "scflow.flow",
     filters: { id: flow.id },
     input: { item: item.id },
   });
-  await holdItem(mcl, locator, source, item);
-  await holdItem(mcl, locator, destination, item);
+  await holdItem(onDataset(mcl, locator), source, item);
+  await holdItem(onDataset(mcl, locator), destination, item);
   return after[0] as unknown as Record<string, unknown>;
+}
+
+/** The access of the actions on the dataset `locator`. */
+function onDataset(mcl: MclAccess, locator: string): ActionAccess {
+  return { locator, runCommand: (at, command) => mcl.runCommand(at, command), runScript: (at, script) => mcl.runScript(at, script) };
 }
 
 /** True when one actor is the parent of the other. */
@@ -179,10 +185,10 @@ async function loadInstance(mcl: MclAccess, locator: string, schema: string, id:
 }
 
 async function domainsOfActor(mcl: MclAccess, locator: string, actorId: string): Promise<string[]> {
-  const actor = await loadInstance(mcl, locator, "actor", actorId);
+  const actor = await loadInstance(mcl, locator, "scflow.actor", actorId);
   const types = await mcl.runCommand(locator, {
     kind: "query",
-    schema: "actor_type",
+    schema: "scflow.actor_type",
     filters: { id: actor.type as string },
   });
   const actorType = types.after[0] as unknown as { domains: string[] };

@@ -191,6 +191,29 @@ pattern: ^([A-Z]{2}[A-Z2-9]{3})?$
 
 The country code followed by three characters, such as `FRLEH` for Le Havre or `NLRTM` for Rotterdam, or the empty text when the code is unset. The model checks the format, not that the code exists.
 
+## Write actions
+
+*Rule.*
+
+Each schema names the business action that takes the place of a generated CRUD operation in its `crud` constraint (see Action in the [meta-model](../../../core/docs/spec/meta-model.md#action)). An operation that is not listed is generated. The schema `location` lists none. `annotable` is `abstract`, because every instance belongs to a concrete schema, so no action is generated for it.
+
+| Schema | Create | Update | Delete |
+| --- | --- | --- | --- |
+| `note` | `scflow/add_note` | `scflow/update_note` | `scflow/remove_note` |
+| `actor_type` | `scflow/create_actor_type` | generated | `scflow/delete_actor_type` |
+| `item_type` | `scflow/create_item_type` | generated | `scflow/delete_item_type` |
+| `actor` | `scflow/create_actor` | `scflow/update_actor` | `scflow/delete_actor` |
+| `flow` | `scflow/create_flow` | `scflow/update_flow` | `scflow/delete_flow` |
+| `item` | `scflow/create_item` | `scflow/update_item` | `scflow/delete_item` |
+| `item_at_actor` | `scflow/hold_item` | generated | `scflow/release_held_item` |
+| `transformation_type` | `scflow/create_transformation_type` | generated | `scflow/delete_transformation_type` |
+| `transformation` | `scflow/create_transformation` | generated | `scflow/delete_transformation` |
+| `transformation_line` | `scflow/connect_transformation_line` | generated | generated |
+| `conversion` | `scflow/create_conversion` | `scflow/update_conversion` | `scflow/delete_conversion` |
+| `scope` | `scflow/create_scope` | generated | `scflow/delete_scope` |
+
+The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item of a flow is set once and never changes.
+
 ## annotable
 
 *Schema.*

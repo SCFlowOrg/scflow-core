@@ -1,23 +1,23 @@
-import type { ModelActionDefinition } from "@scfloworg/core";
-import { localizedTextParam, refParam } from "./params.js";
-import { resolveEntity, resolveRef, type Instance } from "./refs.js";
+import { loadInstance, type Instance } from "./refs.js";
+import { cascadeParam, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
 import { toLocalized } from "./text.js";
 
 /** Parameters of `scflow/add_note`. */
 export interface AddNoteParams {
-  entity: string;
+  annotated: string;
   content: string | Record<string, string>;
 }
 
 /** Parameters of `scflow/update_note`. */
 export interface UpdateNoteParams {
-  note: string;
+  id: string;
   content: string | Record<string, string>;
 }
 
 /** Parameters of `scflow/remove_note`. */
 export interface RemoveNoteParams {
-  note: string;
+  id: string;
+  cascade?: boolean;
 }
 
 /** Parameters of `scflow/find_notes`. */
@@ -38,8 +38,9 @@ function summarizeNote(note: Instance): NoteSummary {
 }
 
 /** Adds a note to an entity; see `scflow/add_note` in `docs/actions.md`. */
-export const addNoteAction: ModelActionDefinition<AddNoteParams, NoteSummary> = {
+export const addNoteAction: ScflowActionDefinition<AddNoteParams, NoteSummary> = {
   id: "scflow/add_note",
+  writes: ["note"],
   title: "Add a note",
   description:
     "Adds a Markdown note to an entity of the model (actor, flow, item, scope, type, transformation...) and returns it. " +
@@ -47,28 +48,28 @@ export const addNoteAction: ModelActionDefinition<AddNoteParams, NoteSummary> = 
   parameters: {
     type: "object",
     properties: {
-      entity: refParam("Id of the entity to annotate, whatever its kind."),
+      annotated: refParam("annotable", "Id of the entity to annotate, whatever its kind."),
       content: localizedTextParam("Markdown text of the note."),
     },
-    required: ["entity", "content"],
+    required: ["annotated", "content"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const entity = await resolveEntity(access, locator, params.entity, "entity");
-    const content = toLocalized(params.content, "content");
+  async run(params, context) {
+    const content = toLocalized(params.content);
 
-    const { after } = await access.runCommand(locator, {
+    const { after } = await context.runCommand(context.locator, {
       kind: "create",
-      schema: "note",
-      input: { annotated: entity.id, content },
+      schema: "scflow.note",
+      input: { annotated: params.annotated, content },
     });
     return summarizeNote(after[0] as unknown as Instance);
   },
 };
 
 /** Changes the content of a note; see `scflow/update_note` in `docs/actions.md`. */
-export const updateNoteAction: ModelActionDefinition<UpdateNoteParams, NoteSummary> = {
+export const updateNoteAction: ScflowActionDefinition<UpdateNoteParams, NoteSummary> = {
   id: "scflow/update_note",
+  writes: ["note"],
   title: "Update a note",
   description:
     "Changes the content of a note and returns it. Each given language replaces the text of the same language, the other languages are kept. " +
@@ -76,20 +77,19 @@ export const updateNoteAction: ModelActionDefinition<UpdateNoteParams, NoteSumma
   parameters: {
     type: "object",
     properties: {
-      note: refParam("Id of the note to update."),
+      id: refParam("note", "Id of the note to update."),
       content: localizedTextParam("New Markdown text; each given language replaces the same language."),
     },
-    required: ["note", "content"],
+    required: ["id", "content"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const note = await resolveRef(access, locator, "note", params.note, "note");
-    const content = toLocalized(params.content, "content");
+  async run(params, context) {
+    const content = toLocalized(params.content);
 
-    const { after } = await access.runCommand(locator, {
+    const { after } = await context.runCommand(context.locator, {
       kind: "update",
-      schema: "note",
-      filters: { id: note.id },
+      schema: "scflow.note",
+      filters: { id: params.id },
       input: { content: { set: content } },
     });
     return summarizeNote(after[0] as unknown as Instance);
@@ -97,28 +97,31 @@ export const updateNoteAction: ModelActionDefinition<UpdateNoteParams, NoteSumma
 };
 
 /** Deletes a note; see `scflow/remove_note` in `docs/actions.md`. */
-export const removeNoteAction: ModelActionDefinition<RemoveNoteParams, { id: string }> = {
+export const removeNoteAction: ScflowActionDefinition<RemoveNoteParams, { id: string }> = {
   id: "scflow/remove_note",
+  writes: ["note"],
+  destructive: true,
   title: "Remove a note",
-  description: "Deletes a note and returns its id. The entity it annotated is not changed.",
+  description: "Deletes a note and returns its id. The entity it annotated is not changed. The cascade parameter is accepted for consistency with the other delete actions and changes nothing.",
   parameters: {
     type: "object",
     properties: {
-      note: refParam("Id of the note to delete."),
+      id: refParam("note", "Id of the note to delete."),
+      cascade: cascadeParam("Has no effect: nothing depends on a note."),
     },
-    required: ["note"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const note = await resolveRef(access, locator, "note", params.note, "note");
-    await access.runCommand(locator, { kind: "delete", schema: "note", filters: { id: note.id } });
-    return { id: note.id };
+  async run(params, context) {
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.note", filters: { id: params.id } });
+    return { id: params.id };
   },
 };
 
 /** Lists the notes of an entity; see `scflow/find_notes` in `docs/actions.md`. */
-export const findNotesAction: ModelActionDefinition<FindNotesParams, NoteSummary[]> = {
+export const findNotesAction: ScflowActionDefinition<FindNotesParams, NoteSummary[]> = {
   id: "scflow/find_notes",
+  writes: [],
   title: "Find the notes of an entity",
   description:
     "Lists the notes of an entity, given by its id: [{ id, entity, content }]. An entity without a note gives an empty list. It changes nothing.",
@@ -126,17 +129,16 @@ export const findNotesAction: ModelActionDefinition<FindNotesParams, NoteSummary
   parameters: {
     type: "object",
     properties: {
-      entity: refParam("Id of the entity, whatever its kind."),
+      entity: refParam("annotable", "Id of the entity, whatever its kind."),
     },
     required: ["entity"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const entity = await resolveEntity(access, locator, params.entity, "entity");
-    const { after } = await access.runCommand(locator, {
+  async run(params, context) {
+    const { after } = await context.runCommand(context.locator, {
       kind: "query",
-      schema: "note",
-      filters: { annotated: entity.id },
+      schema: "scflow.note",
+      filters: { annotated: params.entity },
     });
     return (after as unknown as Instance[]).map(summarizeNote);
   },

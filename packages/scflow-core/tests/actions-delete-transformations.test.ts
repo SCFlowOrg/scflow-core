@@ -5,7 +5,7 @@ async function withTransformations() {
   const ctx = await setup();
   const { create, run } = ctx;
   await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const plant = await run("scflow/create_actor", { name: "Plant", type: "Site" });
+  const plant = await run("scflow/create_actor", { display_name: "Plant", type: "Site" });
   const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
   const bolt = await create("item", { display_name: { en: "Bolt" }, type: itemType });
   const heldBolt = await create("item_at_actor", { actor: plant.id, item: bolt });
@@ -43,7 +43,7 @@ describe("scflow/delete_transformation", () => {
   it("deletes a transformation given by name with its lines and notes, and keeps the held item", async () => {
     const { run, query, heldBolt, inspect, lineInspect } = await withTransformations();
 
-    const result = await run("scflow/delete_transformation", { transformation: "Assemble" });
+    const result = await run("scflow/delete_transformation", { id: "Assemble" });
 
     expect(typeof result.id).toBe("string");
     expect((await query("transformation")).map((transformation) => transformation.id)).toHaveLength(2);
@@ -58,8 +58,8 @@ describe("scflow/delete_transformation", () => {
   it("deletes the transformation whether cascade is true or false", async () => {
     const { run, query } = await withTransformations();
 
-    await run("scflow/delete_transformation", { transformation: "Inspect", cascade: false });
-    await run("scflow/delete_transformation", { transformation: "Assemble", cascade: true });
+    await run("scflow/delete_transformation", { id: "Inspect", cascade: false });
+    await run("scflow/delete_transformation", { id: "Assemble", cascade: true });
 
     expect(await query("transformation")).toHaveLength(1);
   });
@@ -67,7 +67,7 @@ describe("scflow/delete_transformation", () => {
   it("refuses an unknown transformation", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_transformation", { transformation: "Ghost" })).rejects.toThrow(/transformation/);
+    await expect(run("scflow/delete_transformation", { id: "Ghost" })).rejects.toThrow(/names no instance/);
   });
 });
 
@@ -76,7 +76,7 @@ describe("scflow/delete_transformation_type", () => {
     const { run, query, create } = await setup();
     await create("transformation_type", { display_name: { en: "Unused" } });
 
-    await run("scflow/delete_transformation_type", { type: "Unused" });
+    await run("scflow/delete_transformation_type", { id: "Unused" });
 
     expect(await query("transformation_type")).toHaveLength(0);
   });
@@ -84,7 +84,7 @@ describe("scflow/delete_transformation_type", () => {
   it("refuses a type that transformations use without cascade, and removes nothing", async () => {
     const { run, query } = await withTransformations();
 
-    await expect(run("scflow/delete_transformation_type", { type: "Assembly" })).rejects.toThrow(/transformation/);
+    await expect(run("scflow/delete_transformation_type", { id: "Assembly" })).rejects.toThrow(/transformation/);
 
     expect(await query("transformation_type")).toHaveLength(2);
     expect(await query("transformation")).toHaveLength(3);
@@ -93,7 +93,7 @@ describe("scflow/delete_transformation_type", () => {
   it("deletes the transformations of the type with their lines and notes, and the type, with cascade", async () => {
     const { run, query, inspection, inspect, heldBolt } = await withTransformations();
 
-    await run("scflow/delete_transformation_type", { type: "Assembly", cascade: true });
+    await run("scflow/delete_transformation_type", { id: "Assembly", cascade: true });
 
     expect((await query("transformation_type")).map((type) => type.id)).toEqual([inspection]);
     expect((await query("transformation")).map((transformation) => transformation.id)).toEqual([inspect]);
@@ -105,6 +105,6 @@ describe("scflow/delete_transformation_type", () => {
   it("refuses an unknown type", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_transformation_type", { type: "Ghost" })).rejects.toThrow(/type/);
+    await expect(run("scflow/delete_transformation_type", { id: "Ghost" })).rejects.toThrow(/names no instance/);
   });
 });

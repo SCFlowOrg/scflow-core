@@ -5,10 +5,10 @@ import { setupActions as setup } from "./actions-helpers.js";
 /** Creates two actors, "Source" and "Target", whose types have the given flow domains. */
 async function withActors(sourceDomains: string[], targetDomains: string[]) {
   const ctx = await setup();
-  await ctx.run("scflow/create_actor_type", { name: "From", domains: sourceDomains });
-  await ctx.run("scflow/create_actor_type", { name: "To", domains: targetDomains });
-  const source = await ctx.run("scflow/create_actor", { name: "Source", type: "From" });
-  const target = await ctx.run("scflow/create_actor", { name: "Target", type: "To" });
+  await ctx.run("scflow/create_actor_type", { display_name: "From", domains: sourceDomains });
+  await ctx.run("scflow/create_actor_type", { display_name: "To", domains: targetDomains });
+  const source = await ctx.run("scflow/create_actor", { display_name: "Source", type: "From" });
+  const target = await ctx.run("scflow/create_actor", { display_name: "Target", type: "To" });
   return { ...ctx, source, target };
 }
 
@@ -101,9 +101,9 @@ describe("scflow/create_flow", () => {
 
   it("requires an item between an actor and its child, in both directions", async () => {
     const { run, query } = await setup().then(async (ctx) => {
-      await ctx.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
-      await ctx.run("scflow/create_actor", { name: "Plant", type: "Site" });
-      await ctx.run("scflow/create_actor", { name: "Workshop", type: "Site", parent_actor: "Plant" });
+      await ctx.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
+      await ctx.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
+      await ctx.run("scflow/create_actor", { display_name: "Workshop", type: "Site", parent_actor: "Plant" });
       const type = await ctx.create("item_type", { display_name: { en: "Part" }, domain: "physical" });
       await ctx.create("item", { display_name: { en: "Bolt" }, type });
       return ctx;
@@ -161,7 +161,7 @@ describe("scflow/create_flow", () => {
     const named = await run<Record<string, unknown>>("scflow/create_flow", {
       source: "Source",
       destination: "Target",
-      name: { en: "Lane", fr: "Voie" },
+      display_name: { en: "Lane", fr: "Voie" },
     });
 
     expect(unnamed).not.toHaveProperty("display_name");
@@ -175,7 +175,7 @@ describe("scflow/create_flow", () => {
     const flow = await run<Record<string, unknown>>("scflow/create_flow", {
       source: "Source",
       destination: "Target",
-      name: "Lane",
+      display_name: "Lane",
     });
 
     expect(flow.display_name).toEqual({ en: "Lane" });
@@ -185,7 +185,7 @@ describe("scflow/create_flow", () => {
     const { run, query } = await withActors(["physical"], ["physical"]);
 
     await expect(
-      run("scflow/create_flow", { source: "Source", destination: "Target", name: 42 }),
+      run("scflow/create_flow", { source: "Source", destination: "Target", display_name: 42 }),
     ).rejects.toThrow(/name/);
     expect(await query("flow")).toHaveLength(0);
   });
@@ -217,10 +217,8 @@ describe("scflow/create_flow", () => {
   it("refuses an unknown or missing actor, naming the parameter", async () => {
     const { run } = await withActors(["physical"], ["physical"]);
 
-    await expect(run("scflow/create_flow", { source: "Ghost", destination: "Target" })).rejects.toThrow(/source/);
-    await expect(run("scflow/create_flow", { source: "Source", destination: "Ghost" })).rejects.toThrow(
-      /destination/,
-    );
+    await expect(run("scflow/create_flow", { source: "Ghost", destination: "Target" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_flow", { source: "Source", destination: "Ghost" })).rejects.toThrow(/names no instance/);
     await expect(run("scflow/create_flow", { source: "Source" })).rejects.toThrow(/destination/);
   });
 });
@@ -243,7 +241,7 @@ describe("scflow/update_flow", () => {
   it("makes a flow bidirectional and one-way again, and returns it", async () => {
     const { run, query, flow, source, target } = await withFlow();
 
-    const both = await run("scflow/update_flow", { flow: flow.id, bidirectional: true });
+    const both = await run("scflow/update_flow", { id: flow.id, bidirectional: true });
 
     expect(both).toEqual({
       id: flow.id,
@@ -253,7 +251,7 @@ describe("scflow/update_flow", () => {
     });
     expect((await query("flow", { id: flow.id }))[0].bidirectional).toBe(true);
 
-    const oneWay = await run<Record<string, unknown>>("scflow/update_flow", { flow: flow.id, bidirectional: false });
+    const oneWay = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, bidirectional: false });
     expect(oneWay.bidirectional).toBe(false);
     expect((await query("flow", { id: flow.id }))[0].bidirectional).toBe(false);
   });
@@ -261,7 +259,7 @@ describe("scflow/update_flow", () => {
   it("changes the description and the tags", async () => {
     const { run, query, flow } = await withFlow();
 
-    await run("scflow/update_flow", { flow: flow.id, description: "Weekly lane", tags: ["a", "b"] });
+    await run("scflow/update_flow", { id: flow.id, description: "Weekly lane", tags: ["a", "b"] });
 
     const stored = (await query("flow", { id: flow.id }))[0];
     expect(stored.description).toEqual({ en: "Weekly lane" });
@@ -271,14 +269,14 @@ describe("scflow/update_flow", () => {
   it("sets the name, merges languages and removes the name with null", async () => {
     const { run, query, flow } = await withFlow();
 
-    const named = await run<Record<string, unknown>>("scflow/update_flow", { flow: flow.id, name: "Lane" });
+    const named = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: "Lane" });
     expect(named.display_name).toEqual({ en: "Lane" });
 
-    const merged = await run<Record<string, unknown>>("scflow/update_flow", { flow: flow.id, name: { fr: "Voie" } });
+    const merged = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: { fr: "Voie" } });
     expect(merged.display_name).toEqual({ en: "Lane", fr: "Voie" });
     expect((await query("flow", { id: flow.id }))[0].display_name).toEqual({ en: "Lane", fr: "Voie" });
 
-    const cleared = await run<Record<string, unknown>>("scflow/update_flow", { flow: flow.id, name: null });
+    const cleared = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: null });
     expect(cleared).not.toHaveProperty("display_name");
     expect((await query("flow", { id: flow.id }))[0].display_name ?? {}).toEqual({});
   });
@@ -286,14 +284,14 @@ describe("scflow/update_flow", () => {
   it("refuses a name that is neither a string, a map nor null", async () => {
     const { run, flow } = await withFlow();
 
-    await expect(run("scflow/update_flow", { flow: flow.id, name: 42 })).rejects.toThrow(/name/);
+    await expect(run("scflow/update_flow", { id: flow.id, display_name: 42 })).rejects.toThrow(/name/);
   });
 
   it("leaves untouched what is not given", async () => {
     const { run, query, flow, source, target } = await withFlow();
-    await run("scflow/update_flow", { flow: flow.id, bidirectional: true, tags: ["x"] });
+    await run("scflow/update_flow", { id: flow.id, bidirectional: true, tags: ["x"] });
 
-    await run("scflow/update_flow", { flow: flow.id, description: "Lane" });
+    await run("scflow/update_flow", { id: flow.id, description: "Lane" });
 
     const stored = (await query("flow", { id: flow.id }))[0];
     expect(stored).toMatchObject({ bidirectional: true, tags: ["x"], source: source.id, destination: target.id });
@@ -302,17 +300,15 @@ describe("scflow/update_flow", () => {
   it("refuses a call that gives no property to change", async () => {
     const { run, flow } = await withFlow();
 
-    await expect(run("scflow/update_flow", { flow: flow.id })).rejects.toThrow(/at least one/);
+    await expect(run("scflow/update_flow", { id: flow.id })).rejects.toThrow(/must NOT have fewer/);
   });
 
   it("refuses an unknown or missing flow and a bidirectional that is not a boolean", async () => {
     const { run, query, flow } = await withFlow();
 
-    await expect(run("scflow/update_flow", { flow: "missing", bidirectional: true })).rejects.toThrow(
-      /flow.*not found/,
-    );
+    await expect(run("scflow/update_flow", { id: "missing", bidirectional: true })).rejects.toThrow(/names no instance/);
     await expect(run("scflow/update_flow", { bidirectional: true })).rejects.toThrow(/flow/);
-    await expect(run("scflow/update_flow", { flow: flow.id, bidirectional: "yes" })).rejects.toThrow(
+    await expect(run("scflow/update_flow", { id: flow.id, bidirectional: "yes" })).rejects.toThrow(
       /bidirectional/,
     );
     expect((await query("flow", { id: flow.id }))[0].bidirectional).toBe(false);
@@ -330,7 +326,7 @@ describe("scflow/delete_flow", () => {
       item: "Bolt",
     });
 
-    const result = await run("scflow/delete_flow", { flow: flow.id });
+    const result = await run("scflow/delete_flow", { id: flow.id });
 
     expect(result).toEqual({ id: flow.id });
     expect(await query("flow")).toHaveLength(0);
@@ -345,7 +341,7 @@ describe("scflow/delete_flow", () => {
     const first = await run<Record<string, any>>("scflow/create_flow", { source: "Source", destination: "Target" });
     const second = await run<Record<string, any>>("scflow/create_flow", { source: "Source", destination: "Target" });
 
-    await run("scflow/delete_flow", { flow: first.id });
+    await run("scflow/delete_flow", { id: first.id });
 
     const left = await query("flow");
     expect(left).toHaveLength(1);
@@ -355,7 +351,7 @@ describe("scflow/delete_flow", () => {
   it("refuses an unknown or missing flow", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_flow", { flow: "missing" })).rejects.toThrow(/flow.*not found/);
+    await expect(run("scflow/delete_flow", { id: "missing" })).rejects.toThrow(/names no instance/);
     await expect(run("scflow/delete_flow", {})).rejects.toThrow(/flow/);
   });
 });

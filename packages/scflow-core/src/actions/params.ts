@@ -1,10 +1,57 @@
-import type { ModelActionParamsSchema } from "@scfloworg/core";
+import type { GeneratedActionContext } from "@scfloworg/core";
+
+/**
+ * What the body of an action reaches the dataset through: an `MclAccess` and the
+ * locator of the dataset the action runs on. An `ActionContext` of
+ * `@scfloworg/environment` is one.
+ */
+export type ActionAccess = GeneratedActionContext;
+
+/** The parameters of an action, a JSON Schema object that may use the keyword `ref`. */
+export interface ActionParameters {
+  type: "object";
+  properties: Record<string, ParamProperty>;
+  required?: readonly string[];
+  additionalProperties?: boolean;
+  minProperties?: number;
+}
+
+/**
+ * A model action of the package, with the shape of an `Action` of
+ * `@scfloworg/actions`: its declaration, which agrees with `module.yaml`, and
+ * its body. The registry checks the parameters and resolves each `ref` to a key
+ * before `run`, so a body validates nothing by hand.
+ */
+export interface ScflowActionDefinition<TParams, TResult> {
+  /** The namespace of the module, a slash and a name. */
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  /** `read` writes nothing; `action`, the default, writes. */
+  readonly kind?: "read" | "action";
+  /** Whether the action may destroy data. */
+  readonly destructive?: boolean;
+  /** The short names of the schemas of `scflow:core` the action writes. */
+  readonly writes: readonly string[];
+  readonly parameters: ActionParameters;
+  run(params: TParams, context: ActionAccess): Promise<TResult>;
+}
 
 /** One property of the JSON Schema of an action's parameters. */
-export type ParamProperty = ModelActionParamsSchema["properties"][string];
+export interface ParamProperty {
+  type: string;
+  description?: string;
+  [key: string]: unknown;
+}
 
 /** The flow domains, in the declaration order of the `flow_domain` scalar type. */
 export const FLOW_DOMAINS = ["physical", "information", "financial", "service"] as const;
+
+/** A text that holds something else than white space. */
+const TEXT = { type: "string", pattern: "\\S" };
+
+/** A string, or a non-empty map of language to string. */
+const LOCALIZED = [TEXT, { type: "object", minProperties: 1, additionalProperties: TEXT }];
 
 /**
  * JSON Schema of a text parameter: a string, or a map of language to string.
@@ -13,113 +60,38 @@ export const FLOW_DOMAINS = ["physical", "information", "financial", "service"] 
  * the union is declared with `anyOf` and cast.
  */
 export function localizedTextParam(description: string): ParamProperty {
-  return {
-    anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }],
-    description,
-  } as unknown as ParamProperty;
+  return { anyOf: LOCALIZED, description } as unknown as ParamProperty;
 }
 
 /** JSON Schema of a text parameter that also accepts `null`, to remove the text. */
 export function nullableLocalizedTextParam(description: string): ParamProperty {
-  return {
-    anyOf: [{ type: "string" }, { type: "object", additionalProperties: { type: "string" } }, { type: "null" }],
-    description,
-  } as unknown as ParamProperty;
+  return { anyOf: [...LOCALIZED, { type: "null" }], description } as unknown as ParamProperty;
 }
 
-/** JSON Schema of a parameter that holds the id or the name of an entity. */
-export function refParam(description: string): ParamProperty {
-  return { type: "string", description };
+/**
+ * JSON Schema of a parameter that holds the id or the display name of an
+ * instance of `schema`, a short name of the module. The body receives its key.
+ */
+export function refParam(schema: string, description: string): ParamProperty {
+  return { type: "string", ref: schema, description };
 }
 
 /** JSON Schema of a reference parameter that also accepts `null`, to clear the relation. */
-export function nullableRefParam(description: string): ParamProperty {
-  return { anyOf: [{ type: "string" }, { type: "null" }], description } as unknown as ParamProperty;
+export function nullableRefParam(schema: string, description: string): ParamProperty {
+  return { type: ["string", "null"], ref: schema, description } as unknown as ParamProperty;
 }
 
 /** JSON Schema of a parameter that holds a list of tags. */
 export function tagsParam(description: string): ParamProperty {
-  return { type: "array", items: { type: "string" }, description };
+  return { type: "array", items: { type: "string", minLength: 1 }, description };
 }
 
-/**
- * Reads an optional list of non-empty strings.
- *
- * @returns The list without duplicates, or `undefined` when the parameter is absent.
- * @throws When the value is not a list of non-empty strings.
- */
-export function optionalStringList(value: unknown, param: string): string[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry === "")) {
-    throw new Error(`parameter "${param}": expected a list of non-empty strings`);
-  }
-  return [...new Set(value as string[])];
+/** JSON Schema of the `cascade` parameter of a delete action. */
+export function cascadeParam(description: string): ParamProperty {
+  return { type: "boolean", default: false, description };
 }
 
-/**
- * Reads an optional boolean.
- *
- * @returns The boolean, or `undefined` when the parameter is absent.
- * @throws When the value is not a boolean.
- */
-export function optionalBoolean(value: unknown, param: string): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "boolean") {
-    throw new Error(`parameter "${param}": expected a boolean`);
-  }
-  return value;
-}
-
-/** The roles of a transformation line, in the declaration order of `transformation_role`. */
-export const TRANSFORMATION_ROLES = ["consumed", "produced"] as const;
-
-/**
- * Reads a required transformation role.
- *
- * @returns `"consumed"` or `"produced"`.
- * @throws When the value is missing or is neither of the two roles.
- */
-export function requireRole(value: unknown, param: string): "consumed" | "produced" {
-  if (value !== "consumed" && value !== "produced") {
-    throw new Error(`parameter "${param}": expected ${TRANSFORMATION_ROLES.join(" or ")}`);
-  }
-  return value;
-}
-
-/**
- * Reads a required flow domain.
- *
- * @returns The domain.
- * @throws When the value is missing or is not one of the four flow domains.
- */
-export function requireDomain(value: unknown, param: string): string {
-  if (typeof value !== "string" || !(FLOW_DOMAINS as readonly string[]).includes(value)) {
-    throw new Error(`parameter "${param}": expected one of ${FLOW_DOMAINS.join(", ")}`);
-  }
-  return value;
-}
-
-/**
- * Reads an optional list of flow domains.
- *
- * @returns The domains without duplicates, or `undefined` when the parameter is absent.
- * @throws When the list is empty or holds a value that is not a flow domain.
- */
-export function optionalDomains(value: unknown, param: string): string[] | undefined {
-  const list = optionalStringList(value, param);
-  if (list === undefined) {
-    return undefined;
-  }
-  if (list.length === 0) {
-    throw new Error(`parameter "${param}": give at least one of ${FLOW_DOMAINS.join(", ")}`);
-  }
-  const unknown = list.filter((domain) => !(FLOW_DOMAINS as readonly string[]).includes(domain));
-  if (unknown.length > 0) {
-    throw new Error(`parameter "${param}": unknown flow domain ${unknown.map((d) => `"${d}"`).join(", ")}`);
-  }
-  return list;
+/** The values of a list without duplicates, or `undefined` when the parameter is absent. */
+export function unique<T>(values: readonly T[] | undefined): T[] | undefined {
+  return values === undefined ? undefined : [...new Set(values)];
 }

@@ -1,4 +1,4 @@
-import type { ModelActionDefinition } from "@scfloworg/core";
+import type { ActionAccess, ScflowActionDefinition } from "./params.js";
 import { ACTOR_ACTIONS } from "./actors.js";
 import { CONVERSION_ACTIONS } from "./conversions.js";
 import { FLOW_ACTIONS } from "./flows.js";
@@ -9,13 +9,14 @@ import { TAG_ACTIONS } from "./tags.js";
 import { TRANSFORMATION_ACTIONS } from "./transformations.js";
 
 /** Any model action of the package, whatever its parameters and its result. */
-export type ScflowAction = ModelActionDefinition<any, any>;
+export type ScflowAction = ScflowActionDefinition<any, any>;
 
 /**
  * The model actions of `scflow-core`, in catalog order (`docs/actions.md`).
  *
- * The package exports them as data. The host registers them on its runtime, for
- * example with `registerModelActions(ACTIONS)` in `@scfloworg/core-plugin-core`.
+ * The package exports them as data. Their bodies reach an environment through
+ * the bundle of the module (`src/module.ts`), and their declarations through
+ * `module.yaml`, which a test keeps in agreement.
  */
 export const ACTIONS: readonly ScflowAction[] = [
   ...ACTOR_ACTIONS,
@@ -27,6 +28,17 @@ export const ACTIONS: readonly ScflowAction[] = [
   ...TAG_ACTIONS,
   ...INSPECT_ACTIONS,
 ];
+
+/**
+ * The body of each action, by its name: the part of its id after the slash, in
+ * the form `defineModule` of `@scfloworg/module` takes: the context, then the parameters.
+ */
+export const ACTION_BODIES: Record<string, (context: ActionAccess, params: unknown) => unknown> = Object.fromEntries(
+  ACTIONS.map((action) => [
+    action.id.slice(action.id.indexOf("/") + 1),
+    (context: ActionAccess, params: unknown) => action.run(params, context),
+  ]),
+);
 
 export type {
   ActorSummary,

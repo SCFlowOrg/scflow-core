@@ -44,6 +44,7 @@ scalar_types:
 schemas:
   - name: annotable
     description: The base schema of every entity that carries notes and tags
+    abstract: true
     is_root: true
     properties:
       - name: tags
@@ -53,6 +54,10 @@ schemas:
 
   - name: note
     description: A free-form annotation of one entity, written in one or more languages
+    crud:
+      create: scflow/add_note
+      update: scflow/update_note
+      delete: scflow/remove_note
     properties:
       - name: annotated
         type: annotable
@@ -65,6 +70,9 @@ schemas:
 
   - name: actor_type
     description: A type of actor, with the flow domains it belongs to
+    crud:
+      create: scflow/create_actor_type
+      delete: scflow/delete_actor_type
     extends: annotable
     is_root: true
     has_description: true
@@ -83,6 +91,9 @@ schemas:
 
   - name: item_type
     description: A type of item, with the one flow domain it belongs to
+    crud:
+      create: scflow/create_item_type
+      delete: scflow/delete_item_type
     extends: annotable
     is_root: true
     has_description: true
@@ -97,6 +108,10 @@ schemas:
 
   - name: actor
     description: A place in the network where items are held, consumed, produced or queued
+    crud:
+      create: scflow/create_actor
+      update: scflow/update_actor
+      delete: scflow/delete_actor
     extends: annotable
     is_root: true
     properties:
@@ -125,6 +140,10 @@ schemas:
 
   - name: flow
     description: A connection moving one optional item from a source actor to a destination actor
+    crud:
+      create: scflow/create_flow
+      update: scflow/update_flow
+      delete: scflow/delete_flow
     extends: annotable
     is_root: true
     properties:
@@ -144,6 +163,7 @@ schemas:
         inverse_is_array: true
       - name: item
         type: item
+        updated_by: scflow/set_flow_item
         inverse_name: carried_on
         inverse_is_array: true
       - name: bidirectional
@@ -151,6 +171,10 @@ schemas:
 
   - name: item
     description: A family of things the network moves and holds
+    crud:
+      create: scflow/create_item
+      update: scflow/update_item
+      delete: scflow/delete_item
     extends: annotable
     is_root: true
     properties:
@@ -167,6 +191,9 @@ schemas:
 
   - name: item_at_actor
     description: An item held at an actor
+    crud:
+      create: scflow/hold_item
+      delete: scflow/release_held_item
     extends: annotable
     properties:
       - name: actor
@@ -183,6 +210,9 @@ schemas:
 
   - name: transformation_type
     description: A type of transformation
+    crud:
+      create: scflow/create_transformation_type
+      delete: scflow/delete_transformation_type
     extends: annotable
     is_root: true
     has_description: true
@@ -195,6 +225,9 @@ schemas:
 
   - name: transformation
     description: A transformation of consumed items into produced items at an actor
+    crud:
+      create: scflow/create_transformation
+      delete: scflow/delete_transformation
     extends: annotable
     properties:
       - name: display_name
@@ -216,6 +249,8 @@ schemas:
 
   - name: transformation_line
     description: One item consumed or produced by a transformation
+    crud:
+      create: scflow/connect_transformation_line
     extends: annotable
     properties:
       - name: transformation
@@ -233,6 +268,10 @@ schemas:
 
   - name: conversion
     description: A conversion of one item into another item at an actor
+    crud:
+      create: scflow/create_conversion
+      update: scflow/update_conversion
+      delete: scflow/delete_conversion
     extends: annotable
     properties:
       - name: display_name
@@ -255,6 +294,9 @@ schemas:
 
   - name: scope
     description: A flat grouping of actors, a swim lane of the graph
+    crud:
+      create: scflow/create_scope
+      delete: scflow/delete_scope
     extends: annotable
     is_root: true
     properties:
@@ -299,6 +341,22 @@ actions:
       inside a parent actor, and returns it. The scope defaults to the default scope of the type;
       the location has no default.
     kind: action
+    writes:
+      - actor
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the actor, a string or a map of language to string.'}
+        type: {type: string, ref: actor_type, description: Id or name of the actor type.}
+        scope: {type: string, ref: scope, description: Id or name of the containing scope; the default scope of the type when omitted.}
+        location: {type: string, ref: location, description: Id or name of the location of the actor; none when omitted.}
+        parent_actor: {type: string, ref: actor, description: 'Id or name of the parent actor, to nest the actor in a hierarchy.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the actor.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the actor.}
+      required:
+        - display_name
+        - type
+      additionalProperties: false
   - id: scflow/update_actor
     title: Update an actor
     description: >-
@@ -307,6 +365,23 @@ actions:
       the relation. Changing the type does not check the held items, the flows and the parent of the
       actor: the network check reports the ones whose domain no longer fits.
     kind: action
+    writes:
+      - actor
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: actor, description: Id or name of the actor to update.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown description; same language rule as name.}
+        type: {type: string, ref: actor_type, description: Id or name of the new actor type.}
+        scope: {type: [string, 'null'], ref: scope, description: 'Id or name of the new scope, or null to detach the actor from its scope.'}
+        location: {type: [string, 'null'], ref: location, description: 'Id or name of the new location, or null to remove the location of the actor.'}
+        parent_actor: {type: [string, 'null'], ref: actor, description: 'Id or name of the new parent actor, or null to move the actor to the root.'}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
   - id: scflow/delete_actor
     title: Delete an actor
     description: >-
@@ -315,12 +390,45 @@ actions:
       recursively, the flows incident to the actor and its descendants, the items they hold, their
       transformations and conversions and the notes of every deleted entity.
     kind: action
+    destructive: true
+    writes:
+      - actor
+      - flow
+      - item_at_actor
+      - transformation
+      - transformation_line
+      - conversion
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: actor, description: Id or name of the actor to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the descendant actors, the incident flows, the held items, the transformations, the conversions and the notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/delete_actor_type
     title: Delete an actor type
     description: >-
       Deletes an actor type. It is refused while actors have this type, unless cascade is true,
       which deletes those actors first, each with the cascade of scflow/delete_actor.
     kind: action
+    destructive: true
+    writes:
+      - actor
+      - flow
+      - item_at_actor
+      - transformation
+      - transformation_line
+      - conversion
+      - actor_type
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: actor_type, description: Id or name of the actor type to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the actors of this type with their descendants, flows, held items, transformations and notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/delete_scope
     title: Delete a scope
     description: >-
@@ -328,28 +436,87 @@ actions:
       deletes those actors first, each with the cascade of scflow/delete_actor. The default scope of
       an actor type that names the scope is cleared.
     kind: action
+    destructive: true
+    writes:
+      - actor
+      - flow
+      - item_at_actor
+      - transformation
+      - transformation_line
+      - conversion
+      - scope
+      - actor_type
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: scope, description: Id or name of the scope to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the actors of this scope with their descendants, flows, held items, transformations and notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/create_actor_type
     title: Create an actor type
     description: >-
       Creates an actor type with the flow domains its actors can exchange, and an optional default
       scope, and returns it.
     kind: action
+    writes:
+      - actor_type
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the actor type, a string or a map of language to string.'}
+        domains: {type: array, items: {type: string, enum: [physical, information, financial, service]}, minItems: 1, default: [physical], description: Flow domains of the type; physical when omitted.}
+        default_scope: {type: string, ref: scope, description: Id or name of the scope given to the actors of this type that name no scope.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the actor type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the actor type.}
+      required:
+        - display_name
+      additionalProperties: false
   - id: scflow/create_scope
     title: Create a scope
     description: >-
       Creates a scope, a lane that groups actors (for example SOURCE, MAKE, DELIVER or a region),
       and returns it.
     kind: action
+    writes:
+      - scope
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the scope, a string or a map of language to string.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the scope.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the scope.}
+      required:
+        - display_name
+      additionalProperties: false
   - id: scflow/create_flow
     title: Create a flow
     description: >-
       Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to
-      true so that the flow carries items in both directions; it is one-way otherwise. Give name to
-      name the flow; it has no name otherwise. A flow carries at most one item, given by item. A
-      flow between an actor and one of its child actors, in either direction, must carry an item,
-      otherwise the action fails. The domain of the item must be among the domains of both actors,
-      and the actors that do not hold the item yet hold it afterwards.
+      true so that the flow carries items in both directions; it is one-way otherwise. Give
+      display_name to name the flow; it has no name otherwise. A flow carries at most one item,
+      given by item. A flow between an actor and one of its child actors, in either direction, must
+      carry an item, otherwise the action fails. The domain of the item must be among the domains of
+      both actors, and the actors that do not hold the item yet hold it afterwards.
     kind: action
+    writes:
+      - flow
+      - item_at_actor
+    parameters:
+      type: object
+      properties:
+        source: {type: string, ref: actor, description: Id or name of the actor the flow starts from.}
+        destination: {type: string, ref: actor, description: Id or name of the actor the flow arrives at.}
+        item: {type: string, ref: item, description: Id or name of the item the flow carries; required between an actor and its child.}
+        bidirectional: {type: boolean, description: Whether the flow carries items in both directions; false when omitted.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the flow, a string or a map of language to string; the flow has no name when omitted.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the flow.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the flow.}
+      required:
+        - source
+        - destination
+      additionalProperties: false
   - id: scflow/update_flow
     title: Update a flow
     description: >-
@@ -357,6 +524,20 @@ actions:
       it. Only the given properties change; null removes the name. The source and the destination of
       a flow never change: delete the flow and create it again.
     kind: action
+    writes:
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: flow, description: Id of the flow to update.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New display name; each given language replaces the same language, the others are kept. null removes the name.'}
+        bidirectional: {type: boolean, description: Whether the flow carries items in both directions.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New Markdown description; each given language replaces the same language, the others are kept.'}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
   - id: scflow/set_flow_item
     title: Set the item of a flow
     description: >-
@@ -364,26 +545,75 @@ actions:
       never changes and is never removed: the action fails when the flow carries another item, and
       changes nothing when it already carries this one. The domain of the item must be among the
       domains of both the source and the destination, and the actors that do not hold the item yet
-      hold it afterwards. A flow has no name: give its id.
+      hold it afterwards.
     kind: action
+    writes:
+      - flow
+      - item_at_actor
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: flow, description: Id of the flow.}
+        item: {type: string, ref: item, description: Id or name of the item.}
+      required:
+        - id
+        - item
+      additionalProperties: false
   - id: scflow/delete_flow
     title: Delete a flow
     description: >-
-      Deletes a flow and returns its id. The items held by its ends are kept. A flow has no name:
-      give its id.
+      Deletes a flow and returns its id. The items held by its ends are kept. The cascade parameter
+      is accepted for consistency with the other delete actions and changes nothing.
     kind: action
+    destructive: true
+    writes:
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: flow, description: Id of the flow to delete.}
+        cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a flow but its notes, which are always deleted with it.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/create_item_type
     title: Create an item type
     description: >-
       Creates an item type, a category of items bound to one flow domain (physical, information,
       financial or service), and returns it.
     kind: action
+    writes:
+      - item_type
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the item type, a string or a map of language to string.'}
+        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the items of this type.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the item type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the item type.}
+      required:
+        - display_name
+        - domain
+      additionalProperties: false
   - id: scflow/create_item
     title: Create an item
     description: >-
       Creates an item, a family of things the network moves and holds, of a given item type, and
       returns it.
     kind: action
+    writes:
+      - item
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the item, a string or a map of language to string.'}
+        type: {type: string, ref: item_type, description: Id or name of the item type.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the item.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the item.}
+      required:
+        - display_name
+        - type
+      additionalProperties: false
   - id: scflow/update_item
     title: Update an item
     description: >-
@@ -391,6 +621,20 @@ actions:
       change. Changing the type does not check the held records of the item and the flows that carry
       it: the network check reports the ones whose domain no longer fits.
     kind: action
+    writes:
+      - item
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: item, description: Id or name of the item to update.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown description; same language rule as name.}
+        type: {type: string, ref: item_type, description: Id or name of the new item type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
   - id: scflow/hold_item
     title: Hold an item at an actor
     description: >-
@@ -398,13 +642,37 @@ actions:
       domain of the item must be among the domains of the actor. When the actor already holds the
       item, the existing record is returned.
     kind: action
+    writes:
+      - item_at_actor
+    parameters:
+      type: object
+      properties:
+        actor: {type: string, ref: actor, description: Id or name of the actor.}
+        item: {type: string, ref: item, description: Id or name of the item.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags of the record, when the action creates it.'}
+      required:
+        - actor
+        - item
+      additionalProperties: false
   - id: scflow/release_held_item
     title: Release a held item
     description: >-
       Removes an item from the actor that holds it, and returns the id of the removed record. It is
-      refused while a transformation line uses the record. Give the id of the record returned by
-      hold_item.
+      refused while a transformation line uses the record, unless cascade is true, which deletes
+      those lines first. Give the id of the record returned by hold_item.
     kind: action
+    destructive: true
+    writes:
+      - item_at_actor
+      - transformation_line
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: item_at_actor, description: Id of the item-at-actor record to remove.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the transformation lines that use the record.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/delete_item
     title: Delete an item
     description: >-
@@ -413,24 +681,80 @@ actions:
       conversions first, with the transformation lines that use the held records and the notes of
       every deleted entity.
     kind: action
+    destructive: true
+    writes:
+      - item
+      - flow
+      - item_at_actor
+      - transformation_line
+      - conversion
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: item, description: Id or name of the item to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the held records, the flows that carry the item, the conversions, the transformation lines and the notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/delete_item_type
     title: Delete an item type
     description: >-
       Deletes an item type. It is refused while items have this type, unless cascade is true, which
       deletes those items first, each with the cascade of scflow/delete_item.
     kind: action
+    destructive: true
+    writes:
+      - item
+      - item_type
+      - flow
+      - item_at_actor
+      - transformation_line
+      - conversion
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: item_type, description: Id or name of the item type to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the items of this type with their held records, flows, lines and notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/create_transformation_type
     title: Create a transformation type
     description: >-
       Creates a transformation type, a kind of operation such as assembly, machining, packaging or
       inspection, and returns it.
     kind: action
+    writes:
+      - transformation_type
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the transformation type, a string or a map of language to string.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the transformation type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the transformation type.}
+      required:
+        - display_name
+      additionalProperties: false
   - id: scflow/create_transformation
     title: Create a transformation
     description: >-
       Creates a transformation of a given type inside an actor, with no line yet, and returns it.
       The transformation is named after its type when no name is given.
     kind: action
+    writes:
+      - transformation
+    parameters:
+      type: object
+      properties:
+        actor: {type: string, ref: actor, description: Id or name of the actor that executes the transformation.}
+        type: {type: string, ref: transformation_type, description: Id or name of the transformation type.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Display name of the transformation; the name of its type when omitted.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the transformation.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the transformation.}
+      required:
+        - actor
+        - type
+      additionalProperties: false
   - id: scflow/connect_transformation_line
     title: Connect a transformation line
     description: >-
@@ -438,6 +762,20 @@ actions:
       (consumed) or an output (produced), and returns the line. When the same line exists, it is
       returned. Give the id of the held-item record.
     kind: action
+    writes:
+      - transformation_line
+    parameters:
+      type: object
+      properties:
+        transformation: {type: string, ref: transformation, description: Id or name of the transformation.}
+        held_item: {type: string, ref: item_at_actor, description: 'Id of the item-at-actor record, held by the actor of the transformation.'}
+        role: {type: string, enum: [consumed, produced], description: Whether the transformation consumes or produces the item.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags of the line, when the action creates it.'}
+      required:
+        - transformation
+        - held_item
+        - role
+      additionalProperties: false
   - id: scflow/define_process
     title: Define a process
     description: >-
@@ -445,6 +783,21 @@ actions:
       produced items that it does not hold yet, and attaches a line for each of them, in one step.
       Every item must be in a domain of the actor. Returns the transformation and its lines.
     kind: action
+    writes:
+      - transformation
+      - item_at_actor
+      - transformation_line
+    parameters:
+      type: object
+      properties:
+        actor: {type: string, ref: actor, description: Id or name of the actor.}
+        transformation_type: {type: string, ref: transformation_type, description: Id or name of the transformation type.}
+        consumed_items: {type: array, items: {type: string, ref: item}, description: Ids or names of the items consumed.}
+        produced_items: {type: array, items: {type: string, ref: item}, description: Ids or names of the items produced.}
+      required:
+        - actor
+        - transformation_type
+      additionalProperties: false
   - id: scflow/delete_transformation
     title: Delete a transformation
     description: >-
@@ -452,12 +805,37 @@ actions:
       lines used are kept. The cascade parameter is accepted for consistency with the other delete
       actions and changes nothing.
     kind: action
+    destructive: true
+    writes:
+      - transformation
+      - transformation_line
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: transformation, description: Id or name of the transformation to delete.}
+        cascade: {type: boolean, default: false, description: 'Has no effect: the lines and the notes of a transformation are always deleted with it.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/delete_transformation_type
     title: Delete a transformation type
     description: >-
       Deletes a transformation type. It is refused while transformations have this type, unless
       cascade is true, which deletes those transformations first, with their lines and notes.
     kind: action
+    destructive: true
+    writes:
+      - transformation
+      - transformation_line
+      - transformation_type
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: transformation_type, description: Id or name of the transformation type to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the transformations of this type with their lines and notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/create_conversion
     title: Create a conversion
     description: >-
@@ -465,6 +843,22 @@ actions:
       two items must be in the same flow domain, and they cannot change afterwards. The name, the
       description and the tags are optional.
     kind: action
+    writes:
+      - conversion
+    parameters:
+      type: object
+      properties:
+        actor: {type: string, ref: actor, description: Id or name of the actor where the conversion takes place.}
+        from_item: {type: string, ref: item, description: Id or name of the item that is converted.}
+        to_item: {type: string, ref: item, description: Id or name of the item that results; it has the domain of from_item.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the conversion, a string or a map of language to string.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the conversion.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the conversion.}
+      required:
+        - actor
+        - from_item
+        - to_item
+      additionalProperties: false
   - id: scflow/update_conversion
     title: Update a conversion
     description: >-
@@ -473,6 +867,19 @@ actions:
       actor and the two items of a conversion never change: to change them, delete the conversion
       and create another.
     kind: action
+    writes:
+      - conversion
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: conversion, description: Id or name of the conversion to update.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New display name; each given language replaces the same language, the others are kept. null removes the name.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New Markdown description; same language rule as name. null removes the description.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
   - id: scflow/delete_conversion
     title: Delete a conversion
     description: >-
@@ -480,6 +887,17 @@ actions:
       cascade parameter is accepted for consistency with the other delete actions and changes
       nothing.
     kind: action
+    destructive: true
+    writes:
+      - conversion
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: conversion, description: Id or name of the conversion to delete.}
+        cascade: {type: boolean, default: false, description: 'Has no effect: the notes of a conversion are always deleted with it.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/add_note
     title: Add a note
     description: >-
@@ -487,22 +905,65 @@ actions:
       transformation...) and returns it. The entity is given by its id. A plain string is stored as
       English text; give a map of language to string for other languages.
     kind: action
+    writes:
+      - note
+    parameters:
+      type: object
+      properties:
+        annotated: {type: string, ref: annotable, description: 'Id of the entity to annotate, whatever its kind.'}
+        content: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown text of the note.}
+      required:
+        - annotated
+        - content
+      additionalProperties: false
   - id: scflow/update_note
     title: Update a note
     description: >-
       Changes the content of a note and returns it. Each given language replaces the text of the
       same language, the other languages are kept. The note stays on its entity.
     kind: action
+    writes:
+      - note
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: note, description: Id of the note to update.}
+        content: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown text; each given language replaces the same language.}
+      required:
+        - id
+        - content
+      additionalProperties: false
   - id: scflow/remove_note
     title: Remove a note
-    description: Deletes a note and returns its id. The entity it annotated is not changed.
+    description: >-
+      Deletes a note and returns its id. The entity it annotated is not changed. The cascade
+      parameter is accepted for consistency with the other delete actions and changes nothing.
     kind: action
+    destructive: true
+    writes:
+      - note
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: note, description: Id of the note to delete.}
+        cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a note.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/find_notes
     title: Find the notes of an entity
     description: >-
       Lists the notes of an entity, given by its id: [{ id, entity, content }]. An entity without a
       note gives an empty list. It changes nothing.
     kind: read
+    writes: []
+    parameters:
+      type: object
+      properties:
+        entity: {type: string, ref: annotable, description: 'Id of the entity, whatever its kind.'}
+      required:
+        - entity
+      additionalProperties: false
   - id: scflow/add_tags
     title: Add tags
     description: >-
@@ -510,6 +971,17 @@ actions:
       conversion...) without removing its existing tags, and returns { id, tags }. Tags that the
       entity already carries are skipped. The entity is given by its id.
     kind: action
+    writes:
+      - annotable
+    parameters:
+      type: object
+      properties:
+        entity: {type: string, ref: annotable, description: 'Id of the entity to tag, whatever its kind.'}
+        tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags to add, at least one.', minItems: 1}
+      required:
+        - entity
+        - tags
+      additionalProperties: false
   - id: scflow/remove_tags
     title: Remove tags
     description: >-
@@ -517,6 +989,17 @@ actions:
       transformation, conversion...) and returns { id, tags }. Tags that the entity does not carry
       are ignored. The entity is given by its id.
     kind: action
+    writes:
+      - annotable
+    parameters:
+      type: object
+      properties:
+        entity: {type: string, ref: annotable, description: 'Id of the entity to untag, whatever its kind.'}
+        tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags to remove, at least one.', minItems: 1}
+      required:
+        - entity
+        - tags
+      additionalProperties: false
   - id: scflow/inspect_delete_impact
     title: Inspect the impact of a delete
     description: >-
@@ -525,3 +1008,11 @@ actions:
       conversions and notes, with counts. An entity reached from several targets is counted once. It
       changes nothing.
     kind: read
+    writes: []
+    parameters:
+      type: object
+      properties:
+        targets: {type: array, minItems: 1, description: The entities to delete., items: {type: object, properties: {schema: {type: string, enum: [actor, actor_type, scope, item, item_type, flow, transformation, transformation_type, conversion, item_at_actor], description: The kind of the entity.}, ref: {type: string, minLength: 1, description: Id or name of the entity; the id only for a flow and an item_at_actor.}}, required: [schema, ref], additionalProperties: false}}
+      required:
+        - targets
+      additionalProperties: false

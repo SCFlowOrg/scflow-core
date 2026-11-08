@@ -1,14 +1,6 @@
-import type { ModelActionDefinition } from "@scfloworg/core";
+import { loadInstance, type Instance } from "./refs.js";
+import { cascadeParam, type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, refParam, tagsParam, unique } from "./params.js";
 import { createFlow, setFlowItem } from "../flows.js";
-import {
-  localizedTextParam,
-  nullableLocalizedTextParam,
-  optionalBoolean,
-  optionalStringList,
-  refParam,
-  tagsParam,
-} from "./params.js";
-import { resolveRef, type Instance } from "./refs.js";
 import { toLocalized } from "./text.js";
 
 /** Parameters of `scflow/create_flow`. */
@@ -17,21 +9,21 @@ export interface CreateFlowParams {
   destination: string;
   item?: string;
   bidirectional?: boolean;
-  name?: string | Record<string, string>;
+  display_name?: string | Record<string, string>;
   description?: string | Record<string, string>;
   tags?: string[];
 }
 
 /** Parameters of `scflow/set_flow_item`. */
 export interface SetFlowItemParams {
-  flow: string;
+  id: string;
   item: string;
 }
 
 /** Parameters of `scflow/update_flow`. */
 export interface UpdateFlowParams {
-  flow: string;
-  name?: string | Record<string, string> | null;
+  id: string;
+  display_name?: string | Record<string, string> | null;
   bidirectional?: boolean;
   description?: string | Record<string, string>;
   tags?: string[];
@@ -39,7 +31,8 @@ export interface UpdateFlowParams {
 
 /** Parameters of `scflow/delete_flow`. */
 export interface DeleteFlowParams {
-  flow: string;
+  id: string;
+  cascade?: boolean;
 }
 
 /** A flow as `scflow/create_flow` returns it; `display_name` is absent when the flow has no name, and `item` when it carries none. */
@@ -53,27 +46,28 @@ export interface FlowSummary {
 }
 
 /** Creates a flow between two actors; see `scflow/create_flow` in `docs/actions.md`. */
-export const createFlowAction: ModelActionDefinition<CreateFlowParams, FlowSummary> = {
+export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSummary> = {
   id: "scflow/create_flow",
+  writes: ["flow", "item_at_actor"],
   title: "Create a flow",
   description:
     "Creates a flow from a source actor to a destination actor and returns it. " +
     "Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. " +
-    "Give name to name the flow; it has no name otherwise. " +
+    "Give display_name to name the flow; it has no name otherwise. " +
     "A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, " +
     "must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, " +
     "and the actors that do not hold the item yet hold it afterwards.",
   parameters: {
     type: "object",
     properties: {
-      source: refParam("Id or name of the actor the flow starts from."),
-      destination: refParam("Id or name of the actor the flow arrives at."),
-      item: refParam("Id or name of the item the flow carries; required between an actor and its child."),
+      source: refParam("actor", "Id or name of the actor the flow starts from."),
+      destination: refParam("actor", "Id or name of the actor the flow arrives at."),
+      item: refParam("item", "Id or name of the item the flow carries; required between an actor and its child."),
       bidirectional: {
         type: "boolean",
         description: "Whether the flow carries items in both directions; false when omitted.",
       },
-      name: localizedTextParam(
+      display_name: localizedTextParam(
         "Display name of the flow, a string or a map of language to string; the flow has no name when omitted.",
       ),
       description: localizedTextParam("Markdown description of the flow."),
@@ -82,19 +76,16 @@ export const createFlowAction: ModelActionDefinition<CreateFlowParams, FlowSumma
     required: ["source", "destination"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const source = await resolveRef(access, locator, "actor", params.source, "source");
-    const destination = await resolveRef(access, locator, "actor", params.destination, "destination");
-    const item = params.item === undefined ? undefined : await resolveRef(access, locator, "item", params.item, "item");
-    const bidirectional = optionalBoolean(params.bidirectional, "bidirectional");
-    const display_name = params.name === undefined ? undefined : toLocalized(params.name, "name");
-    const description = params.description === undefined ? undefined : toLocalized(params.description, "description");
-    const tags = optionalStringList(params.tags, "tags");
+  async run(params, context) {
+    const bidirectional = params.bidirectional;
+    const display_name = params.display_name === undefined ? undefined : toLocalized(params.display_name);
+    const description = params.description === undefined ? undefined : toLocalized(params.description);
+    const tags = unique(params.tags);
 
-    const flow = await createFlow(access, locator, {
-      source: source.id,
-      destination: destination.id,
-      ...(item === undefined ? {} : { item: item.id }),
+    const flow = await createFlow(context, context.locator, {
+      source: params.source,
+      destination: params.destination,
+      ...(params.item === undefined ? {} : { item: params.item }),
       ...(bidirectional === undefined ? {} : { bidirectional }),
       ...(display_name === undefined ? {} : { display_name }),
       ...(description === undefined ? {} : { description }),
@@ -105,33 +96,33 @@ export const createFlowAction: ModelActionDefinition<CreateFlowParams, FlowSumma
 };
 
 /** Sets the item of a flow; see `scflow/set_flow_item` in `docs/actions.md`. */
-export const setFlowItemAction: ModelActionDefinition<SetFlowItemParams, FlowSummary> = {
+export const setFlowItemAction: ScflowActionDefinition<SetFlowItemParams, FlowSummary> = {
   id: "scflow/set_flow_item",
+  writes: ["flow", "item_at_actor"],
   title: "Set the item of a flow",
   description:
     "Sets the item carried by a flow that carries none, and returns the flow. The item of a flow never changes and is never removed: " +
     "the action fails when the flow carries another item, and changes nothing when it already carries this one. " +
     "The domain of the item must be among the domains of both the source and the destination, and the actors that do not hold " +
-    "the item yet hold it afterwards. A flow has no name: give its id.",
+    "the item yet hold it afterwards.",
   parameters: {
     type: "object",
     properties: {
-      flow: refParam("Id of the flow."),
-      item: refParam("Id or name of the item."),
+      id: refParam("flow", "Id of the flow."),
+      item: refParam("item", "Id or name of the item."),
     },
-    required: ["flow", "item"],
+    required: ["id", "item"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const flow = await resolveRef(access, locator, "flow", params.flow, "flow");
-    const item = await resolveRef(access, locator, "item", params.item, "item");
-    return summarizeFlow((await setFlowItem(access, locator, { flow: flow.id, item: item.id })) as unknown as Instance);
+  async run(params, context) {
+    return summarizeFlow((await setFlowItem(context, context.locator, { flow: params.id, item: params.item })) as unknown as Instance);
   },
 };
 
 /** Updates a flow; see `scflow/update_flow` in `docs/actions.md`. */
-export const updateFlowAction: ModelActionDefinition<UpdateFlowParams, FlowSummary> = {
+export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSummary> = {
   id: "scflow/update_flow",
+  writes: ["flow"],
   title: "Update a flow",
   description:
     "Changes the name, the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change; " +
@@ -140,8 +131,8 @@ export const updateFlowAction: ModelActionDefinition<UpdateFlowParams, FlowSumma
   parameters: {
     type: "object",
     properties: {
-      flow: refParam("Id of the flow to update."),
-      name: nullableLocalizedTextParam(
+      id: refParam("flow", "Id of the flow to update."),
+      display_name: nullableLocalizedTextParam(
         "New display name; each given language replaces the same language, the others are kept. null removes the name.",
       ),
       bidirectional: {
@@ -151,37 +142,32 @@ export const updateFlowAction: ModelActionDefinition<UpdateFlowParams, FlowSumma
       description: localizedTextParam("New Markdown description; each given language replaces the same language, the others are kept."),
       tags: tagsParam("New tags; they replace the current ones."),
     },
-    required: ["flow"],
+    required: ["id"],
+    minProperties: 2,
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const flow = await resolveRef(access, locator, "flow", params.flow, "flow");
+  async run(params, context) {
     const patch: Record<string, unknown> = {};
 
-    if (params.name !== undefined) {
-      patch.display_name = params.name === null ? null : { set: toLocalized(params.name, "name") };
+    if (params.display_name !== undefined) {
+      patch.display_name = params.display_name === null ? null : { set: toLocalized(params.display_name) };
     }
-    const bidirectional = optionalBoolean(params.bidirectional, "bidirectional");
+    const bidirectional = params.bidirectional;
     if (bidirectional !== undefined) {
       patch.bidirectional = bidirectional;
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description, "description") };
+      patch.description = { set: toLocalized(params.description) };
     }
-    const tags = optionalStringList(params.tags, "tags");
+    const tags = unique(params.tags);
     if (tags !== undefined) {
       patch.tags = tags;
     }
-    if (Object.keys(patch).length === 0) {
-      throw new Error(
-        'scflow/update_flow: give at least one property to change besides "flow" (name, bidirectional, description, tags)',
-      );
-    }
 
-    const { after } = await access.runCommand(locator, {
+    const { after } = await context.runCommand(context.locator, {
       kind: "update",
-      schema: "flow",
-      filters: { id: flow.id },
+      schema: "scflow.flow",
+      filters: { id: params.id },
       input: patch,
     });
     return summarizeFlow(after[0] as unknown as Instance);
@@ -189,22 +175,24 @@ export const updateFlowAction: ModelActionDefinition<UpdateFlowParams, FlowSumma
 };
 
 /** Deletes a flow; see `scflow/delete_flow` in `docs/actions.md`. */
-export const deleteFlowAction: ModelActionDefinition<DeleteFlowParams, { id: string }> = {
+export const deleteFlowAction: ScflowActionDefinition<DeleteFlowParams, { id: string }> = {
   id: "scflow/delete_flow",
+  writes: ["flow"],
+  destructive: true,
   title: "Delete a flow",
-  description: "Deletes a flow and returns its id. The items held by its ends are kept. A flow has no name: give its id.",
+  description: "Deletes a flow and returns its id. The items held by its ends are kept. The cascade parameter is accepted for consistency with the other delete actions and changes nothing.",
   parameters: {
     type: "object",
     properties: {
-      flow: refParam("Id of the flow to delete."),
+      id: refParam("flow", "Id of the flow to delete."),
+      cascade: cascadeParam("Has no effect: nothing depends on a flow but its notes, which are always deleted with it."),
     },
-    required: ["flow"],
+    required: ["id"],
     additionalProperties: false,
   },
-  async execute(access, locator, params) {
-    const flow = await resolveRef(access, locator, "flow", params.flow, "flow");
-    await access.runCommand(locator, { kind: "delete", schema: "flow", filters: { id: flow.id } });
-    return { id: flow.id };
+  async run(params, context) {
+    await context.runCommand(context.locator, { kind: "delete", schema: "scflow.flow", filters: { id: params.id } });
+    return { id: params.id };
   },
 };
 

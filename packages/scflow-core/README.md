@@ -12,7 +12,7 @@ its identity, its scalar types, its schemas and the declarations of its actions,
 
 Its code is one bundle, `dist/module.js`, built from `src/module.ts` by `buildModule` of
 `@scfloworg/module` (see its [docs](../module/docs/module-packages.md)): the default export
-`defineModule(manifest, { actions })` gives the `execute` of each action of `ACTIONS` as its body.
+`defineModule(manifest, { actions })` gives each action of `ACTIONS` as a body that calls its `run(params, context)`.
 The package imports only types from `@scfloworg/core`, so the bundle holds no copy of the
 engine. A host loads the module with `modules.load(folder)` of `@scfloworg/module/host`;
 `tests/bundle.test.ts` builds, checks and loads the bundle. `tsc -b` leaves `src/module.ts` out,
@@ -38,9 +38,9 @@ since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
 - `setFlowItem(mcl, locator, { flow, item })`: sets the item of a flow that carries none, with the same
   checks and holdings as `createFlow`. The item of a flow never changes and is never removed: it throws when
   the flow carries another item, and changes nothing when it already carries `item`.
-- `ACTIONS`: the model actions of the package, as `ModelActionDefinition` values for UIs, AI
-  assistants and macros. The host registers them, for example with
-  `registerModelActions(ACTIONS)` in `@scfloworg/core-plugin-core`. The package exports
+- `ACTIONS`: the model actions of the package, each with its declaration and its body
+  `run(params, context)`, for UIs, AI assistants and macros. An environment runs them through
+  the module. The package exports
   `create_actor`, `update_actor`, `delete_actor`, `create_actor_type`, `create_scope`,
   `create_flow`, `update_flow`, `set_flow_item`, `delete_flow`, `create_item_type`, `create_item`, `update_item`, `hold_item`,
   `release_held_item`, `create_transformation_type`,
@@ -64,13 +64,17 @@ given by id or display name; the package ships no action that creates or changes
 ## Actions
 
 An action takes the id or the display name of every entity it references, and a plain string
-or a map of language to string for every text. It checks its parameters and throws an error
-that names the faulty parameter, before it writes anything. It opens no transaction: the host
-runs it in one, so a failure leaves the dataset unchanged and a success is one undoable step.
+or a map of language to string for every text. It declares its parameters as JSON Schema, which
+the registry checks before the body runs, and the schemas it writes in `writes`. An action that
+takes the place of a CRUD operation is named by the `crud` of its schema and follows the CRUD
+parameters. It opens no transaction: the host runs it in one, so a failure leaves the dataset
+unchanged and a success is one undoable step.
 
 ```ts
-import { ACTIONS } from "@scfloworg/scflow-core";
+const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
+await env.modules.load(folderOfThePackage);
+const dataset = await env.datasets.create({ locator: "js:network", modules: ["scflow:core"] });
 
-runtime.registerModelActions(ACTIONS);
-await runtime.runModelAction(docId, "scflow/create_actor", { name: "Main warehouse", type: "Warehouse" });
+await dataset.run("scflow/create_actor_type", { display_name: "Warehouse" });
+await dataset.run("scflow/create_actor", { display_name: "Main warehouse", type: "Warehouse" });
 ```
