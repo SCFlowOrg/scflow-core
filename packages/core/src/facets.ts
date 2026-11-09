@@ -29,6 +29,11 @@ import type { Key, NormalizedProperty, NormalizedSchema, PersistenceInterface, T
 /** The internal constraint naming, on a property of a target, the facet that adds it. */
 export const FACET_TAG = "__facet";
 
+/** Whether `prop` belongs to its schema itself rather than being added by a facet. */
+export function isOwnProperty(prop: NormalizedProperty): boolean {
+  return facetOfProperty(prop) === undefined;
+}
+
 /** The key of the facet that adds `prop` to its schema, or `undefined` for a property of the schema itself. */
 export function facetOfProperty(prop: NormalizedProperty): string | undefined {
   const tag = prop.constraints[FACET_TAG];

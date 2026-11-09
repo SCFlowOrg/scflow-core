@@ -2,7 +2,6 @@ import { BASE_SCALAR_TYPES, BUILTIN_SCALAR_TYPES, META_SCHEMAS, baseScalarDefaul
 import { validateUiAccessConstraints } from "./uiAccess.js";
 import { parseMapType } from "./mapTypes.js";
 import { modelError } from "./errors.js";
-import { validateExtensionSchema } from "./extensions.js";
 import { validateFacetSchema } from "./facets.js";
 import { processRuleDeclarations } from "./ruleDeclarations.js";
 import type {
@@ -135,11 +134,6 @@ export function processPropertyDescription(raw: TransientValue, inherited?: Norm
   if (isArray) constraints.is_array = true;
   // a set and a unique array are arrays: the processed property carries both, so `min_length`, `max_length` and every reader of `is_array` apply unchanged
   if (constraints.is_set === true || constraints.is_unique === true) constraints.is_array = true;
-  // an extension relation is mandatory and owner: the extended instance owns its extension instance
-  if (constraints.extension === true) {
-    constraints.mandatory = true;
-    constraints.owner = true;
-  }
   return {
     name: obj.name,
     type,
@@ -192,9 +186,6 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
       throw modelError("unknown_extends_target", `schema "${obj.name}" extends unknown schema "${extendsName}"`);
     }
     checkExtendsCycle(obj.name, parent, ctx.resolveSchema);
-    if (parent.properties.some((p) => p.constraints.extension === true)) {
-      throw modelError("constraint_violation", `schema "${obj.name}" extends "${parent.name}", an extension schema — an extension schema cannot be extended`);
-    }
   }
   const inherited = new Map<string, NormalizedProperty>((parent?.properties ?? []).map((p) => [p.name, p] as const));
 
@@ -203,12 +194,6 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
   const ownProperties = ownPropertiesRaw.map((p) => {
     const declaredName = p !== null && typeof p === "object" && !Array.isArray(p) ? (p as TransientObject).name : undefined;
     const overridden = typeof declaredName === "string" ? inherited.get(declaredName) : undefined;
-    if (typeof overridden?.constraints.__extension === "string") {
-      throw modelError(
-        "constraint_violation",
-        `schema "${obj.name}" declares "${overridden.name}", a property of the extension "${overridden.constraints.__extension}" of its parent "${parent?.name}"`,
-      );
-    }
     const normalized = processPropertyDescription(p, overridden);
     if (seen.has(normalized.name)) {
       throw modelError("duplicate_property_name", `schema "${obj.name}" declares "${normalized.name}" twice`);
@@ -247,7 +232,6 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
   validateObservablePropertyConstraints(obj.name, properties, constraints, ctx);
   validateOnDeleteConstraints(obj.name, properties, ctx);
   validateUiAccessConstraints(obj.name, properties, constraints);
-  validateExtensionSchema(obj.name, properties, constraints, ctx);
   validateFacetSchema(obj.name, properties, constraints, parent, ctx);
 
   return {
@@ -578,8 +562,8 @@ export type OnDelete = (typeof ON_DELETE_VALUES)[number];
  * `on_delete` says what the deletion of the target of a relation does to the
  * instance declaring it: `restrict`, `cascade`, `set_null` or `confirm`. It is
  * valid on a relation only; on an `owner` relation `confirm` is the only value
- * allowed (the owner otherwise removes the instance with it silently), it is
- * never valid on an `extension` relation, and `set_null` is refused on a
+ * allowed (the owner otherwise removes the instance with it silently), and
+ * `set_null` is refused on a
  * `mandatory` relation, which cannot be null. Each breach is a
  * `constraint_violation`.
  */
@@ -596,10 +580,10 @@ function validateOnDeleteConstraints(schemaName: string, properties: NormalizedP
     if (resolveType(prop.type, ctx).kind !== "relation") {
       throw modelError("constraint_violation", `"${prop.name}" on schema "${schemaName}" has "on_delete" but is not a relation`);
     }
-    if (prop.constraints.extension === true || (prop.constraints.owner === true && value !== "confirm")) {
+    if (prop.constraints.owner === true && value !== "confirm") {
       throw modelError(
         "constraint_violation",
-        `"${prop.name}" on schema "${schemaName}" has "on_delete: ${value}" but is an owner or extension relation — its owner already removes the instance with it, and only "confirm" asks for consent on an owner relation`,
+        `"${prop.name}" on schema "${schemaName}" has "on_delete: ${value}" but is an owner relation — its owner already removes the instance with it, and only "confirm" asks for consent on an owner relation`,
       );
     }
     if (value === "set_null" && prop.constraints.mandatory === true) {

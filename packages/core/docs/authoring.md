@@ -173,7 +173,6 @@ single-valued.
 | --- | --- |
 | `mandatory` | The relation cannot be null |
 | `owner` | The target owns this instance |
-| `extension` | The declaring schema extends the target, see [Extensions](#extensions); implies `mandatory` and `owner` |
 | `inverse_name` | Generates the inverse relation on the target schema and on every schema extending it |
 | `inverse_is_array` | The inverse relation holds several instances |
 | `on_delete` | What the deletion of the target does to this instance: `restrict`, `cascade` or `set_null`, see [Deleting the target](#deleting-the-target) |
@@ -208,7 +207,7 @@ deleted.
   asks for consent before it goes with its owner, while an owned part without it
   goes silently.
 - `set_null` on a `mandatory` relation, any other `on_delete` on an `owner`
-  relation, `on_delete` on an `extension` relation, `on_delete` on a property that
+  relation, `on_delete` on a property that
   is not a relation and a value other than the four are refused with
   `constraint_violation` when the schema is created or updated.
 - A `restrict` is checked before anything is written, over everything the `delete`
@@ -216,57 +215,6 @@ deleted.
   `cascade`, does not block it.
 - An instance deleted by `cascade` applies the same rules to what it owns and to
   what references it.
-
-### Extensions
-
-An extension adds properties to a schema of the same model. A module adds
-properties to a schema of another module with a facet instead (see
-[modules.md](modules.md), Facets); extensions stay beside facets until the graph
-styles of `scflow-plugins` move to facets.
-
-A relation declared `extension` makes its schema an *extension* of the relation's
-target: the properties of the extension are seen as properties of the target, in
-the schema of the target and in every command on it.
-
-```js
-{ name: "task", shared_by_name: true, properties: [{ name: "name", type: "identifier" }, { name: "title", type: "string" }] }
-{
-  name: "task_billing",
-  properties: [
-    { name: "task", type: "task", extension: true },
-    { name: "rate", type: "integer", default_value: 10 },
-  ],
-}
-```
-
-A task now has a `rate`: `create` takes it, `query` returns it, a filter and
-`result.properties` name it, and `update` changes it. Several extensions of the
-same target add their properties side by side.
-
-- `extension` implies `mandatory` and `owner`: the instance of the target owns its
-  instance of the extension, which is created with it, from the defaults and the
-  values of the `input`, and deleted with it. The instance of the extension is
-  stored under the extension schema, with the key of the instance it extends, and
-  is never reported in `cascade-deleted`.
-- An extension has one `extension` relation and no other `owner`. It has no `name`
-  and no key of its own, and is not `shared_by_name`, `embedded` or `is_root`.
-  Every other property is a relation that is not `mandatory`, an array, a map, or a
-  scalar with a `default_value`; none carries `inverse_name`, `owns` or `owner`.
-  The `extension` relation takes no `is_array` and no `inverse_*`.
-- The schema of the target, and every schema extending it, lists the properties of
-  its extensions, each tagged by the internal constraint `__extension`. A property
-  of an extension named like a property of the target, of a schema extending it or
-  of another extension of it, in either order of creation, fails with
-  `constraint_violation`.
-- An extension schema cannot be extended and no relation can target it; a command
-  whose `schema` is an extension schema fails with `extension_not_addressable`.
-- Adding an extension to a populated dataset is a compatible upgrade: the instances
-  that exist get their extension instance, from the defaults (see
-  [model-upgrade.md](model-upgrade.md)).
-
-Every breach of a rule on the extension schema is a `constraint_violation` raised
-when the schema is created or updated, except an unknown target, which is
-`unknown_extends_target`.
 
 ## Placeholders
 

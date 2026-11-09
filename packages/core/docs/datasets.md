@@ -92,12 +92,6 @@ restoreDataset(locator, dump: string, format: "json" | "yaml"): Promise<RestoreR
   at another version than its entry, and the snapshot of a published module that
   does not match its digest. A local module is editable, so its digest is
   computed again. A dump with no `modules` section restores with no module.
-- `restoreDataset` creates the extension instance (see [authoring.md](authoring.md),
-  Extensions) that a restored instance lacks, from the defaults, as an upgrade
-  does. It applies to a dump written before a schema became an extension of the
-  schema of its instances. The extension
-  instances the dump holds are left as they are, and the versions of the dump are
-  kept.
 - `restoreDataset` refuses, with `invalid_dump`, an instance whose schema is not in
   the dump, its modules or the meta-model.
 - Everything else (a missing dataset, a missing format) fails with

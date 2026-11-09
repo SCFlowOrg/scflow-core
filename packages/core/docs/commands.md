@@ -46,11 +46,6 @@ The error codes of a failing command are documented on `ErrorCode`.
   the model when it is done (see [rules.md](rules.md)): a breach undoes it and
   fails with `rule_violation`.
 - `update` and `delete` without `filters` act on every instance of the schema.
-- The properties of the **extensions** of a schema (see [authoring.md](authoring.md),
-  Extensions) are properties of that schema in every kind: `query` returns them,
-  filters, including a path across a relation, and `result.properties` name them,
-  and `create` and `update` take them. A command whose `schema` is an extension
-  schema fails with `extension_not_addressable`.
 - The properties of the **facets** of a schema (see [modules.md](modules.md),
   Facets) are qualified by the namespace of the module of the facet. `query`
   returns them as a nested mapping, `carbon: {co2: 12}`. Filters, including a

@@ -1,3 +1,4 @@
+import { isOwnProperty } from "./facets.js";
 import * as YAML from "js-yaml";
 import { assertDistinct, computePropertyValue, requiresDistinct, resolveCommandForm, runCommand as runCommandEngine, validateMapValue, validateScalarValue, deleteImpact as deleteImpactEngine } from "./command.js";
 import type { DeleteImpact } from "./command.js";
@@ -5,8 +6,6 @@ import type { DatasetModel as LoadedDatasetModel } from "./datasetModules.js";
 import type { Filter as CommandFilter } from "./types.js";
 import { META_SCHEMAS } from "./builtins.js";
 import { modelError } from "./errors.js";
-import { isOwnProperty } from "./extensions.js";
-import { ensureExtensionInstances } from "./extensionUpgrade.js";
 import {
   computeModelDiff,
   clone as cloneUpgrade,
@@ -478,11 +477,7 @@ async function dumpDatasetIn(scope: EngineScope, locator: string, format: DumpFo
  * `createDataset`), not reset the way a fresh `initDataset` would, since a
  * restore is meant to reproduce the prior state exactly. An instance whose
  * schema is missing from the dataset, its modules and the meta-model is refused
- * with `invalid_dump`. An instance of a schema that is
- * an extension target and that has no
- * extension instance in the dump (a dump written before the schema became an
- * extension) gets it, from the defaults, as `upgradeDataset` does; the dump's
- * versions are kept. A restore that fails once the dataset is created deletes
+ * with `invalid_dump`. The dump's versions are kept. A restore that fails once the dataset is created deletes
  * it again, so it creates nothing.
  * The modules of the dump (its `modules` and `model` sections) are embedded
  * again; a snapshot of a published module that does not match its digest is
@@ -554,11 +549,6 @@ async function populateRestoredDataset(
       await impl.putInstance(rest, schemaName, key, instance, roles);
     }
   }
-
-  // A dump written before a schema became an extension of the schema of its
-  // instances holds no extension instance for
-  // them. The versions of the dump are kept, so nothing is bumped here.
-  await ensureExtensionInstances(impl, rest, await loadResolvers(impl, rest), await impl.getDataset(rest));
 }
 
 /**
@@ -982,7 +972,7 @@ function classifySchemaInstances(
   instances: TransientValue[],
   ctx: TypeResolutionContext,
 ): { autoUpdate: TransientValue[]; modifiedSchema: TransientValue[] } {
-  // the properties an extension adds are stored in the instance of the extension, not in these instances
+  // the properties a facet adds are stored in the instance of the facet, not in these instances
   const oldProps = new Map(oldSchema.properties.filter(isOwnProperty).map((p) => [p.name, p] as const));
   const newProps = new Map(newSchema.properties.filter(isOwnProperty).map((p) => [p.name, p] as const));
   const added = [...newProps.keys()].filter((n) => !oldProps.has(n));
@@ -1227,9 +1217,6 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
   // ever "considered as deleted" for reporting — their own stored definition
   // didn't change, so nothing is written back for them here.
 
-  // an extension added to a populated dataset lacks an instance for each instance it extends
-  const createdExtensions = await ensureExtensionInstances(writer, rest, upgradeResolvers, datasetValue);
-
   // the declared rules hold on every instance under the new model: an upgrade that breaks one is refused
   const violations = await evaluateRules(impl, rest, await loadResolvers(impl, rest), "all");
   if (violations.length > 0) {
@@ -1240,7 +1227,7 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
   const patch: TransientObject = { updated_at: new Date().toISOString() };
   const info = (await impl.getDataset(rest)) as TransientObject;
   patch.model_minor_version = (typeof info.model_minor_version === "number" ? info.model_minor_version : 0) + 1;
-  if (after.length > 0 || createdExtensions > 0) {
+  if (after.length > 0) {
     patch.data_minor_version = (typeof info.data_minor_version === "number" ? info.data_minor_version : 0) + 1;
   }
   await impl.updateDataset(rest, patch);

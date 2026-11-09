@@ -36,11 +36,6 @@ Rules:
 - `upgradeDataset` of an incompatible change fails with `incompatible_upgrade` and
   changes nothing. The host may migrate the data itself, then bump
   `model_major_version`.
-- Adding an extension schema (see [authoring.md](authoring.md), Extensions) is
-  compatible: `upgradeDataset` creates, for each stored instance of the schema it
-  extends and of the schemas extending that one, its extension instance from the
-  defaults, and bumps `data_minor_version`. The properties an extension adds are
-  not stored on the extended instances, so they are never backfilled there.
 - Adding a facet to a module (see [modules.md](modules.md), Facets) writes
   nothing: the instance of a facet is created on its first value. A schema the
   dataset defines itself belongs to no module, so `facet_of` fails there with

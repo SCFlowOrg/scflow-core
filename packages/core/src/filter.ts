@@ -1,6 +1,4 @@
 import { modelError } from "./errors.js";
-import { mergeExtensionValues } from "./extensionData.js";
-import { extensionNamesOf } from "./extensions.js";
 import { facetNamesOf, facetOfProperty, mergeFacetValues, resolvePathSegment } from "./facets.js";
 import { findProperty, isEmbedded } from "./schema.js";
 import type { TypeResolutionContext } from "./schemaProcessing.js";
@@ -185,12 +183,9 @@ async function getPathValue(
     }
     if (Array.isArray(value) || value === null) return null; // multi-valued/absent — not traversable further here
     const target = await ctx.impl.getInstance(ctx.rest, resolved.schema.name, value as Key, derivePropertyRoles(resolved.schema));
-    // the target's extension and facet values live in other instances: read in, on a copy, so the path reaches them like its own properties
+    // the target's facet values live in other instances: read in, on a copy, so the path reaches them like its own properties
     const isObject = target !== null && typeof target === "object" && !Array.isArray(target);
     current = target;
-    if (isObject && extensionNamesOf(resolved.schema).length > 0) {
-      current = await mergeExtensionValues(ctx.impl, ctx.rest, ctx, resolved.schema, value as Key, { ...(target as TransientObject) });
-    }
     if (isObject && facetNamesOf(resolved.schema).length > 0) {
       current = await mergeFacetValues(ctx.impl, ctx.rest, ctx, resolved.schema, value as Key, { ...(current as TransientObject) });
     }
