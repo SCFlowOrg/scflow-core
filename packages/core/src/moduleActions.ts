@@ -64,12 +64,10 @@ function defaultOf(prop: NormalizedProperty, resolved: ResolvedScalar): Transien
   return raw;
 }
 
-/** Whether `prop` is a property of `schema` itself, as authored: neither generated nor brought by a facet or an extension. */
+/** Whether `prop` is a property of `schema` itself, as authored: neither generated nor brought by a facet. */
 function isAuthoredProperty(prop: NormalizedProperty): boolean {
   return (
     prop.constraints.__generated !== true &&
-    prop.constraints.__extension === undefined &&
-    prop.constraints.extension !== true &&
     facetOfProperty(prop) === undefined &&
     !prop.name.includes(".")
   );
@@ -127,7 +125,6 @@ export function generatedActions(model: DatasetModel, module: LoadedModule): Gen
     const name = `${module.namespace}.${short}`;
     const schema = model.schemas.get(name);
     if (!schema || schema.constraints.abstract === true || isEmbedded(schema)) continue;
-    if (schema.properties.some((p) => p.constraints.extension === true)) continue;
     const target = facetTargetOf(schema);
     if (target !== undefined) actions.push(...facetActions(model, module, short, name, schema, target, ctx));
     else actions.push(...schemaActions(module, short, name, schema, ctx));

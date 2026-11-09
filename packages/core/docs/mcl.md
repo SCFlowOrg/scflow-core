@@ -47,7 +47,7 @@ Each rule is stated in the file named in brackets; read it before relying on the
 - [sessions.md](sessions.md): `MclAccess`, `ApiSession`, transactions, revert.
 - [actions.md](actions.md): `ModelActionDefinition`, the actions a domain package exposes to UIs and AI assistants.
 - [commands.md](commands.md): commands, text and map operations, filters, scripts, examples.
-- [authoring.md](authoring.md): schemas, properties, map types, relations, extensions, placeholders, `ui_access`.
+- [authoring.md](authoring.md): schemas, properties, map types, relations, placeholders, `ui_access`.
 - [rules.md](rules.md): declared rules, `checks`, `unique`, `acyclic`, `set_once`, and when the engine checks them.
 - [multilingual.md](multilingual.md): `localized_string` and `localized_markdown`, translating one language, filtering on one.
 - [observability.md](observability.md): `observable` constraints and `subscribeObservable`.

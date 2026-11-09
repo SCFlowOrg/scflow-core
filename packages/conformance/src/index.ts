@@ -1197,93 +1197,22 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
     });
   });
 
-  /**
-   * The `extension` relation constraint — the *Extensions* paragraphs of the
-   * `relations`, `schema_processing` and `command` parts of the `core` dataset:
-   * the properties of an extension schema are properties of the schema it
-   * extends in every command, its instance is created and deleted with the
-   * extended one, and a command cannot name the extension schema.
-   */
-  const extensionModel = [
-    { name: "task", shared_by_name: null, properties: [{ name: "name", type: "identifier" }, { name: "title", type: "string" }] },
-    {
-      name: "task_billing",
-      properties: [
-        { name: "task", type: "task", extension: null },
-        { name: "rate", type: "integer", default_value: 10 },
-      ],
-    },
-  ];
-
-  async function setupExtension(locator: string): Promise<void> {
-    await initDataset(locator, "extensions");
-    const upgradeLocator = await createUpgradeLocator(locator);
-    await runCommand(upgradeLocator, { create: "schema", input: extensionModel });
-    await upgradeDataset(locator, upgradeLocator);
-  }
-
-  describe(`extension constraint conformance — ${formatPrefix}`, () => {
-    it("creates, reads, filters, updates and deletes the properties of an extension through the extended schema", async () => {
+  describe(`no extension relation — ${formatPrefix}`, () => {
+    it("reads a relation declared `extension` as an ordinary relation, whose schema a command can name", async () => {
       const locator = newLocator();
-      await setupExtension(locator);
-
-      await runCommand(locator, { create: "task", input: [{ name: "t1", title: "A", rate: 25 }, { name: "t2" }] });
-      const t2 = (await runCommand(locator, { query: "task", filters: { name: "t2" } })).after[0];
-      expect(t2).toMatchObject({ name: "t2", rate: 10 });
-      const found = await runCommand(locator, { query: "task", filters: { rate: { gte: 20 } } });
-      expect(found.after.map((i) => (i as Record<string, unknown>).name)).toEqual(["t1"]);
-
-      const updated = await runCommand(locator, { update: "task", filters: { name: "t1" }, input: { rate: 30, title: "B" } });
-      expect(updated.before[0]).toMatchObject({ rate: 25, title: "A" });
-      expect(updated.after[0]).toMatchObject({ rate: 30, title: "B" });
-
-      const deleted = await runCommand(locator, { delete: "task", filters: { name: "t1" } });
-      expect(deleted["cascade-deleted"]).toEqual([]);
-      const remaining = await runCommand(locator, { query: "task" });
-      expect(remaining.after.map((i) => (i as Record<string, unknown>).name)).toEqual(["t2"]);
-    });
-
-    it("refuses a command on the extension schema with extension_not_addressable", async () => {
-      const locator = newLocator();
-      await setupExtension(locator);
-      await expect(runCommand(locator, { query: "task_billing" })).rejects.toMatchObject({ code: "extension_not_addressable" });
-      await expect(runCommand(locator, { create: "task_billing", input: [{ rate: 1 }] })).rejects.toMatchObject({ code: "extension_not_addressable" });
-    });
-
-    it("refuses an extension schema that breaks the rules, with constraint_violation", async () => {
-      const locator = newLocator();
-      await initDataset(locator, "extension-reject");
+      await initDataset(locator, "no-extensions");
       const upgradeLocator = await createUpgradeLocator(locator);
-      await runCommand(upgradeLocator, { create: "schema", input: [extensionModel[0]] });
-      await expect(
-        runCommand(upgradeLocator, {
-          create: "schema",
-          input: [{ name: "task_billing", properties: [{ name: "task", type: "task", extension: null }, { name: "name", type: "identifier" }] }],
-        }),
-      ).rejects.toMatchObject({ code: "constraint_violation" });
-      await expect(
-        runCommand(upgradeLocator, {
-          create: "schema",
-          input: [{ name: "task_billing", properties: [{ name: "task", type: "task", extension: null }, { name: "rate", type: "integer" }] }],
-        }),
-      ).rejects.toMatchObject({ code: "constraint_violation" });
-    });
-
-    it("gives the instances that exist when an extension is added the defaults of its properties", async () => {
-      const locator = newLocator();
-      await initDataset(locator, "extension-upgrade");
-      const first = await createUpgradeLocator(locator);
-      await runCommand(first, { create: "schema", input: [extensionModel[0]] });
-      await upgradeDataset(locator, first);
-      await runCommand(locator, { create: "task", input: [{ name: "t1" }, { name: "t2" }] });
-
-      const second = await createUpgradeLocator(locator);
-      await runCommand(second, { create: "schema", input: [extensionModel[1]] });
-      expect((await checkUpgrade(locator, second)).modifiedSchema).toEqual([]);
-      await upgradeDataset(locator, second);
-
-      const tasks = await runCommand(locator, { query: "task" });
-      expect(tasks.after.map((i) => (i as Record<string, unknown>).rate)).toEqual([10, 10]);
+      await runCommand(upgradeLocator, {
+        create: "schema",
+        input: [
+          { name: "task", is_root: true, properties: [{ name: "title", type: "string" }] },
+          { name: "task_billing", is_root: true, properties: [{ name: "task", type: "task", extension: null }, { name: "rate", type: "integer", default_value: 10 }] },
+        ],
+      });
+      await upgradeDataset(locator, upgradeLocator);
+      const { after } = await runCommand(locator, { query: "task" });
+      expect(after).toEqual([]);
+      await expect(runCommand(locator, { query: "task_billing" })).resolves.toMatchObject({ after: [] });
     });
   });
 
