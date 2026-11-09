@@ -3,12 +3,10 @@ import type { Key, PersistenceInterface, TransientValue } from "@scfloworg/core"
 
 /**
  * The `js` format's in-memory core: dataset storage, the persistence
- * primitives and the `areaOf`/`builtinRestFor` pair. Internal to the package,
- * not a public entry point.
+ * primitives. Internal to the package, not a public entry point.
  *
  * This module imports nothing that touches the filesystem, so the browser
- * entry point can load it alone. The Node entry point adds the area's YAML
- * fallback through the `diskFallback` hook of `createJsPersistenceInterfaceCore`.
+ * entry point can load it alone.
  */
 
 /** A dataset's own properties: name, the four version numbers and the two timestamps. */
@@ -35,16 +33,6 @@ export function cloneValue<T extends TransientValue>(value: T): T {
 }
 
 /**
- * The area of `rest`: the part before its last `/`, or `""` when `rest` has
- * no `/`. `rest` is `"<area>/<localRest>"`, and the area may itself contain
- * `/`. A pure string function with no I/O, identical on every entry point.
- */
-export function areaOf(rest: string): string {
-  const i = rest.lastIndexOf("/");
-  return i === -1 ? "" : rest.slice(0, i);
-}
-
-/**
  * Builds a `js` `PersistenceInterface` over an in-memory dataset registry.
  *
  * Every read and write deep-copies through `cloneValue`, so callers may
@@ -54,26 +42,16 @@ export function areaOf(rest: string): string {
  * `getInstance` returns `null` for a missing key, while `deleteInstance`
  * throws `key_not_found`.
  *
- * `diskFallback`, when given, supplies the dataset of a `rest` that has no
- * in-memory dataset. The read primitives and the existence check of
- * `createDataset` consult it; `updateDataset`, `putInstance`,
- * `deleteInstance` and `deleteDataset` do not, so a dataset
- * resolved only through the fallback is read-only and those calls throw
- * `dataset_not_found` for it.
- *
  * `supportsTransactions` is `true`: only this process mutates an in-memory
  * dataset, so a captured delta can always be reverted or redone.
  *
  * @param name - the format prefix the interface answers to.
- * @param diskFallback - resolves a `rest` to a read-only dataset, or `null`
- * when nothing is there.
  * @throws `dataset_already_exists` from `createDataset` when `rest` resolves
  * to a dataset; `dataset_not_found` from any other dataset-level call on a
  * `rest` that does not.
  */
 export function createJsPersistenceInterfaceCore(
   name: string,
-  diskFallback?: (rest: string) => Promise<DatasetState | null>,
 ): PersistenceInterface {
   const datasets = new Map<string, DatasetState>();
   // The tail of each rest's lock chain: a caller waits for the tail it found,
@@ -87,9 +65,7 @@ export function createJsPersistenceInterfaceCore(
   }
 
   async function resolveState(rest: string): Promise<DatasetState | null> {
-    const inMemory = datasets.get(rest);
-    if (inMemory) return inMemory;
-    return diskFallback ? diskFallback(rest) : null;
+    return datasets.get(rest) ?? null;
   }
 
   async function requireState(rest: string): Promise<DatasetState> {
@@ -107,14 +83,8 @@ export function createJsPersistenceInterfaceCore(
     return store;
   }
 
-  function builtinRestFor(rest: string): string {
-    return areaOf(rest);
-  }
-
   return {
     name,
-    areaOf,
-    builtinRestFor,
     supportsTransactions: true,
 
     async datasetExists(rest) {
@@ -122,7 +92,7 @@ export function createJsPersistenceInterfaceCore(
     },
 
     async createDataset(rest, dsName) {
-      if (datasets.has(rest) || (diskFallback && (await diskFallback(rest)) !== null)) {
+      if (datasets.has(rest)) {
         throw modelError("dataset_already_exists", `a "${name}" dataset already exists at "${rest}"`);
       }
       const now = new Date().toISOString();

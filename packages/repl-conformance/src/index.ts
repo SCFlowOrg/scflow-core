@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as YAML from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { createApiSession, createUpgradeLocator, initDataset, registerPersistentFormat, runCommand, upgradeDataset } from "@scfloworg/core/testing";
+import { TESTING_ENGINE, createUpgradeLocator, initDataset, registerPersistentFormat, runCommand, upgradeDataset } from "@scfloworg/core/testing";
 import type { PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { createReplState, currentContext, registerOpenContext, runCommandBlock } from "@scfloworg/repl";
 import type { Output } from "@scfloworg/repl";
@@ -169,7 +169,7 @@ function registerFixtureTest(fixture: ReplFixture, formatName: string): void {
     // datasets.ts's registerOpenContext).
     await initDataset(locator, "fixture");
     if (fixture.seed) await applySeed(locator, fixture.seed);
-    const state = createReplState({ apiSession: createApiSession() });
+    const state = createReplState({ engine: TESTING_ENGINE });
     await registerOpenContext(state, "fixture", locator);
 
     const out = capturingErrors();

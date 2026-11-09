@@ -204,15 +204,6 @@ export function createFormatParts(
   const format: ProjectFormat = {
     ...inner,
     name,
-    areaOf(rest) {
-      const separator = Math.max(rest.lastIndexOf("/"), rest.lastIndexOf("\\"));
-      return separator === -1 ? "" : rest.slice(0, separator);
-    },
-    builtinRestFor(rest) {
-      // Never a path: the built-in of an area is not a project on disk.
-      return `${this.areaOf(rest)}#builtin`;
-    },
-
     async datasetExists(rest) {
       await ensureLoaded(rest);
       return inner.datasetExists(rest);

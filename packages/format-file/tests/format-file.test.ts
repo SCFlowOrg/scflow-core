@@ -125,10 +125,10 @@ describe("saving a change", () => {
     const path = join(tempDir(), "new");
     const format = createFileFormat();
     await format.createDataset(path, "demo");
-    await format.putInstance(path, "__dormant_instances__", "self", { schemas: {} }, {});
+    await format.putInstance(path, "__internal_record__", "self", { schemas: {} }, {});
     await format.save(path);
     const again = createFileFormat();
-    expect(await again.getInstance(path, "__dormant_instances__", "self", {})).toEqual({ schemas: {} });
+    expect(await again.getInstance(path, "__internal_record__", "self", {})).toEqual({ schemas: {} });
     expect(await again.save(path)).toEqual({ written: [], removed: [] });
   });
 

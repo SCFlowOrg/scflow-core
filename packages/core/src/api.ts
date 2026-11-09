@@ -68,8 +68,7 @@ import type { ScriptSession } from "./script.js";
  *
  * Every function runs in an engine scope: its persistent formats and the
  * listeners of its observable changes. `createEngine` (at the end of this
- * file) gives an engine its own scope; the free functions share the global
- * one, which `registerPersistentFormat` fills (see `docs/formats.md`).
+ * file) gives an engine its own scope (see `docs/formats.md`).
  */
 
 /** What one engine holds: its formats by name and its observable listeners by locator. */
@@ -87,7 +86,7 @@ function newScope(formats: readonly PersistenceInterface[]): EngineScope {
   return scope;
 }
 
-/** The scope of the free functions of the API. */
+/** The scope of the free functions of the entry for tests. */
 const GLOBAL_SCOPE = newScope([]);
 
 /**
@@ -104,7 +103,7 @@ function refuseWriteOutsideAction(mayWrite: boolean, commands: readonly { kind: 
   }
 }
 
-/** Registers `impl` under `impl.name` for the free functions, the prefix of the locators it serves; a later registration under the same name replaces the earlier one. An engine made by `createEngine` does not see it. */
+/** Registers `impl` under `impl.name` for the entry for tests, the prefix of the locators it serves; a later registration under the same name replaces the earlier one. An engine made by `createEngine` does not see it. */
 export function registerPersistentFormat(impl: PersistenceInterface): void {
   GLOBAL_SCOPE.formats.set(impl.name, impl);
 }
@@ -142,156 +141,6 @@ async function withLock<T>(impl: PersistenceInterface, rest: string, fn: () => P
     return await fn();
   } finally {
     await release();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Built-in overlay (packages/core/docs/spec/meta-model.md#import's "Built-in — virtual,
-// not imported", `PersistenceInterface`'s `builtinRestFor`): a dataset never copies its area's built-in
-// schemas/scalar_types in, and never gets a standing import for them.
-// `initDataset` does nothing built-in-related at all; `loadResolvers`
-// (resolvers.ts) and `datasetTransientForm` below read the built-in live,
-// every time, via `builtinRestFor`. `dumpDataset` and `restoreDataset` are the
-// only two places that touch the `import` schema for the built-in, and only
-// as bookkeeping — see below.
-// ---------------------------------------------------------------------------
-
-/**
- * The area's built-in dataset for `rest` — its current schema/scalar_type
- * instances, resolved live via `builtinRestFor` — or `null` if no dataset
- * exists yet at the rest `builtinRestFor` names. Never copied or cached:
- * every caller sees whatever the built-in currently holds. `resolvers.ts`'s
- * `loadResolvers` has its own small copy of this same lookup (command
- * processing can't import from here without a cycle) — keep the two in sync.
- */
-async function loadBuiltinOverlay(
-  impl: PersistenceInterface,
-  rest: string,
-): Promise<{ builtinRest: string; schemas: NormalizedSchema[]; scalarTypes: NormalizedScalarType[] } | null> {
-  const builtinRest = impl.builtinRestFor(rest);
-  if (!(await impl.datasetExists(builtinRest))) return null;
-  const [schemaInstances, scalarTypeInstances] = await Promise.all([
-    impl.listInstances(builtinRest, "schema", SCHEMA_ROLES),
-    impl.listInstances(builtinRest, "scalar_type", NO_ROLES),
-  ]);
-  return {
-    builtinRest,
-    schemas: schemaInstances.map((raw) => raw as unknown as NormalizedSchema),
-    scalarTypes: scalarTypeInstances.map((raw) => raw as unknown as NormalizedScalarType),
-  };
-}
-
-/**
- * The shape `dumpDataset` synthesizes for the area's built-in, and
- * `restoreDataset` recognizes by its empty `namespace` — never an instance
- * actually stored via `putInstance` against `rest`'s own `import` schema; see
- * packages/core/docs/spec/meta-model.md#import's `import` schema block for the full
- * shape shared with every other kind of import.
- */
-interface BuiltinImportRecord extends TransientObject {
-  name: string;
-  locator: string;
-  namespace: string;
-  model_major_version: number;
-  model_minor_version: number;
-  data_major_version: number;
-  data_minor_version: number;
-  caching_policy: "full" | "partial" | "none";
-  imported_schemas: string[];
-  imported_scalar_types: string[];
-}
-
-const BUILTIN_IMPORT_NAME = "builtin";
-
-/**
- * Builds the bookkeeping-only `import` entry `dumpDataset` includes for the
- * area's built-in — no schema/scalar_type content: its `locator`, the names
- * it currently overlays (`imported_schemas`/`imported_scalar_types`), and its
- * four versions at `0`. A built-in can be assembled at run time by its host,
- * so its own version numbers say nothing about its content; `restoreDataset`
- * ignores them and checks the restored instances instead.
- */
-function builtinImportRecord(
-  impl: PersistenceInterface,
-  builtinRest: string,
-  overlay: { schemas: NormalizedSchema[]; scalarTypes: NormalizedScalarType[] },
-): BuiltinImportRecord {
-  return {
-    name: BUILTIN_IMPORT_NAME,
-    locator: `${impl.name}:${builtinRest}`,
-    namespace: "",
-    model_major_version: 0,
-    model_minor_version: 0,
-    data_major_version: 0,
-    data_minor_version: 0,
-    caching_policy: "none",
-    imported_schemas: overlay.schemas.map((s) => s.name),
-    imported_scalar_types: overlay.scalarTypes.map((s) => s.name),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Dormant instances (packages/core/docs/spec/meta-model.md#import's "Dormant
-// instances"): an instance whose schema is neither in its dataset, nor in the
-// meta-model, nor in its area's current built-in. `restoreDataset` stores it
-// as it is and records its schema and key in an internal instance of `rest`,
-// the way modelUpgrade.ts records an upgrade locator's marker: no command
-// addresses that schema, so the record and the dormant instances stay out of
-// every query and command. `dumpDataset` reads the record to write the
-// dormant instances back unchanged.
-// ---------------------------------------------------------------------------
-
-const DORMANT_RECORD_SCHEMA = "__dormant_instances__";
-const DORMANT_RECORD_KEY = "self";
-
-/** Schema name → keys of the dormant instances `rest` holds. */
-type DormantRecord = Record<string, string[]>;
-
-async function getDormantRecord(impl: PersistenceInterface, rest: string): Promise<DormantRecord> {
-  const raw = (await impl.getInstance(rest, DORMANT_RECORD_SCHEMA, DORMANT_RECORD_KEY, NO_ROLES)) as TransientObject | null;
-  return raw !== null && isPlainObject(raw.schemas) ? (raw.schemas as unknown as DormantRecord) : {};
-}
-
-async function setDormantRecord(impl: PersistenceInterface, rest: string, record: DormantRecord): Promise<void> {
-  await impl.putInstance(rest, DORMANT_RECORD_SCHEMA, DORMANT_RECORD_KEY, { schemas: record } as unknown as TransientValue, NO_ROLES);
-}
-
-/**
- * Checks every restored instance of a built-in schema against that schema's
- * *current* definition, per packages/core/docs/spec/meta-model.md#import's "Built-in —
- * virtual, not imported" — whatever versions the dump recorded. A valid
- * instance is left as it is, one that becomes valid by backfilling defaults
- * is upgraded in place (`reconcileInstanceAgainstSchema` below), and the
- * first one that cannot be throws `incompatible_upgrade`; `restoreDataset`
- * then deletes the dataset it was creating. A built-in schema shadowed by one
- * of `rest`'s own (`ownSchemaNames`) is skipped: `rest`'s own wins.
- *
- * This is a single-schema check rather than the old-vs-new
- * `classifySchemaInstances`/`backfillInstance` machinery `upgradeDataset`
- * uses below: that machinery needs both versions of the schema, and the dump
- * carries none of the built-in's content.
- */
-async function reconcileRestoredBuiltinData(
-  impl: PersistenceInterface,
-  rest: string,
-  locator: string,
-  ownSchemaNames: Set<string>,
-): Promise<void> {
-  const overlay = await loadBuiltinOverlay(impl, rest);
-  if (!overlay) return;
-
-  const resolvers = await loadResolvers(impl, rest);
-  const datasetValue = await impl.getDataset(rest);
-
-  for (const schema of overlay.schemas) {
-    if (ownSchemaNames.has(schema.name)) continue;
-    const keyProp = keyPropertyName(schema);
-    if (!keyProp) continue; // embedded — never independently stored
-    const roles = derivePropertyRoles(schema);
-    for (const raw of await impl.listInstances(rest, schema.name, roles)) {
-      const reconciled = reconcileInstanceAgainstSchema(schema, raw as TransientObject, resolvers.ctx, datasetValue, `restoring "${locator}" against its built-in`);
-      if (reconciled) await impl.putInstance(rest, schema.name, reconciled[keyProp] as string, reconciled, roles);
-    }
   }
 }
 
@@ -439,11 +288,8 @@ async function seedSingletons(impl: PersistenceInterface, rest: string): Promise
  * the four version numbers, created_at/updated_at) plus
  * schemas/scalar_types/imports as arrays of names — a relation value is always
  * a Key (name), never a nested object (see `TransientValue`).
- * `schemas`/`scalar_types` include the area's built-in overlay (see
- * `loadBuiltinOverlay`) alongside `rest`'s own; `rest`'s own names win on a
- * name collision. `modules` lists the `dataset_module` entries, `[]` for a
- * dataset with none. `imports` names the stored imports: the built-in is
- * never a standing import (`import` part, "Built-in — virtual, not imported").
+ * `modules` lists the `dataset_module` entries, `[]` for a dataset with none.
+ * `imports` names the stored imports.
  */
 async function datasetTransientForm(impl: PersistenceInterface, rest: string): Promise<TransientValue> {
   const info = (await impl.getDataset(rest)) as TransientObject;
@@ -452,15 +298,10 @@ async function datasetTransientForm(impl: PersistenceInterface, rest: string): P
     impl.listInstances(rest, "scalar_type", NO_ROLES),
   ]);
   const names = (instances: TransientValue[]) => instances.map((i) => (i as TransientObject).name);
-  const ownSchemaNames = new Set(names(schemas));
-  const ownScalarTypeNames = new Set(names(scalarTypes));
-  const overlay = await loadBuiltinOverlay(impl, rest);
-  const overlaySchemaNames = overlay ? overlay.schemas.map((s) => s.name).filter((n) => !ownSchemaNames.has(n)) : [];
-  const overlayScalarTypeNames = overlay ? overlay.scalarTypes.map((s) => s.name).filter((n) => !ownScalarTypeNames.has(n)) : [];
   return {
     ...info,
-    schemas: [...names(schemas), ...overlaySchemaNames],
-    scalar_types: [...names(scalarTypes), ...overlayScalarTypeNames],
+    schemas: names(schemas),
+    scalar_types: names(scalarTypes),
     modules: Array.isArray(info.modules) ? info.modules : [],
     imports: names(await impl.listInstances(rest, "import", NO_ROLES)),
   };
@@ -598,48 +439,21 @@ async function dumpDatasetIn(scope: EngineScope, locator: string, format: DumpFo
   const imports: TransientObject = {};
   for (const raw of importInstances) imports[(raw as TransientObject).name as string] = raw;
 
-  // The area's built-in is never physically stored in `rest` — its
-  // bookkeeping-only `import` entry is synthesized here instead of read back
-  // from storage, and no schema/scalar_type content is added to
-  // `schemas`/`scalar_types` for it.
-  const overlay = await loadBuiltinOverlay(impl, rest);
-  if (overlay) {
-    const record = builtinImportRecord(impl, overlay.builtinRest, overlay);
-    imports[record.name] = record as unknown as TransientValue;
-  }
-
-  // Data collection covers `rest`'s own schemas AND the built-in's — an
-  // instance of a built-in schema (e.g. a "widget") is real, physically
-  // stored data in `rest` even though the "widget" schema definition itself
-  // is never stored there.
   const data: TransientObject = {};
   const datasetModel = await loadDatasetModel(impl, rest);
   const schemasForData = [
     ...schemaInstances.map((raw) => raw as unknown as NormalizedSchema),
-    ...(overlay?.schemas ?? []),
     ...(datasetModel ? datasetModel.schemas.values() : []),
   ];
   for (const schema of schemasForData) {
     if (isEmbedded(schema)) continue;
     const key = keyPropertyName(schema);
     if (!key) continue;
-    if (Object.prototype.hasOwnProperty.call(data, schema.name)) continue; // `rest`'s own wins over the built-in's
+    if (Object.prototype.hasOwnProperty.call(data, schema.name)) continue; // `rest`'s own wins over a module's
     const instances = await impl.listInstances(rest, schema.name, derivePropertyRoles(schema));
     const bySchemaKey: TransientObject = {};
     for (const instance of instances) bySchemaKey[(instance as TransientObject)[key] as string] = instance;
     data[schema.name] = bySchemaKey;
-  }
-
-  // Dormant instances are written back unchanged. One whose schema has
-  // become available since is an ordinary instance, already dumped above.
-  for (const [schemaName, keys] of Object.entries(await getDormantRecord(impl, rest))) {
-    if (Object.prototype.hasOwnProperty.call(data, schemaName)) continue;
-    const bySchemaKey: TransientObject = {};
-    for (const key of keys) {
-      const instance = await impl.getInstance(rest, schemaName, key, NO_ROLES);
-      if (instance !== null) bySchemaKey[key] = instance;
-    }
-    if (Object.keys(bySchemaKey).length > 0) data[schemaName] = bySchemaKey;
   }
 
   // The modules of the dataset, in the shape of the `modules` and `model`
@@ -662,13 +476,10 @@ async function dumpDatasetIn(scope: EngineScope, locator: string, format: DumpFo
  * Creates a new dataset at `locator` from a `dumpDataset` output — the exact
  * dumped versions/timestamps are carried over (via `updateDataset` right after
  * `createDataset`), not reset the way a fresh `initDataset` would, since a
- * restore is meant to reproduce the prior state exactly. The area's own
- * built-in, if the dump carries a synthesized entry for it (see
- * `builtinImportRecord`), is never installed as a standing import: every
- * restored instance of a built-in schema is checked against its current
- * definition instead (see `reconcileRestoredBuiltinData`). An instance whose
- * schema is missing everywhere is kept dormant. An instance of a schema that is
- * an extension target, in the dataset or in its built-in, and that has no
+ * restore is meant to reproduce the prior state exactly. An instance whose
+ * schema is missing from the dataset, its modules and the meta-model is refused
+ * with `invalid_dump`. An instance of a schema that is
+ * an extension target and that has no
  * extension instance in the dump (a dump written before the schema became an
  * extension) gets it, from the defaults, as `upgradeDataset` does; the dump's
  * versions are kept. A restore that fails once the dataset is created deletes
@@ -677,8 +488,7 @@ async function dumpDatasetIn(scope: EngineScope, locator: string, format: DumpFo
  * again; a snapshot of a published module that does not match its digest is
  * refused with `invalid_dump` (see `restoredModules`).
  * `pendingRealignment` lists every import restored with a `none` caching
- * policy still needing manual realignment; the built-in never appears in it,
- * and `createImport` makes every import `full`, so it is always `[]`.
+ * policy still needing manual realignment; `createImport` makes every import `full`, so it is always `[]`.
  */
 async function restoreDatasetIn(scope: EngineScope, locator: string, dump: string, format: DumpFormat): Promise<RestoreResult> {
   const { impl, rest } = resolveImpl(scope, locator);
@@ -724,39 +534,29 @@ async function populateRestoredDataset(
   for (const [name, instance] of Object.entries(parsed.schemas)) {
     await impl.putInstance(rest, "schema", name, instance, SCHEMA_ROLES);
   }
-  // The built-in's synthesized entry (namespace "") is never installed as a
-  // standing import; every other import is restored as one.
+  // A dump written when datasets had a built-in holds a bookkeeping entry for
+  // it (namespace ""), which is no import.
   for (const [name, instance] of Object.entries(parsed.imports)) {
     if ((instance as TransientObject).namespace === "") continue;
     await impl.putInstance(rest, "import", name, instance, NO_ROLES);
   }
 
-  // Roles come from the dump's own schema definition when it's one of
-  // `rest`'s own, from the built-in's current one when it's a built-in
-  // schema, or from the meta-model. A schema found nowhere makes its
-  // instances dormant: stored as they are, with no roles.
-  const overlay = await loadBuiltinOverlay(impl, rest);
-  const overlaySchemasByName = new Map((overlay?.schemas ?? []).map((s) => [s.name, s] as const));
-  const dormant: DormantRecord = {};
+  // Roles come from the dump's own schema definition, the modules of the dataset or the meta-model.
   for (const [schemaName, bySchemaKey] of Object.entries(parsed.data)) {
     if (!isPlainObject(bySchemaKey)) throw modelError("invalid_dump", `dump.data.${schemaName} is not an object`);
     const schemaDef =
       (parsed.schemas[schemaName] as unknown as NormalizedSchema | undefined) ??
-      overlaySchemasByName.get(schemaName) ??
       datasetModel?.schemas.get(schemaName) ??
       (Object.prototype.hasOwnProperty.call(META_SCHEMAS, schemaName) ? META_SCHEMAS[schemaName] : undefined);
-    const roles = schemaDef ? derivePropertyRoles(schemaDef) : NO_ROLES;
+    if (!schemaDef) throw modelError("invalid_dump", `dump.data holds instances of "${schemaName}", a schema the dataset does not have`);
+    const roles = derivePropertyRoles(schemaDef);
     for (const [key, instance] of Object.entries(bySchemaKey)) {
       await impl.putInstance(rest, schemaName, key, instance, roles);
     }
-    if (!schemaDef) dormant[schemaName] = Object.keys(bySchemaKey);
   }
-  if (Object.keys(dormant).length > 0) await setDormantRecord(impl, rest, dormant);
-
-  await reconcileRestoredBuiltinData(impl, rest, locator, new Set(Object.keys(parsed.schemas)));
 
   // A dump written before a schema became an extension of the schema of its
-  // instances, in `rest` or in its built-in, holds no extension instance for
+  // instances holds no extension instance for
   // them. The versions of the dump are kept, so nothing is bumped here.
   await ensureExtensionInstances(impl, rest, await loadResolvers(impl, rest), await impl.getDataset(rest));
 }
@@ -2009,8 +1809,6 @@ function wrapForDeltaCapture(
   return {
     name: impl.name,
     supportsTransactions: impl.supportsTransactions,
-    areaOf: (rest) => impl.areaOf(rest),
-    builtinRestFor: (rest) => impl.builtinRestFor(rest),
     datasetExists: (rest) => impl.datasetExists(rest),
     createDataset: (rest, name) => impl.createDataset(rest, name),
     getDataset: (rest) => impl.getDataset(rest),
@@ -2798,8 +2596,7 @@ export interface EngineOptions {
  * the engine was created with and to its own observable listeners. Each
  * function behaves as the free function of the same name (see each one), and
  * a locator whose format the engine does not hold fails with
- * `unknown_persistent_format`. Two engines share nothing, and none sees the
- * formats of `registerPersistentFormat`. See `docs/formats.md`.
+ * `unknown_persistent_format`. Two engines share nothing. See `docs/formats.md`.
  */
 export interface Engine {
   /** The formats of the engine, in the order given. */
@@ -2863,34 +2660,6 @@ function engineOf(scope: EngineScope, mayWrite = false): Engine {
 export function createEngine(options: EngineOptions = {}): Engine {
   return engineOf(newScope(options.formats ?? []));
 }
-
-/**
- * The free functions: the engine of the global scope, whose formats
- * `registerPersistentFormat` registers. Each is documented on its
- * implementation above (`initDatasetIn` for `initDataset`, and so on).
- */
-export const {
-  initDataset,
-  queryDataset,
-  bumpMajorVersions,
-  deleteDataset,
-  dumpDataset,
-  restoreDataset,
-  setLocalModule,
-  checkImport,
-  createImport,
-  removeImport,
-  refreshImport,
-  createUpgradeLocator,
-  queryUpgradeLocator,
-  checkUpgrade,
-  upgradeDataset,
-  runCommand,
-  runScript,
-  createScriptSession,
-  createApiSession,
-  subscribeObservable,
-} = engineOf(GLOBAL_SCOPE);
 
 /** The free functions with the right to write, for the entry `@scfloworg/core/testing` only. */
 export const TESTING_ENGINE: Engine = engineOf(GLOBAL_SCOPE, true);

@@ -1,7 +1,7 @@
 import { runCommandBlock } from "./commandBlock.js";
 import type { LineSource, Output } from "./io.js";
 import { handleMeta } from "./meta.js";
-import { createReplState, currentContext } from "./state.js";
+import { currentContext } from "./state.js";
 import type { ReplState } from "./state.js";
 
 /**
@@ -40,8 +40,7 @@ async function readBlockLines(lines: LineSource, out: Output, firstLine: string)
  * the same state to an `--init` pass and then to the interactive pass, so
  * whatever the first pass opened or ran is still there for the second.
  */
-export async function runRepl(lines: LineSource, out: Output, initialState?: ReplState): Promise<void> {
-  const state = initialState ?? createReplState();
+export async function runRepl(lines: LineSource, out: Output, state: ReplState): Promise<void> {
   let pendingSnippetSave: string | null = null;
   let pendingRun = false;
 

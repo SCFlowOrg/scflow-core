@@ -25,9 +25,6 @@ const { result } = await dataset.run("carbon/set_actor_emissions", { actor, co2:
 Two environments share nothing: each has its own engine, made by
 `createEngine` of `@scfloworg/core` with the formats it is given, its own
 catalogue and its own open datasets, so a test gets an isolated environment.
-The global format registry, the area and the built-in dataset of the engine
-stay for the hosts that do not use an environment yet; an environment never
-reaches them.
 
 ## Formats
 

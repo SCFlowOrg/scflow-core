@@ -147,8 +147,6 @@ describe("ui_access — advisory", () => {
     };
     const impl: PersistenceInterface = {
       name: "fake",
-      areaOf: () => "",
-      builtinRestFor: () => "no-builtin",
       async datasetExists() {
         return true;
       },

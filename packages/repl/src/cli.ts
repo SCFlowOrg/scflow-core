@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
 import * as readline from "node:readline";
-import { registerPersistentFormat } from "@scfloworg/core";
+import { createEngine } from "@scfloworg/core";
 import type { Logger, PersistenceInterface } from "@scfloworg/core";
 import { cliHelpLines, parseCliArgs } from "./cliArgs.js";
 import type { LineSource, Output } from "./io.js";
@@ -50,8 +50,8 @@ async function loadInitLines(file: string): Promise<LineSource> {
  * with a warning, the same pattern `registerOpenContext` already uses for
  * dataset names.
  */
-async function loadFormatModules(specifiers: string[]): Promise<void> {
-  const registered = new Set<string>();
+async function loadFormatModules(specifiers: string[]): Promise<PersistenceInterface[]> {
+  const registered = new Map<string, PersistenceInterface>();
   for (const specifier of specifiers) {
     let mod: unknown;
     try {
@@ -67,12 +67,13 @@ async function loadFormatModules(specifiers: string[]): Promise<void> {
     if (registered.has(impl.name)) {
       console.log(`warning: persistent format "${impl.name}" was already registered — overwritten by ${specifier}`);
     }
-    registerPersistentFormat(impl);
-    registered.add(impl.name);
+    registered.set(impl.name, impl);
   }
+  return [...registered.values()];
 }
 
 async function main(): Promise<number> {
+  let formats: PersistenceInterface[] = [];
   let args;
   try {
     args = parseCliArgs(process.argv.slice(2));
@@ -89,7 +90,7 @@ async function main(): Promise<number> {
   }
 
   try {
-    await loadFormatModules(args.formatModules);
+    formats = await loadFormatModules(args.formatModules);
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     return 1;
@@ -110,7 +111,7 @@ async function main(): Promise<number> {
     logger = createConsoleLogger(args.logLevel);
   }
 
-  const state = createReplState({ logger });
+  const state = createReplState({ engine: createEngine({ formats }), logger });
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const iterator = rl[Symbol.asyncIterator]();

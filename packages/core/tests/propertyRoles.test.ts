@@ -45,8 +45,6 @@ function fakeImpl(): { impl: PersistenceInterface; calls: RecordedCall[] } {
 
   const impl: PersistenceInterface = {
     name: "fake",
-    areaOf: () => "",
-    builtinRestFor: () => "no-builtin",
     async datasetExists() {
       return true;
     },

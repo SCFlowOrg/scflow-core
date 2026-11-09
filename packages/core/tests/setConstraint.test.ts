@@ -119,8 +119,6 @@ function fakeFormat(): PersistenceInterface {
   return {
     name,
     supportsTransactions: true,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);

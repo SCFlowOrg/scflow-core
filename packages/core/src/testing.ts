@@ -6,7 +6,7 @@ import { TESTING_ENGINE, createTestingEngine, registerPersistentFormat } from ".
  * A host never uses it: see Writes and actions in
  * `docs/spec/typescript-reference-implementation.md`.
  */
-export { createTestingEngine, registerPersistentFormat };
+export { TESTING_ENGINE, createTestingEngine, registerPersistentFormat };
 
 export const {
   initDataset,

@@ -22,7 +22,7 @@ The manifest holds the scalar types `flow_domain`, `transformation_role`, `tag`,
 
 *Implementation.*
 
-`scflow-plugin`, a plugin of the `scflow-plugins` repository (see Repository Structure), is built on core-plugin (`dependsOn: ["core-plugin"]`). In `setup()` it calls `upgradeModel` once with the schemas and scalar types of section 3, THE SCHEMAS, per Accessing MCL And Extending The Built-in Model. They join the built-in dataset of the area: every network dataset sees them without holding a copy, and a network's dump names them in its built-in entry. A network dataset holds instances only — its actors, flows, items, transformations and scopes.
+`scflow-plugin`, a plugin of the `scflow-plugins` repository (see Repository Structure), installs the module `scflow:core` in its environment with `modules.install` at start-up, and a document embeds the module when it uses it.
 
 ## Type Libraries
 

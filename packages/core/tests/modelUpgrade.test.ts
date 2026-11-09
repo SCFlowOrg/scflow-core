@@ -7,8 +7,6 @@ import type { Key, NormalizedSchema, PersistenceInterface, TransientValue } from
 function fakeImpl(): PersistenceInterface {
   return {
     name: "fake",
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
     datasetExists: async () => true,
     createDataset: async () => ({}),
     getDataset: async () => ({}),

@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import * as YAML from "js-yaml";
-import { checkUpgrade, dumpDataset, isLogLevel, queryUpgradeLocator, substitutePlaceholders } from "@scfloworg/core";
+import { isLogLevel, substitutePlaceholders } from "@scfloworg/core";
 import type { TransientValue } from "@scfloworg/core";
 import { summarizeResult } from "./commandBlock.js";
 import {
@@ -422,7 +422,7 @@ export async function handleMeta(state: ReplState, line: string, out: Output): P
       const ctx = requireUpgrade(state, out);
       if (!ctx) return undefined;
       try {
-        const { commandResult } = await queryUpgradeLocator(ctx.locator);
+        const { commandResult } = await state.engine.queryUpgradeLocator(ctx.locator);
         out.print(`before:          ${entryNames(commandResult.before)}`);
         out.print(`after:           ${entryNames(commandResult.after)}`);
         out.print(`cascade-deleted: ${entryNames(commandResult["cascade-deleted"])}`);
@@ -436,7 +436,7 @@ export async function handleMeta(state: ReplState, line: string, out: Output): P
       const ctx = requireUpgrade(state, out);
       if (!ctx) return undefined;
       try {
-        const result = await checkUpgrade(ctx.upgradeOf, ctx.locator);
+        const result = await state.engine.checkUpgrade(ctx.upgradeOf, ctx.locator);
         out.print(`autoUpdate: ${result.autoUpdate.length}  modifiedSchema: ${result.modifiedSchema.length}  lostSchema: ${result.lostSchema.length}`);
         if (result.modifiedSchema.length > 0 || result.lostSchema.length > 0) {
           out.print("commit rejects this as incompatible_upgrade — resolve those instances outside the modelling language first");
@@ -588,7 +588,7 @@ export async function handleMeta(state: ReplState, line: string, out: Output): P
       const format = parseDumpFormat(formatArg, out);
       if (!format) return undefined;
       try {
-        const text = await dumpDataset(ctx.locator, format);
+        const text = await state.engine.dumpDataset(ctx.locator, format);
         await fs.writeFile(file, text, "utf8");
         out.print(`dumped "${ctx.name}" -> ${file} (${format})`);
       } catch (err) {

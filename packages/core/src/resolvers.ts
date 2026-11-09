@@ -53,25 +53,6 @@ export async function loadResolvers(impl: PersistenceInterface, rest: string): P
   const schemas = new Map<string, NormalizedSchema>(Object.entries(META_SCHEMAS));
   const scalarTypes = new Map<string, NormalizedScalarType>();
 
-  // The area's built-in, loaded live and never cached/copied (see the `import`
-  // part of dataset `core`, section
-  // "Built-in — virtual, not imported"). Loaded FIRST so `rest`'s own
-  // schemas/scalar_types below always win on a name collision. api.ts's
-  // `loadBuiltinOverlay` is the same lookup for dump/restore/queryDataset —
-  // duplicated here (rather than imported) to keep command.ts's engine free
-  // of any dependency on api.ts; keep the two in sync if this changes.
-  const builtinRest = impl.builtinRestFor(rest);
-  if (await impl.datasetExists(builtinRest)) {
-    for (const raw of await impl.listInstances(builtinRest, "schema", SCHEMA_ROLES)) {
-      const s = raw as unknown as NormalizedSchema;
-      schemas.set(s.name, s.content === undefined ? { ...s, content: "" } : s);
-    }
-    for (const raw of await impl.listInstances(builtinRest, "scalar_type", NO_ROLES)) {
-      const st = raw as unknown as NormalizedScalarType;
-      scalarTypes.set(st.name, st);
-    }
-  }
-
   for (const raw of await impl.listInstances(rest, "schema", SCHEMA_ROLES)) {
     const s = raw as unknown as NormalizedSchema;
     // A schema stored before `content` was part of the meta-schema reads back

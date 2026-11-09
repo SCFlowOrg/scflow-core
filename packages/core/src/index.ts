@@ -1,29 +1,6 @@
 export * from "./types.js";
 export * from "./errors.js";
-export {
-  registerPersistentFormat,
-  initDataset,
-  queryDataset,
-  bumpMajorVersions,
-  deleteDataset,
-  dumpDataset,
-  restoreDataset,
-  createUpgradeLocator,
-  queryUpgradeLocator,
-  checkUpgrade,
-  upgradeDataset,
-  runCommand,
-  runScript,
-  createScriptSession,
-  createApiSession,
-  subscribeObservable,
-  setLocalModule,
-  checkImport,
-  createImport,
-  removeImport,
-  refreshImport,
-  createEngine,
-} from "./api.js";
+export { createEngine } from "./api.js";
 export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
 export { resolveClockPlaceholders, runProcedure } from "./procedure.js";
 export type { Procedure, ProcedureHost } from "./procedure.js";

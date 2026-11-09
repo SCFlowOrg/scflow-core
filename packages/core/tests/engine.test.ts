@@ -33,8 +33,6 @@ function memoryFormat(name: string): PersistenceInterface {
   };
   return {
     name,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
     supportsTransactions: true,
     async datasetExists(rest) {
       return datasets.has(rest);

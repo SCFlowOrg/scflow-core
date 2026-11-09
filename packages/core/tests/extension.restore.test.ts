@@ -31,11 +31,6 @@ const BILLING: TransientObject = {
   ],
 };
 
-/** The in-memory format, whose built-in dataset is the dataset `builtin`. */
-function formatWithBuiltin(): PersistenceInterface {
-  return { ...fakeFormat(), builtinRestFor: () => "builtin" };
-}
-
 const createSchemas = async (impl: PersistenceInterface, rest: string, ...input: TransientObject[]) =>
   runSchemaCommand(impl, rest, { kind: "create", schema: "schema", input }, await loadResolvers(impl, rest));
 
@@ -86,21 +81,4 @@ describe("extension — restore", () => {
     expect(await impl.getInstance("d2", "task_billing", "t1", {})).toMatchObject({ rate: 25 });
   });
 
-  it("creates the extension instances when the extension was added to the built-in after the dump", async () => {
-    const impl = formatWithBuiltin();
-    registerPersistentFormat(impl);
-    await impl.createDataset("builtin", "Builtin");
-    await createSchemas(impl, "builtin", TASK);
-    await impl.createDataset("d1", "Test");
-    const source = `${impl.name}:d1`;
-    await createTasks(source, { name: "t1", title: "A" }, { name: "t2" });
-    const dump = await dumpDataset(source, "json");
-
-    await createSchemas(impl, "builtin", BILLING);
-    const target = `${impl.name}:d2`;
-    await restoreDataset(target, dump, "json");
-
-    expect(await impl.getInstance("d2", "task_billing", "t1", {})).toMatchObject({ task: "t1", rate: 10, currency: "EUR" });
-    expect(await impl.getInstance("d2", "task_billing", "t2", {})).toMatchObject({ task: "t2", rate: 10, currency: "EUR" });
-  });
 });

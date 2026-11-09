@@ -42,8 +42,6 @@ function fakeFormat(): { impl: PersistenceInterface; schemaLoads: () => number }
 
   const impl: PersistenceInterface = {
     name,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
     async datasetExists(rest) {
       return datasets.has(rest);
     },

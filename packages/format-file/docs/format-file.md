@@ -39,5 +39,4 @@ Files that no reader knows stay as they are on disk at the time of the save, so 
 ## Limits
 
 - Between `save` calls, the changes exist only in memory, and a crash loses them.
-- The built-in dataset of an area is never a project on disk.
 - `save` is not atomic across the files of a folder.

@@ -34,8 +34,6 @@ function fakeFormat(): PersistenceInterface & {
   const persistenceImpl = {
     name,
     supportsTransactions: true,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);
@@ -267,7 +265,7 @@ describe("T078c: related-change notification via observable relations", () => {
   describe("related-change semantics", () => {
     it("produces via entries when a site changes and nodes point at it", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable-relations");
+      const rest = "test-observable-relations";
       await impl.seedNodeSiteSchemas(rest);
 
       const changes: ObservableChange[] = [];
@@ -338,7 +336,7 @@ describe("T078c: related-change notification via observable relations", () => {
 
     it("does not require the target schema to be observable", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable-relations");
+      const rest = "test-observable-relations";
       
       // Seed schemas where site is NOT observable
       const schemas = new Map<string, NormalizedSchema>();
@@ -422,7 +420,7 @@ describe("T078c: related-change notification via observable relations", () => {
 
     it("does not duplicate entries for directly-touched instances", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable-relations");
+      const rest = "test-observable-relations";
       await impl.seedNodeSiteSchemas(rest);
 
       const changes: ObservableChange[] = [];
@@ -483,7 +481,7 @@ describe("T078c: related-change notification via observable relations", () => {
 
     it("does not propagate beyond one hop", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable-relations");
+      const rest = "test-observable-relations";
       await impl.seedNodeSiteSchemas(rest);
       await impl.seedRegionSchema(rest);
 

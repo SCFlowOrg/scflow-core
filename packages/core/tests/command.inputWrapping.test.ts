@@ -37,8 +37,6 @@ function fakeImpl(): PersistenceInterface {
 
   return {
     name: "fake",
-    areaOf: () => "",
-    builtinRestFor: () => "no-builtin",
     async datasetExists() {
       return true;
     },

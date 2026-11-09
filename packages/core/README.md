@@ -11,19 +11,18 @@ of its own and runs in Node and in a browser.
 ## Start
 
 Install `@scfloworg/core` and a persistent format such as `@scfloworg/format-js`,
-register the format once, then reach datasets by locator.
+make an engine with its formats, then reach datasets by locator.
 
 ```ts
-import { registerPersistentFormat, initDataset, queryDataset } from "@scfloworg/core";
+import { createEngine } from "@scfloworg/core";
 import { jsFormat } from "@scfloworg/format-js";
 
-registerPersistentFormat(jsFormat);
-await initDataset("js:app", "app");
-const dataset = await queryDataset("js:app"); // the dataset's name, versions and schemas
+const engine = createEngine({ formats: [jsFormat] });
+await engine.initDataset("js:app", "app");
+const dataset = await engine.queryDataset("js:app"); // the dataset's name, versions and schemas
 ```
 
-`createEngine({ formats })` gives the same functions bound to formats of their
-own, with no global registration: two engines share nothing (see
+Two engines share nothing (see
 [`docs/formats.md`](docs/formats.md), Engines).
 
 ## Documentation

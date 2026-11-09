@@ -53,8 +53,6 @@ function fakeFormat(withLock = true): { impl: PersistenceInterface; stats: LockS
   const impl: PersistenceInterface = {
     name,
     supportsTransactions: true,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);

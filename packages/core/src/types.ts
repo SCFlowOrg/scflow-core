@@ -212,21 +212,6 @@ export interface PersistenceInterface {
   readonly name: string;
 
   /**
-   * The concrete place `rest` is attached to — a vault root, a database
-   * connection target, an application marker. Entirely this format's own
-   * notion, derived from `rest` however it sees fit; the engine never
-   * inspects or parses `rest` itself to get here.
-   */
-  areaOf(rest: string): string;
-
-  /**
-   * The rest of the built-in dataset of the area of `rest`. Always returns a
-   * rest, whether or not that dataset exists yet. Two rests of one area give
-   * the same result; rests of different areas give independent ones.
-   */
-  builtinRestFor(rest: string): string;
-
-  /**
    * Whether this format permits `ApiSession`'s transaction and revert methods
    * to run against it. `false` when absent. The mechanism is generic, built on
    * `getInstance`/`putInstance`/`deleteInstance` below; this flag only says

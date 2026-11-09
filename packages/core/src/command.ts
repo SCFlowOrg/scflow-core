@@ -1712,23 +1712,7 @@ async function executeCommand(
     checkFilterOnCandidates(command.filters, candidateSchemas, resolvers.ctx);
     for (const candidateSchema of candidateSchemas) {
       const candidateRoles = derivePropertyRoles(candidateSchema);
-      // A query against `schema`/`scalar_type` transparently includes the
-      // area's built-in instances too, merged live with `rest`'s own — own
-      // wins on a name collision — per packages/core/docs/spec/meta-model.md#import's
-      // "Built-in — virtual, not imported". Every other command kind against
-      // these two schemas is already rejected above (the `isModelSchema`
-      // gating at the top of `executeCommand`), so this only ever runs for a
-      // read; every other schema is unaffected (no built-in dataset lookup,
-      // same instances and order as before).
       const byKey = new Map<Key, TransientValue>();
-      if (command.kind === "query" && isModelSchema(candidateSchema.name)) {
-        const builtinRest = impl.builtinRestFor(rest);
-        if ((await impl.datasetExists(builtinRest))) {
-          for (const raw of await impl.listInstances(builtinRest, candidateSchema.name, candidateRoles)) {
-            byKey.set(keyOf(candidateSchema, raw), raw);
-          }
-        }
-      }
       for (const raw of await impl.listInstances(rest, candidateSchema.name, candidateRoles)) {
         byKey.set(keyOf(candidateSchema, raw), raw);
       }
@@ -2050,7 +2034,7 @@ async function executeCommand(
 
 /**
  * Builds the dataset's transient form: scalar fields from getDataset plus
- * schemas/scalar_types as arrays of names, including the built-in overlay.
+ * schemas/scalar_types as arrays of names.
  * Same logic as api.ts's datasetTransientForm, kept here to avoid circular
  * imports between command.ts and api.ts.
  */
@@ -2061,26 +2045,10 @@ async function buildDatasetTransientForm(impl: PersistenceInterface, rest: strin
     impl.listInstances(rest, "scalar_type", NO_ROLES),
   ]);
   const names = (instances: TransientValue[]) => instances.map((i) => (i as TransientObject).name);
-  const ownSchemaNames = new Set(names(schemas));
-  const ownScalarTypeNames = new Set(names(scalarTypes));
-  
-  // Include built-in overlay
-  const builtinRest = impl.builtinRestFor(rest);
-  let overlaySchemaNames: string[] = [];
-  let overlayScalarTypeNames: string[] = [];
-  if ((await impl.datasetExists(builtinRest))) {
-    const [builtinSchemas, builtinScalarTypes] = await Promise.all([
-      impl.listInstances(builtinRest, "schema", SCHEMA_ROLES),
-      impl.listInstances(builtinRest, "scalar_type", NO_ROLES),
-    ]);
-    overlaySchemaNames = builtinSchemas.map((s) => (s as TransientObject).name as string).filter((n) => !ownSchemaNames.has(n));
-    overlayScalarTypeNames = builtinScalarTypes.map((s) => (s as TransientObject).name as string).filter((n) => !ownScalarTypeNames.has(n));
-  }
-
   return {
     ...info,
-    schemas: [...names(schemas), ...overlaySchemaNames],
-    scalar_types: [...names(scalarTypes), ...overlayScalarTypeNames],
+    schemas: names(schemas),
+    scalar_types: names(scalarTypes),
     modules: Array.isArray(info.modules) ? info.modules : [],
     imports: (await impl.listInstances(rest, "import", NO_ROLES)).map((i) => (i as TransientObject).name),
   };

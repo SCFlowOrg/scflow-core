@@ -1,10 +1,10 @@
-# Datasets, schemas and the built-in dataset
+# Datasets and their schemas
 
 A dataset is the unit of persistence: it can be moved, copied or dumped as a
 whole. It holds two parts:
 
 - the **modelling part**: the modules it uses (see Modules of a dataset below),
-  and, until the built-in path is removed, schemas and scalar types of its own;
+  and schemas and scalar types of its own;
 - the **data part**: every other instance, its imports included.
 
 Each dataset has one `dataset` instance, a singleton, which is also a command
@@ -23,8 +23,8 @@ target (see The `dataset` instance below).
 
 - Minor versions increase on every change of their part. A major version is
   bumped on purpose, with `bumpMajorVersions`, and resets its minor to `0`.
-- An instance has its schema in a module the dataset uses, in the dataset, in the
-  meta-model or in the built-in dataset of its area. Its relations point to
+- An instance has its schema in a module the dataset uses, in the dataset or in the
+  meta-model. Its relations point to
   instances of the same dataset, imported ones included.
 - The meta-schemas `schema`, `scalar_type` and `dataset` are known to `core`; they
   need no declaration.
@@ -40,9 +40,8 @@ transactions and can be reverted.
   match returns nothing), `result` shapes the answer, and a non-empty `namespace`
   is refused.
 - `update` with `input: { name }` renames the dataset; `filters` are optional. The
-  name must satisfy the `identifier` scalar type of the dataset's model, which
-  the built-in dataset of the format supplies (see the doc comment of
-  `resolveType`); otherwise the command fails with `constraint_violation`.
+  name must satisfy the `identifier` scalar type of the dataset's model
+  when it has one (see the doc comment of `resolveType`); otherwise the command fails with `constraint_violation`.
 - `model_major_version`, `model_minor_version`, `data_major_version`,
   `data_minor_version`, `created_at`, `updated_at`, `model_only`, `schemas`,
   `scalar_types`, `modules` and `imports` are maintained by the engine or by a model upgrade: an `update`
@@ -60,8 +59,7 @@ transactions and can be reverted.
   `data_minor_version` and `updated_at`; the persistence interface has no other
   primitive for it.
 - The transient form carries `imports`, the relation to the dataset's `import`
-  instances, as an array of names. The built-in dataset never appears there: it
-  is a virtual overlay, not a standing import.
+  instances, as an array of names.
 
 ## Lifecycle
 
@@ -97,52 +95,13 @@ restoreDataset(locator, dump: string, format: "json" | "yaml"): Promise<RestoreR
 - `restoreDataset` creates the extension instance (see [authoring.md](authoring.md),
   Extensions) that a restored instance lacks, from the defaults, as an upgrade
   does. It applies to a dump written before a schema became an extension of the
-  schema of its instances, in the dataset or in its built-in. The extension
+  schema of its instances. The extension
   instances the dump holds are left as they are, and the versions of the dump are
   kept.
+- `restoreDataset` refuses, with `invalid_dump`, an instance whose schema is not in
+  the dump, its modules or the meta-model.
 - Everything else (a missing dataset, a missing format) fails with
   `dataset_not_found` or `unknown_persistent_format`.
-
-## Schemas and the built-in dataset
-
-A dataset keeps the schemas and scalar types it defines itself. It also sees the
-schemas of the **built-in dataset** of its area.
-
-- The built-in dataset is an ordinary dataset at `builtinRestFor(rest)`, one per
-  area, and it is a library: schemas and scalar types only. The host creates it
-  with `initDataset` before any other dataset of the area.
-- Every read of a model sees the built-in schemas and scalar types as if they were
-  the dataset's own, with no prefix: `describe`, `query` of `schema` or
-  `scalar_type`, and every command. The overlay is computed at read time, and
-  nothing of it is copied or stored. When both define a name, the dataset's own
-  wins.
-- A new dataset therefore stores no schema of its own, yet already reads those of
-  its built-in.
-- `dumpDataset` does not write the built-in schemas. It writes an `import` entry
-  with `namespace: ""` that names the built-in schemas the data relies on, and
-  `restoreDataset` rebuilds the overlay from the built-in dataset of the target
-  area. Each restored instance of a built-in schema is checked against its
-  current definition, and a restore fails with `incompatible_upgrade`, creating
-  nothing, when one cannot take it.
-- An instance whose schema exists nowhere is **dormant**: it is kept as stored,
-  queries and commands do not see it, a dump writes it back unchanged, and it
-  becomes ordinary again when its schema appears.
-- The built-in dataset can declare the standard string types `date`, `date_time`,
-  `time`, `identifier`, `email`, `uuid`, `duration` and `markdown` with their
-  patterns. A type that no dataset declares falls back to a placeholder of `core`
-  with an empty pattern.
-
-### Changing the built-in dataset
-
-The host changes the built-in dataset through the upgrade protocol (see
-[model-upgrade.md](model-upgrade.md)), usually from the schemas that its plugins
-contribute. Every dataset of the area sees the change at once.
-
-- `core` does not propagate an incompatible change. Before upgrading the built-in,
-  the host runs `checkUpgrade(locator, upgrade)` against each open dataset of the
-  area, and refuses the change when one cannot take it.
-- The version numbers of a built-in assembled at run time say nothing about its
-  content: a dump writes them as `0` and ignores them on restore.
 
 ## Modules of a dataset
 
@@ -178,9 +137,8 @@ await runCommand("js:plant", { create: "scflow.actor", input: { name: "acme" } }
   targets (see [modules.md](modules.md), Facets); a dataset without the module of
   a facet sees the target bare. A dump holds the instances of a facet under the
   facet's qualified name.
-- A schema the dataset defines itself, or reads from its built-in dataset, keeps
-  its short name and wins over a module on a name collision. This older path
-  stays until the built-in dataset is removed.
+- A schema the dataset defines itself keeps its short name and wins over a module
+  on a name collision.
 - A format stores each manifest as an instance of `module`, by module key, and
   the list as the `modules` property of the dataset.
 - Changing the modules of a dataset, apart from a local module, goes through a
@@ -230,7 +188,7 @@ removeImport(locator, importKey): Promise<TransientValue>         // the removed
   namespace that name and a dot, `suppliers.`; a name already taken gets a
   suffix, `suppliers_2`. Every key a copy holds, its own and those of its
   relations, embedded instances included, is prefixed. Instances of schemas the
-  imported dataset defines itself, or reads from its built-in, are not copied.
+  imported dataset defines itself are not copied.
 - The import records `name`, `locator`, `namespace`, the data versions of the
   imported dataset and `caching_policy`, always `full` here. It is an instance of
   `import`, keyed by its name: a `query` reads it, a `create` fails with
