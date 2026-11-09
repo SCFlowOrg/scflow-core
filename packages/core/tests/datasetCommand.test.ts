@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { createApiSession, deleteDataset, dumpDataset, initDataset, queryDataset, registerPersistentFormat, restoreDataset, runCommand } from "../src/index.js";
+import { createApiSession, deleteDataset, dumpDataset, initDataset, queryDataset, registerPersistentFormat, restoreDataset, runCommand } from "../src/testing.js";
 import { ModelError } from "../src/errors.js";
 import type { Key, PersistenceInterface, TransientObject, TransientValue } from "../src/types.js";
 
@@ -28,8 +28,6 @@ function fakeFormat(supportsTransactions = true): PersistenceInterface {
   return {
     name,
     supportsTransactions,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);

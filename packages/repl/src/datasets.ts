@@ -1,13 +1,4 @@
-import {
-  ModelError,
-  createUpgradeLocator,
-  deleteDataset,
-  initDataset,
-  queryDataset,
-  queryUpgradeLocator,
-  restoreDataset,
-  upgradeDataset,
-} from "@scfloworg/core";
+import { ModelError } from "@scfloworg/core";
 import type { CommandResult, RestoreResult, TransientObject } from "@scfloworg/core";
 import type { DatasetContext, ReplState } from "./state.js";
 
@@ -51,9 +42,9 @@ export async function registerOpenContext(
  * `not_upgrade_locator` for an ordinary dataset, which is the common case, so
  * that one code becomes `null`; any other failure propagates.
  */
-export async function resolveUpgradeSource(locator: string): Promise<string | null> {
+export async function resolveUpgradeSource(state: ReplState, locator: string): Promise<string | null> {
   try {
-    const { source_locator } = await queryUpgradeLocator(locator);
+    const { source_locator } = await state.engine.queryUpgradeLocator(locator);
     return source_locator;
   } catch (err) {
     if (err instanceof ModelError && err.code === "not_upgrade_locator") return null;
@@ -66,8 +57,8 @@ export async function resolveUpgradeSource(locator: string): Promise<string | nu
  *
  * @throws `Error` when `locator` resolves to no dataset, or its `name` is not a string.
  */
-export async function resolveDatasetName(locator: string): Promise<string> {
-  const info = await queryDataset(locator);
+export async function resolveDatasetName(state: ReplState, locator: string): Promise<string> {
+  const info = await state.engine.queryDataset(locator);
   if (info === null) {
     throw new Error(`no dataset at "${locator}" to open`);
   }
@@ -85,8 +76,8 @@ export async function resolveDatasetName(locator: string): Promise<string> {
  * process that did not create it.
  */
 export async function openDatasetContext(state: ReplState, locator: string): Promise<{ ctx: DatasetContext; overwrote: boolean }> {
-  const name = await resolveDatasetName(locator);
-  const upgradeOf = await resolveUpgradeSource(locator);
+  const name = await resolveDatasetName(state, locator);
+  const upgradeOf = await resolveUpgradeSource(state, locator);
   return registerOpenContext(state, name, locator, upgradeOf);
 }
 
@@ -98,8 +89,8 @@ export async function openDatasetContext(state: ReplState, locator: string): Pro
  * throws them away.
  */
 export async function createUpgradeContext(state: ReplState, sourceLocator: string): Promise<{ ctx: DatasetContext; overwrote: boolean }> {
-  const upgradeLocator = await createUpgradeLocator(sourceLocator);
-  const name = await resolveDatasetName(upgradeLocator);
+  const upgradeLocator = await state.engine.createUpgradeLocator(sourceLocator);
+  const name = await resolveDatasetName(state, upgradeLocator);
   return registerOpenContext(state, name, upgradeLocator, sourceLocator);
 }
 
@@ -118,7 +109,7 @@ export async function createUpgradeContext(state: ReplState, sourceLocator: stri
 export async function commitUpgradeContext(state: ReplState, ctx: DatasetContext): Promise<{ result: CommandResult; sourceLocator: string }> {
   const sourceLocator = ctx.upgradeOf;
   if (sourceLocator === null) throw new Error(`"${ctx.name}" is not an upgrade context`);
-  const result = await upgradeDataset(sourceLocator, ctx.locator);
+  const result = await state.engine.upgradeDataset(sourceLocator, ctx.locator);
   state.apiSession.invalidate(sourceLocator);
   state.apiSession.invalidate(ctx.locator);
   forgetContext(state, ctx);
@@ -132,7 +123,7 @@ export async function commitUpgradeContext(state: ReplState, ctx: DatasetContext
  */
 export async function discardUpgradeContext(state: ReplState, ctx: DatasetContext): Promise<void> {
   if (ctx.upgradeOf === null) throw new Error(`"${ctx.name}" is not an upgrade context`);
-  await deleteDataset(ctx.locator);
+  await state.engine.deleteDataset(ctx.locator);
   state.apiSession.invalidate(ctx.locator);
   forgetContext(state, ctx);
 }
@@ -157,7 +148,7 @@ function forgetContext(state: ReplState, ctx: DatasetContext): void {
  * @throws `dataset_already_exists` when `locator` already holds a dataset.
  */
 export async function createDatasetContext(state: ReplState, locator: string, name: string): Promise<{ ctx: DatasetContext; overwrote: boolean }> {
-  await initDataset(locator, name);
+  await state.engine.initDataset(locator, name);
   return registerOpenContext(state, name, locator);
 }
 
@@ -176,7 +167,7 @@ export async function uploadDatasetContext(
   dump: string,
   format: "json" | "yaml",
 ): Promise<{ ctx: DatasetContext; result: RestoreResult; overwrote: boolean }> {
-  const result = await restoreDataset(locator, dump, format);
+  const result = await state.engine.restoreDataset(locator, dump, format);
   const name = (result.dataset as TransientObject).name;
   if (typeof name !== "string") {
     throw new Error(`dataset restored at "${locator}" has no usable "name" to open it under`);

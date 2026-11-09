@@ -41,7 +41,7 @@ export const ErrorCode = {
    * as a `ui_access` outside its three levels), for `create` and `delete` on
    * `dataset`, and for a text or map operation used where it does not apply, and
    * for a map whose key, value or entry count breaks its type or constraints, and
-   * for a schema that breaks the rules of an `extension` relation (see `docs/authoring.md`, *Extensions*),
+   * for a schema that breaks the rules
    * or of a facet (see `docs/modules.md`, *Facets*).
    */
   constraint_violation: "constraint_violation",
@@ -70,8 +70,6 @@ export const ErrorCode = {
   invalid_map_operation: "invalid_map_operation",
   /** A relation value is not the key of an instance of the relation's schema or of a schema extending it. */
   unknown_relation_target: "unknown_relation_target",
-  /** `schema` of a command names an extension schema, whose instances are reached only through the schema it extends. */
-  extension_not_addressable: "extension_not_addressable",
   /** `schema` of a command names a facet: its values are reached only through its target (see `docs/modules.md`, *Facets*). */
   facet_not_addressable: "facet_not_addressable",
 
@@ -92,6 +90,8 @@ export const ErrorCode = {
   // Actions
   /** An action id names no action that the caller can reach: no module of the dataset declares it, or it belongs to a module the calling action does not depend on. */
   unknown_action: "unknown_action",
+  /** A `create`, `update` or `delete` of data runs outside an action (see Writes and actions in `docs/spec/typescript-reference-implementation.md`). */
+  write_outside_action: "write_outside_action",
   /** An action writes a schema outside its `writes`, or a property of a facet of another module (see Action, Write limit, in `docs/spec/meta-model.md`). */
   write_not_declared: "write_not_declared",
   /** A `fail` step of a procedure runs: the procedure, and its transaction, are refused with its message. */

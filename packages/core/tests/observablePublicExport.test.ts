@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { subscribeObservable } from "../src/index.js";
+import { subscribeObservable } from "../src/testing.js";
 import type { ObservableChange, ObservableDelta, ObservableListener } from "../src/index.js";
 
 /**

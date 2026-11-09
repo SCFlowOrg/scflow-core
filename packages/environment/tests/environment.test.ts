@@ -574,6 +574,14 @@ describe("opening against the catalogue", () => {
 });
 
 describe("running an action", () => {
+  it("refuses a write through query, and writes nothing", async () => {
+    const dataset = await environment().datasets.create({ locator: "js:refuse-write", modules: ["acme:tasks"] });
+    await expect(dataset.query({ create: "tasks.task", input: [{ title: "x" }] } as never)).rejects.toMatchObject({
+      code: "write_outside_action",
+    });
+    expect((await dataset.query({ query: "tasks.task" })).after).toEqual([]);
+  });
+
   it("runs the body in one transaction and returns its result and delta", async () => {
     const env = environment();
     const dataset = await env.datasets.create({ locator: "js:plant", modules: ["acme:tasks"] });

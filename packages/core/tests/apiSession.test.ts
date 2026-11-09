@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { modelError } from "../src/errors.js";
-import { createApiSession, createScriptSession, registerPersistentFormat, runCommand, runScript } from "../src/index.js";
+import { createApiSession, createScriptSession, registerPersistentFormat, runCommand, runScript } from "../src/testing.js";
 import type { AuthoredCommand, Key, PersistenceInterface, TransientObject, TransientValue } from "../src/types.js";
 
 /**
@@ -43,8 +43,6 @@ function fakeFormat(): { impl: PersistenceInterface; schemaLoads: (rest: string)
 
   const impl: PersistenceInterface = {
     name,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);

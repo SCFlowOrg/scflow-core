@@ -14,6 +14,7 @@ import {
   createRefResolver,
   generatedActions,
   resolveClockPlaceholders,
+  resolveCommandForm,
   runProcedure,
   type ApiSession,
   type AuthoredCommand,
@@ -271,7 +272,7 @@ interface ActionLimit {
 /** Creates an environment whose `modules.load` is `load`. Each entry of the package gives its own. */
 export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleLoader): Environment {
   const engine = createEngine({ formats: options.formats });
-  const session = engine.createApiSession();
+  const session = engine.createActionSession();
   const modules = createCatalogue(load);
   const open = new Map<string, OpenDataset>();
   // The openings under way, so that two calls for one locator upgrade it once.
@@ -532,6 +533,12 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       return `${info.data_major_version}.${info.data_minor_version}`;
     }
 
+    /** `query` only reads: the session may write, and a caller reaches it through actions alone. */
+    function refuseWrite(command: AuthoredCommand): void {
+      const { kind, schema } = resolveCommandForm(command) as unknown as { kind: string; schema: string };
+      if (kind !== "query") throw modelError("write_outside_action", `a ${kind} of "${schema}" runs outside an action`);
+    }
+
     const dataset: OpenDataset = Object.freeze({
       locator,
       get modules() {
@@ -572,7 +579,11 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       actions: () => registry.list(),
       deleteImpact: (schema: string, filters?: unknown) =>
         inTurn(() => session.deleteImpact(locator, schema, filters as Filter | undefined)),
-      query: (command: AuthoredCommand) => inTurn(() => session.runCommand(locator, command)),
+      query: (command: AuthoredCommand) =>
+        inTurn(() => {
+          refuseWrite(command);
+          return session.runCommand(locator, command);
+        }),
       info: () => inTurn(() => session.queryDataset(locator)),
       dump: (format: DumpFormat) => inTurn(() => session.dumpDataset(locator, format)),
       close: () =>

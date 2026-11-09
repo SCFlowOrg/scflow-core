@@ -1,5 +1,5 @@
-import { createApiSession, noopLogger } from "@scfloworg/core";
-import type { ApiSession, Logger, ScriptCommand, ScriptSession } from "@scfloworg/core";
+import { noopLogger } from "@scfloworg/core";
+import type { ApiSession, Engine, Logger, ScriptCommand, ScriptSession } from "@scfloworg/core";
 
 /**
  * One open dataset of a REPL process, registered under its own `name`. A
@@ -44,6 +44,8 @@ export interface ReplState {
    * a new process opens the locator; a change applied through `commit` drops
    * the cached entry.
    */
+  /** The engine every command and meta-command runs on. */
+  readonly engine: Engine;
   readonly apiSession: ApiSession;
   /**
    * One `Logger` for the process's whole lifetime. `commandBlock.ts` logs each
@@ -57,14 +59,16 @@ export interface ReplState {
 /**
  * Creates an empty REPL state.
  *
+ * @param options.engine - the engine the REPL runs on, with its formats. A write of data outside an action is refused, unless a test gives the engine of `@scfloworg/core/testing`.
  * @param options.logger - the process's logger; defaults to `noopLogger`.
  */
-export function createReplState(options: { logger?: Logger } = {}): ReplState {
+export function createReplState(options: { engine: Engine; logger?: Logger }): ReplState {
   return {
     contexts: new Map(),
     currentName: null,
     snippets: new Map(),
-    apiSession: createApiSession(),
+    engine: options.engine,
+    apiSession: options.engine.createApiSession(),
     logger: options.logger ?? noopLogger,
   };
 }

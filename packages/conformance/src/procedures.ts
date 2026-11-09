@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createApiSession, initDataset, readModuleManifest, resolveClockPlaceholders, runCommand, runProcedure, queryDataset } from "@scfloworg/core";
+import { readModuleManifest, resolveClockPlaceholders, runProcedure } from "@scfloworg/core";
+import { createApiSession, initDataset, runCommand, queryDataset } from "@scfloworg/core/testing";
 import type { ModuleManifest, UpgradeModuleOptions } from "@scfloworg/core";
 import type { AuthoredCommand, ProcedureHost } from "@scfloworg/core";
 

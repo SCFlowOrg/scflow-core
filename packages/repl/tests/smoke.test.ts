@@ -1,3 +1,4 @@
+import { createEngine } from "@scfloworg/core";
 import { describe, expect, it } from "vitest";
 import { createReplState, currentContext, expandSnippets } from "../src/index.js";
 
@@ -5,7 +6,7 @@ import { createReplState, currentContext, expandSnippets } from "../src/index.js
 // coverage is in tests/repl.test.ts.
 describe("@scfloworg/repl exports", () => {
   it("createReplState starts with no current dataset and no snippets", () => {
-    const state = createReplState();
+    const state = createReplState({ engine: createEngine({ formats: [] }) });
     expect(currentContext(state)).toBeNull();
     expect(state.contexts.size).toBe(0);
     expect(state.snippets.size).toBe(0);

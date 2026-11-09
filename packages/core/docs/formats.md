@@ -5,15 +5,8 @@ A **locator** designates one dataset: `<format-name>:<rest>`, split on the first
 format decides (a file path, a connection string, an in-memory name).
 
 - Every function of the API that reaches a dataset takes a `locator`.
-- `registerPersistentFormat(impl)` registers a format under `impl.name` for the
-  free functions of the API, once and before any of its locators is used. A
-  second registration under the same name replaces the first. An engine made by
-  `createEngine` holds its own formats instead (see Engines below).
-- A locator whose format is not registered fails with `unknown_persistent_format`.
-- A format has **areas**: the place its datasets are attached to (a vault, a
-  database, a running application). `areaOf(rest)` is the format's own rule to find
-  it, and `builtinRestFor(rest)` names the built-in dataset of that area (see
-  [datasets.md](datasets.md), Schemas and the built-in dataset).
+- `createEngine({ formats })` makes an engine with its formats (see Engines below).
+- A locator whose format the engine does not hold fails with `unknown_persistent_format`.
 - `core` depends on no format. A format implements `PersistenceInterface`, and
   `core` runs the whole command language on top of it.
 - A format stores the modules of a dataset as it stores any instance: each
@@ -52,11 +45,9 @@ const session = engine.createApiSession();
   with one name fail with `duplicate_name` at creation.
 - Two engines share nothing: neither the formats, so two instances of the `js`
   format named `js` hold two separate sets of datasets, nor the listeners of
-  `subscribeObservable`. An engine never sees the formats of
-  `registerPersistentFormat`, and the free functions never see those of an
-  engine.
-- The free functions are the engine of the global registry. They stay for the
-  hosts that do not use an environment yet (see `@scfloworg/environment`).
+  `subscribeObservable`.
+- `@scfloworg/core/testing` holds free functions over a registry of its own, for
+  tests only.
 
 A property of a map type (see [multilingual.md](multilingual.md)) reaches a format
 as an ordinary object, and a format that does not interpret it stores it as such.
@@ -67,5 +58,5 @@ localized `display_name`.
 
 `@scfloworg/format-js` implements the `js` format in memory: nothing is written
 to disk, and a dataset lives as long as the process. Its entry points, locator
-form, built-in dataset and concurrency are described in the
+form and concurrency are described in the
 [README of `@scfloworg/format-js`](../../format-js/README.md).

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "js-yaml";
 import type { AuthoredCommand, AuthoredScript, CommandResult, MclAccess } from "@scfloworg/core";
+import { createTestingEngine } from "@scfloworg/core/testing";
 import { createEnvironment } from "@scfloworg/environment";
 import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import { defineModule } from "@scfloworg/module";
@@ -36,14 +37,16 @@ function qualify(command: AuthoredCommand): AuthoredCommand {
  * from, which may be one no action can reach. They qualify the schema names.
  */
 export async function setupActions() {
-  const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
+  const format = createJsPersistenceInterface();
+  const env = createEnvironment({ formats: [format] });
+  const belowActions = createTestingEngine({ formats: [format] });
   env.modules.install(definition);
   counter += 1;
   const locator = `js:actions${counter}`;
   const dataset = await env.datasets.create({ locator, modules: ["scflow:core"] });
 
   const mcl = {
-    runCommand: (_locator: string, command: AuthoredCommand): Promise<CommandResult> => dataset.query(qualify(command)),
+    runCommand: (_locator: string, command: AuthoredCommand): Promise<CommandResult> => belowActions.runCommand(locator, qualify(command)),
     runScript: (): Promise<CommandResult> => {
       throw new Error("no script in these tests");
     },
@@ -59,7 +62,7 @@ export async function setupActions() {
     return after as unknown as Record<string, any>[];
   };
   const create = async (schema: string, input: Record<string, unknown>): Promise<string> => {
-    const { after } = await dataset.query({ create: qualified(schema), input } as unknown as AuthoredCommand);
+    const { after } = await belowActions.runCommand(locator, { create: qualified(schema), input } as unknown as AuthoredCommand);
     return (after[0] as Record<string, unknown>).id as string;
   };
   return { env, dataset, mcl, locator, run, query, create };

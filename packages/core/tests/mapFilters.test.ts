@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { runCommand } from "../src/index.js";
+import { runCommand } from "../src/testing.js";
 import type { TransientObject } from "../src/types.js";
 import { createDoc, expectCode, setup } from "./mapTestSupport.js";
 

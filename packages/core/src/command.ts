@@ -1,6 +1,4 @@
 import { modelError } from "./errors.js";
-import { deleteExtensionInstances, mergeExtensionValues, writeExtensionInstances } from "./extensionData.js";
-import { extensionRelationOf } from "./extensions.js";
 import {
   deleteFacetInstances,
   facetOfProperty,
@@ -835,9 +833,7 @@ async function resolveVirtualProperties(
   cache: LiveJoinCache,
 ): Promise<TransientObject> {
   const key = keyOf(schema, instance);
-  // the values the extensions of the schema hold for this instance are read in, so every reader sees them as its own
-  await mergeExtensionValues(impl, rest, resolvers.ctx, schema, key, instance);
-  // and so are the values of its facets, under their qualified names
+  // the values of its facets are read in, under their qualified names, so every reader sees them
   await mergeFacetValues(impl, rest, resolvers.ctx, schema, key, instance);
   return resolveInverseRelations(impl, rest, resolvers, schema, instance, cache);
 }
@@ -871,7 +867,7 @@ async function resolveInverseRelations(
 function withoutVirtualRelations(schema: NormalizedSchema, instance: TransientObject): TransientObject {
   const stripped: TransientObject = { ...instance };
   for (const prop of schema.properties) {
-    if (prop.constraints.__generated === true || prop.constraints.__extension !== undefined || facetOfProperty(prop) !== undefined) {
+    if (prop.constraints.__generated === true || facetOfProperty(prop) !== undefined) {
       delete stripped[prop.name];
     }
   }
@@ -1001,7 +997,7 @@ interface Referrer {
 
 /**
  * The instances holding a relation to the instance `key` of `schema`. A
- * relation that is `owner`, `owns`, `extension` or generated is not listed:
+ * relation that is `owner`, `owns` or generated is not listed:
  * ownership removes the owned instance with its owner (see `performDelete`).
  */
 async function findReferrers(
@@ -1020,19 +1016,15 @@ async function findReferrers(
         p.constraints.__generated !== true &&
         p.constraints.owner !== true &&
         p.constraints.owns !== true &&
-        p.constraints.extension !== true &&
         resolvers.schemas.has(p.type) &&
         isSchemaOrDescendant(schema, p.type, resolvers),
     );
     if (refProps.length === 0) continue;
-    const readsExtension = refProps.some((p) => p.constraints.__extension !== undefined);
     const readsFacet = refProps.some((p) => facetOfProperty(p) !== undefined);
     const candidates = await impl.listInstances(rest, refSchema.name, derivePropertyRoles(refSchema));
     for (const candidate of candidates) {
       const candKey = keyOf(refSchema, candidate);
-      let values = readsExtension
-        ? await mergeExtensionValues(impl, rest, resolvers.ctx, refSchema, candKey, { ...(candidate as TransientObject) })
-        : (candidate as TransientObject);
+      let values = candidate as TransientObject;
       if (readsFacet) values = await mergeFacetValues(impl, rest, resolvers.ctx, refSchema, candKey, { ...values });
       for (const prop of refProps) {
         if (values[prop.name] === key) found.push({ schema: refSchema, key: candKey, prop, mode: onDeleteOf(prop) });
@@ -1077,7 +1069,7 @@ async function planRemoval(
     }
     for (const [, targetSchema] of resolvers.schemas) {
       for (const ownerProp of ownerProperties(targetSchema)) {
-        if (!isSchemaOrDescendant(schema, ownerProp.type, resolvers) || ownerProp.constraints.__generated === true || ownerProp.constraints.extension === true) continue;
+        if (!isSchemaOrDescendant(schema, ownerProp.type, resolvers) || ownerProp.constraints.__generated === true) continue;
         const candidates = await impl.listInstances(rest, targetSchema.name, derivePropertyRoles(targetSchema));
         for (const candidate of candidates) {
           if ((candidate as TransientObject)[ownerProp.name] !== key) continue;
@@ -1205,7 +1197,7 @@ async function clearReference(
     resolvers.ctx,
     referrer.schema,
     referrer.key,
-    await mergeExtensionValues(impl, rest, resolvers.ctx, referrer.schema, referrer.key, { ...(stored as TransientObject) }),
+    { ...(stored as TransientObject) },
   );
   if (current[referrer.prop.name] === null || current[referrer.prop.name] === undefined) return;
   const updated: TransientObject = { ...current, [referrer.prop.name]: null };
@@ -1214,7 +1206,6 @@ async function clearReference(
   if (isFacetValue) delete updated[referrer.prop.name];
   acc.updatedBefore.push(clone(await resolveVirtualProperties(impl, rest, resolvers, referrer.schema, clone(current) as TransientObject, cache)));
   await impl.putInstance(rest, referrer.schema.name, referrer.key, withoutVirtualRelations(referrer.schema, updated), roles);
-  await writeExtensionInstances(impl, rest, resolvers.ctx, referrer.schema, referrer.key, updated);
   if (isFacetValue) await writeFacetValues(impl, rest, resolvers.ctx, referrer.schema, referrer.key, { [referrer.prop.name]: null });
   acc.updatedAfter.push(clone(await resolveVirtualProperties(impl, rest, resolvers, referrer.schema, clone(updated) as TransientObject, cache)));
 }
@@ -1276,7 +1267,6 @@ async function performDelete(
   // `owns` relation declared on `schema` itself, already handled above.
   for (const [, targetSchema] of resolvers.schemas) {
     for (const ownerProp of ownerProperties(targetSchema)) {
-      // an extension relation is not scanned: the extension instance is deleted with its key below, and is no cascade-deleted instance to report
       if (!isSchemaOrDescendant(schema, ownerProp.type, resolvers) || ownerProp.constraints.__generated === true || ownerProp.constraints.extension === true) continue;
       const candidates = await impl.listInstances(rest, targetSchema.name, derivePropertyRoles(targetSchema));
       for (const candidate of candidates) {
@@ -1301,7 +1291,6 @@ async function performDelete(
     }
   }
 
-  await deleteExtensionInstances(impl, rest, resolvers.ctx, schema, key);
   // the facet instances go with their target, whatever their module
   await deleteFacetInstances(impl, rest, resolvers.ctx, schema, key);
   await impl.deleteInstance(rest, schema.name, key);
@@ -1562,12 +1551,6 @@ export async function runCommand(
 ): Promise<CommandResult> {
   const schema = resolvers.schemas.get(command.schema);
   if (!schema) throw modelError("unknown_schema", `unknown schema "${command.schema}"`);
-  if (extensionRelationOf(schema)) {
-    throw modelError(
-      "extension_not_addressable",
-      `"${command.schema}" is an extension schema — its instances are reached through "${extensionRelationOf(schema)?.type}"`,
-    );
-  }
   if (isFacet(schema)) {
     throw modelError("facet_not_addressable", `"${command.schema}" is a facet — its values are reached through "${String(schema.constraints.facet_of)}"`);
   }
@@ -1712,23 +1695,7 @@ async function executeCommand(
     checkFilterOnCandidates(command.filters, candidateSchemas, resolvers.ctx);
     for (const candidateSchema of candidateSchemas) {
       const candidateRoles = derivePropertyRoles(candidateSchema);
-      // A query against `schema`/`scalar_type` transparently includes the
-      // area's built-in instances too, merged live with `rest`'s own — own
-      // wins on a name collision — per packages/core/docs/spec/meta-model.md#import's
-      // "Built-in — virtual, not imported". Every other command kind against
-      // these two schemas is already rejected above (the `isModelSchema`
-      // gating at the top of `executeCommand`), so this only ever runs for a
-      // read; every other schema is unaffected (no built-in dataset lookup,
-      // same instances and order as before).
       const byKey = new Map<Key, TransientValue>();
-      if (command.kind === "query" && isModelSchema(candidateSchema.name)) {
-        const builtinRest = impl.builtinRestFor(rest);
-        if ((await impl.datasetExists(builtinRest))) {
-          for (const raw of await impl.listInstances(builtinRest, candidateSchema.name, candidateRoles)) {
-            byKey.set(keyOf(candidateSchema, raw), raw);
-          }
-        }
-      }
       for (const raw of await impl.listInstances(rest, candidateSchema.name, candidateRoles)) {
         byKey.set(keyOf(candidateSchema, raw), raw);
       }
@@ -1843,7 +1810,6 @@ async function executeCommand(
         // never stored — stripped before this instance ever reaches
         // putInstance's `instance` argument.
         await impl.putInstance(rest, schema.name, key, withoutVirtualRelations(schema, instance), roles);
-        await writeExtensionInstances(impl, rest, resolvers.ctx, schema, key, instance);
         // the first value set creates the instance of a facet
         const facetValues: TransientObject = {};
         for (const prop of schema.properties) {
@@ -1995,7 +1961,6 @@ async function executeCommand(
         // never stored — stripped before this instance ever reaches
         // putInstance's `instance` argument.
         await impl.putInstance(rest, instSchema.name, key, withoutVirtualRelations(instSchema, updated), instRoles);
-        await writeExtensionInstances(impl, rest, resolvers.ctx, instSchema, key, updated);
         await writeFacetValues(impl, rest, resolvers.ctx, instSchema, key, facetChanges);
 
         for (const { prop, oldValue } of relationChanges) {
@@ -2050,7 +2015,7 @@ async function executeCommand(
 
 /**
  * Builds the dataset's transient form: scalar fields from getDataset plus
- * schemas/scalar_types as arrays of names, including the built-in overlay.
+ * schemas/scalar_types as arrays of names.
  * Same logic as api.ts's datasetTransientForm, kept here to avoid circular
  * imports between command.ts and api.ts.
  */
@@ -2061,26 +2026,10 @@ async function buildDatasetTransientForm(impl: PersistenceInterface, rest: strin
     impl.listInstances(rest, "scalar_type", NO_ROLES),
   ]);
   const names = (instances: TransientValue[]) => instances.map((i) => (i as TransientObject).name);
-  const ownSchemaNames = new Set(names(schemas));
-  const ownScalarTypeNames = new Set(names(scalarTypes));
-  
-  // Include built-in overlay
-  const builtinRest = impl.builtinRestFor(rest);
-  let overlaySchemaNames: string[] = [];
-  let overlayScalarTypeNames: string[] = [];
-  if ((await impl.datasetExists(builtinRest))) {
-    const [builtinSchemas, builtinScalarTypes] = await Promise.all([
-      impl.listInstances(builtinRest, "schema", SCHEMA_ROLES),
-      impl.listInstances(builtinRest, "scalar_type", NO_ROLES),
-    ]);
-    overlaySchemaNames = builtinSchemas.map((s) => (s as TransientObject).name as string).filter((n) => !ownSchemaNames.has(n));
-    overlayScalarTypeNames = builtinScalarTypes.map((s) => (s as TransientObject).name as string).filter((n) => !ownScalarTypeNames.has(n));
-  }
-
   return {
     ...info,
-    schemas: [...names(schemas), ...overlaySchemaNames],
-    scalar_types: [...names(scalarTypes), ...overlayScalarTypeNames],
+    schemas: names(schemas),
+    scalar_types: names(scalarTypes),
     modules: Array.isArray(info.modules) ? info.modules : [],
     imports: (await impl.listInstances(rest, "import", NO_ROLES)).map((i) => (i as TransientObject).name),
   };

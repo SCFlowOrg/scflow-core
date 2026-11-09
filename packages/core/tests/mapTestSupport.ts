@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { ModelError } from "../src/errors.js";
-import { registerPersistentFormat, runCommand } from "../src/index.js";
+import { registerPersistentFormat, runCommand } from "../src/testing.js";
 import { processSchemaDescription } from "../src/schemaProcessing.js";
 import type { TypeResolutionContext } from "../src/schemaProcessing.js";
 import type { Key, PersistenceInterface, TransientObject, TransientValue } from "../src/types.js";
@@ -36,8 +36,6 @@ export function fakeFormat(): PersistenceInterface {
   return {
     name,
     supportsTransactions: true,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);

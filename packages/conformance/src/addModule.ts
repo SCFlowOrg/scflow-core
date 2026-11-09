@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createApiSession,
-  dumpDataset,
-  initDataset,
-  moduleDigest,
-  queryDataset,
-  readModuleManifest,
-  runCommand,
-  setLocalModule,
-} from "@scfloworg/core";
+import { moduleDigest, readModuleManifest } from "@scfloworg/core";
+import { createApiSession, dumpDataset, initDataset, queryDataset, runCommand, setLocalModule } from "@scfloworg/core/testing";
 import type { ModuleManifest } from "@scfloworg/core";
 
 type Row = Record<string, unknown>;

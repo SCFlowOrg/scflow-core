@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  bumpMajorVersions,
-  createApiSession,
-  createModuleSet,
-  checkUpgrade,
-  createUpgradeLocator,
-  MCL_CORE,
-  deleteDataset,
-  dumpDataset,
-  initDataset,
-  NO_ROLES,
-  processScalarTypeDescription,
-  processSchemaDescription,
-  queryDataset,
-  queryUpgradeLocator,
-  readModuleManifest,
-  registerPersistentFormat,
-  restoreDataset,
-  runCommand,
-  runScript,
-  upgradeDataset,
-} from "@scfloworg/core";
+import { createModuleSet, MCL_CORE, NO_ROLES, processScalarTypeDescription, processSchemaDescription, readModuleManifest } from "@scfloworg/core";
+import { bumpMajorVersions, createApiSession, checkUpgrade, createUpgradeLocator, deleteDataset, dumpDataset, initDataset, queryDataset, queryUpgradeLocator, registerPersistentFormat, restoreDataset, runCommand, runScript, upgradeDataset } from "@scfloworg/core/testing";
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
@@ -28,6 +8,7 @@ import { addModuleCases } from "./addModule.js";
 import { moduleUpgradeCases } from "./moduleUpgrade.js";
 import { procedureCases } from "./procedures.js";
 import { ruleCases } from "./rules.js";
+import { writeCases } from "./writes.js";
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -1216,93 +1197,22 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
     });
   });
 
-  /**
-   * The `extension` relation constraint — the *Extensions* paragraphs of the
-   * `relations`, `schema_processing` and `command` parts of the `core` dataset:
-   * the properties of an extension schema are properties of the schema it
-   * extends in every command, its instance is created and deleted with the
-   * extended one, and a command cannot name the extension schema.
-   */
-  const extensionModel = [
-    { name: "task", shared_by_name: null, properties: [{ name: "name", type: "identifier" }, { name: "title", type: "string" }] },
-    {
-      name: "task_billing",
-      properties: [
-        { name: "task", type: "task", extension: null },
-        { name: "rate", type: "integer", default_value: 10 },
-      ],
-    },
-  ];
-
-  async function setupExtension(locator: string): Promise<void> {
-    await initDataset(locator, "extensions");
-    const upgradeLocator = await createUpgradeLocator(locator);
-    await runCommand(upgradeLocator, { create: "schema", input: extensionModel });
-    await upgradeDataset(locator, upgradeLocator);
-  }
-
-  describe(`extension constraint conformance — ${formatPrefix}`, () => {
-    it("creates, reads, filters, updates and deletes the properties of an extension through the extended schema", async () => {
+  describe(`no extension relation — ${formatPrefix}`, () => {
+    it("reads a relation declared `extension` as an ordinary relation, whose schema a command can name", async () => {
       const locator = newLocator();
-      await setupExtension(locator);
-
-      await runCommand(locator, { create: "task", input: [{ name: "t1", title: "A", rate: 25 }, { name: "t2" }] });
-      const t2 = (await runCommand(locator, { query: "task", filters: { name: "t2" } })).after[0];
-      expect(t2).toMatchObject({ name: "t2", rate: 10 });
-      const found = await runCommand(locator, { query: "task", filters: { rate: { gte: 20 } } });
-      expect(found.after.map((i) => (i as Record<string, unknown>).name)).toEqual(["t1"]);
-
-      const updated = await runCommand(locator, { update: "task", filters: { name: "t1" }, input: { rate: 30, title: "B" } });
-      expect(updated.before[0]).toMatchObject({ rate: 25, title: "A" });
-      expect(updated.after[0]).toMatchObject({ rate: 30, title: "B" });
-
-      const deleted = await runCommand(locator, { delete: "task", filters: { name: "t1" } });
-      expect(deleted["cascade-deleted"]).toEqual([]);
-      const remaining = await runCommand(locator, { query: "task" });
-      expect(remaining.after.map((i) => (i as Record<string, unknown>).name)).toEqual(["t2"]);
-    });
-
-    it("refuses a command on the extension schema with extension_not_addressable", async () => {
-      const locator = newLocator();
-      await setupExtension(locator);
-      await expect(runCommand(locator, { query: "task_billing" })).rejects.toMatchObject({ code: "extension_not_addressable" });
-      await expect(runCommand(locator, { create: "task_billing", input: [{ rate: 1 }] })).rejects.toMatchObject({ code: "extension_not_addressable" });
-    });
-
-    it("refuses an extension schema that breaks the rules, with constraint_violation", async () => {
-      const locator = newLocator();
-      await initDataset(locator, "extension-reject");
+      await initDataset(locator, "no-extensions");
       const upgradeLocator = await createUpgradeLocator(locator);
-      await runCommand(upgradeLocator, { create: "schema", input: [extensionModel[0]] });
-      await expect(
-        runCommand(upgradeLocator, {
-          create: "schema",
-          input: [{ name: "task_billing", properties: [{ name: "task", type: "task", extension: null }, { name: "name", type: "identifier" }] }],
-        }),
-      ).rejects.toMatchObject({ code: "constraint_violation" });
-      await expect(
-        runCommand(upgradeLocator, {
-          create: "schema",
-          input: [{ name: "task_billing", properties: [{ name: "task", type: "task", extension: null }, { name: "rate", type: "integer" }] }],
-        }),
-      ).rejects.toMatchObject({ code: "constraint_violation" });
-    });
-
-    it("gives the instances that exist when an extension is added the defaults of its properties", async () => {
-      const locator = newLocator();
-      await initDataset(locator, "extension-upgrade");
-      const first = await createUpgradeLocator(locator);
-      await runCommand(first, { create: "schema", input: [extensionModel[0]] });
-      await upgradeDataset(locator, first);
-      await runCommand(locator, { create: "task", input: [{ name: "t1" }, { name: "t2" }] });
-
-      const second = await createUpgradeLocator(locator);
-      await runCommand(second, { create: "schema", input: [extensionModel[1]] });
-      expect((await checkUpgrade(locator, second)).modifiedSchema).toEqual([]);
-      await upgradeDataset(locator, second);
-
-      const tasks = await runCommand(locator, { query: "task" });
-      expect(tasks.after.map((i) => (i as Record<string, unknown>).rate)).toEqual([10, 10]);
+      await runCommand(upgradeLocator, {
+        create: "schema",
+        input: [
+          { name: "task", is_root: true, properties: [{ name: "title", type: "string" }] },
+          { name: "task_billing", is_root: true, properties: [{ name: "task", type: "task", extension: null }, { name: "rate", type: "integer", default_value: 10 }] },
+        ],
+      });
+      await upgradeDataset(locator, upgradeLocator);
+      const { after } = await runCommand(locator, { query: "task" });
+      expect(after).toEqual([]);
+      await expect(runCommand(locator, { query: "task_billing" })).resolves.toMatchObject({ after: [] });
     });
   });
 
@@ -1823,446 +1733,6 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
   });
 
   /**
-   * TDD red state for "Avoid physically copying built-in schemas/scalars
-   * into each dataset" — replaces the
-   * copy-at-init / standing-import design these tests originally proved out.
-   * Under the new design: `initDataset` never creates an import or copies
-   * anything; every read of a dataset's own schema/scalar_type overlays the
-   * area's built-in dataset live via `builtinRestFor`; `dumpDataset`
-   * synthesizes a `namespace: ""` import recording only the built-in's
-   * version (no schema/scalar_type content); `restoreDataset` uses that
-   * synthesized entry to check/upgrade restored data against the *current*
-   * built-in model, then discards it — the restored dataset never gets a
-   * standing import either. See packages/core/docs/spec/meta-model.md#import's
-   * "Built-in — virtual, not imported" and
-   * `docs/datasets.md` of `@scfloworg/core`:
-   * Lifecycle, and Schemas and the built-in dataset.
-   *
-   * Engine-level (api.ts), so this belongs in the shared suite rather than a
-   * per-format test: any conforming format proves it out just by implementing
-   * `areaOf`/`builtinRestFor` correctly, already done for both `js` and
-   * `obsidian`.
-   *
-   * These are written against the *new* behaviour and are expected to fail
-   * against today's `createBuiltinImport`/`realignBuiltinImport`
-   * implementation — that is deliberate: tests land first, implementation
-   * follows.
-   *
-   * `newAreaRest`/`newAreaLocator` give each test its own independent area —
-   * plain `newLocator()` above can't: every locator it generates is flat (no
-   * "/"), so `builtinRestFor` resolves to the exact same single rest for the
-   * *entire* conformance run for a given format+impl instance (`js`'s `areaOf`
-   * is "" for any flat rest; `obsidian`'s is always this file's shared
-   * `baseDir`). Embedding a synthetic area segment first (`<tag>/rest...`)
-   * gives each test a private area under both formats' actual conventions,
-   * without this suite needing to know either one specifically.
-   */
-  describe(`built-in import conformance — ${formatPrefix}`, () => {
-    let areaCounter = 0;
-    // A tag maps to the same area prefix every time — the trailing
-    // "conformance-..." segment still gets a fresh value per call, but the
-    // "built-in-<tag>-N" prefix, and so the area, is fixed the first time a
-    // given tag is seen.
-    const areaTags = new Map<string, string>();
-    function newAreaRest(tag: string): string {
-      let areaTag = areaTags.get(tag);
-      if (!areaTag) {
-        areaCounter += 1;
-        areaTag = `built-in-${tag}-${areaCounter}`;
-        areaTags.set(tag, areaTag);
-      }
-      counter += 1;
-      return `${areaTag}/conformance-${Date.now()}-${counter}`;
-    }
-    function newAreaLocator(tag: string): string {
-      return `${formatPrefix}:${newAreaRest(tag)}`;
-    }
-
-    /** Creates a fresh built-in dataset in a new area: schema `widget`, schema `gadget` (nothing ever instantiates it — free to delete in a realignment test), scalar_type `flag`. */
-    async function seedBuiltinDataset(tag: string): Promise<{ builtinRest: string; builtinLocator: string }> {
-      const builtinRest = impl.builtinRestFor(newAreaRest(tag)) as string;
-      await impl.createDataset(builtinRest, "Builtin");
-      const schemas = new Map<string, NormalizedSchema>();
-      const ctx = { resolveSchema: (n: string) => schemas.get(n), resolveScalarType: () => undefined };
-      const widget = processSchemaDescription({ name: "widget", is_root: true, properties: [{ name: "label", type: "string" }] }, ctx);
-      schemas.set("widget", widget);
-      await impl.putInstance(builtinRest, "schema", "widget", widget as unknown as TransientValue, NO_ROLES);
-      const gadget = processSchemaDescription({ name: "gadget", is_root: true, properties: [{ name: "note", type: "string" }] }, ctx);
-      schemas.set("gadget", gadget);
-      await impl.putInstance(builtinRest, "schema", "gadget", gadget as unknown as TransientValue, NO_ROLES);
-      const flag = processScalarTypeDescription({ name: "flag", extends: "boolean" }, ctx.resolveScalarType);
-      await impl.putInstance(builtinRest, "scalar_type", "flag", flag as unknown as TransientValue, NO_ROLES);
-      return { builtinRest, builtinLocator: `${formatPrefix}:${builtinRest}` };
-    }
-
-    it("initDataset leaves schemas/scalar_types/imports empty when the area has no built-in dataset yet", async () => {
-      const locator = newAreaLocator("empty");
-      await initDataset(locator, "no-builtin-yet");
-      const found = (await queryDataset(locator)) as Record<string, unknown>;
-      expect(found.schemas).toEqual([]);
-      expect(found.scalar_types).toEqual([]);
-      expect(found.imports).toEqual([]);
-    });
-
-    it("initDataset creates no import and copies nothing, but the built-in's schemas/scalar_types are transparently visible and usable", async () => {
-      const tag = "basic";
-      const { builtinRest } = await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-
-      // Visible through the dataset's own query surface, unprefixed, as if imported...
-      const found = (await queryDataset(locator)) as Record<string, unknown>;
-      expect((found.schemas as string[]).sort()).toEqual(["gadget", "widget"]);
-      expect(found.scalar_types).toEqual(["flag"]);
-      // ...but NOT via a standing import: none was created.
-      expect(found.imports).toEqual([]);
-
-      // Nothing was physically copied into the consumer dataset's own storage.
-      expect(await impl.listInstances(consumerRest, "schema", NO_ROLES)).toEqual([]);
-      expect(await impl.listInstances(consumerRest, "scalar_type", NO_ROLES)).toEqual([]);
-      expect(await impl.listInstances(consumerRest, "import", NO_ROLES)).toEqual([]);
-
-      // Genuinely usable through the real engine even though it was never created against `locator`.
-      const created = await runCommand(locator, { create: "widget", input: [{ label: "hello" }] });
-      expect(created.after).toHaveLength(1);
-      expect((created.after[0] as Record<string, unknown>).label).toBe("hello");
-
-      // A dataset in a DIFFERENT area doesn't see this area's built-in.
-      const otherLocator = newAreaLocator("basic-unrelated");
-      await initDataset(otherLocator, "unrelated");
-      const otherFound = (await queryDataset(otherLocator)) as Record<string, unknown>;
-      expect(otherFound.schemas).toEqual([]);
-
-      expect(await impl.datasetExists(builtinRest)).toBe(true); // sanity: still there, untouched
-    });
-
-    it("query: schema / query: scalar_type include the built-in's instances, not just the dataset's own", async () => {
-      const tag = "query-overlay";
-      await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-
-      const schemaQuery = await runCommand(locator, { query: "schema" });
-      expect((schemaQuery.after as Record<string, unknown>[]).map((s) => s.name).sort()).toEqual(["gadget", "widget"]);
-
-      const scalarQuery = await runCommand(locator, { query: "scalar_type" });
-      expect((scalarQuery.after as Record<string, unknown>[]).map((s) => s.name)).toEqual(["flag"]);
-
-      // Filters apply across the merged (own + overlay) result too.
-      const filtered = await runCommand(locator, { query: "schema", filters: { name: "widget" } });
-      expect(filtered.after).toHaveLength(1);
-      expect((filtered.after[0] as Record<string, unknown>).name).toBe("widget");
-    });
-
-    it("query: schema merges the built-in's instances with a dataset's own schema", async () => {
-      const tag = "query-overlay-own";
-      await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-
-      const upgradeLocator = await createUpgradeLocator(locator);
-      await runCommand(upgradeLocator, {
-        create: "schema",
-        input: [{ name: "gizmo", is_root: true, properties: [{ name: "note", type: "string" }] }],
-      });
-      await upgradeDataset(locator, upgradeLocator);
-
-      const schemaQuery = await runCommand(locator, { query: "schema" });
-      expect((schemaQuery.after as Record<string, unknown>[]).map((s) => s.name).sort()).toEqual(["gadget", "gizmo", "widget"]);
-    });
-
-    it("a dataset's schema overlay tracks the built-in live, with no explicit realignment step", async () => {
-      const tag = "live-overlay";
-      await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-
-      const before = (await queryDataset(locator)) as Record<string, unknown>;
-      expect((before.schemas as string[]).sort()).toEqual(["gadget", "widget"]);
-
-      // Change the built-in AFTER the consumer dataset exists — no dump/restore, no explicit realign call.
-      const builtinLocator = `${formatPrefix}:${impl.builtinRestFor(consumerRest)}`;
-      const upgradeLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(upgradeLocator, {
-        create: "schema",
-        input: [{ name: "extra", is_root: null, properties: [{ name: "n", type: "string" }] }],
-      });
-      await upgradeDataset(builtinLocator, upgradeLocator);
-
-      // The consumer sees it immediately, on the very next read.
-      const after = (await queryDataset(locator)) as Record<string, unknown>;
-      expect((after.schemas as string[]).sort()).toEqual(["extra", "gadget", "widget"]);
-      const created = await runCommand(locator, { create: "extra", input: [{ n: "x" }] });
-      expect(created.after).toHaveLength(1);
-    });
-
-    it("dumpDataset synthesizes a bookkeeping-only built-in import, without copying its schemas/scalar_types into the dump", async () => {
-      const tag = "dump";
-      const { builtinRest, builtinLocator } = await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-
-      const dump = await dumpDataset(locator, "json");
-      const parsed = JSON.parse(dump) as Record<string, unknown>;
-
-      const imports = parsed.imports as Record<string, Record<string, unknown>>;
-      expect(Object.keys(imports)).toEqual(["builtin"]);
-      const builtinImport = imports.builtin;
-      expect(builtinImport).toMatchObject({ namespace: "", caching_policy: "none", locator: builtinLocator });
-      expect(typeof builtinImport.model_major_version).toBe("number");
-      expect(typeof builtinImport.model_minor_version).toBe("number");
-      expect((builtinImport.imported_schemas as string[]).sort()).toEqual(["gadget", "widget"]);
-      expect(builtinImport.imported_scalar_types).toEqual(["flag"]);
-
-      // Bookkeeping only — no schema/scalar_type CONTENT copied into the dump.
-      const schemas = parsed.schemas as Record<string, unknown>;
-      const scalarTypes = parsed.scalar_types as Record<string, unknown>;
-      expect(Object.keys(schemas)).toEqual([]);
-      expect(Object.keys(scalarTypes)).toEqual([]);
-
-      expect(await impl.datasetExists(builtinRest)).toBe(true); // sanity: still there, untouched
-    });
-
-    it("restoreDataset installs no standing built-in import; the restored dataset overlays the built-in live and its own data survives", async () => {
-      const tag = "restore-basic";
-      await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-      const createdBefore = await runCommand(locator, { create: "widget", input: [{ label: "hello" }] });
-      const widgetKey = (createdBefore.after[0] as Record<string, unknown>).id as string;
-      const dump = await dumpDataset(locator, "json");
-
-      const restoreRest = newAreaRest(tag); // same area (same tag) as the original
-      const restoreLocator = `${formatPrefix}:${restoreRest}`;
-      const result = await restoreDataset(restoreLocator, dump, "json");
-      expect(result.pendingRealignment).toEqual([]);
-
-      expect(await impl.listInstances(restoreRest, "import", NO_ROLES)).toEqual([]);
-      expect(await impl.listInstances(restoreRest, "schema", NO_ROLES)).toEqual([]);
-
-      const restored = (await queryDataset(restoreLocator)) as Record<string, unknown>;
-      expect((restored.schemas as string[]).sort()).toEqual(["gadget", "widget"]);
-      expect(restored.imports).toEqual([]);
-
-      const queried = await runCommand(restoreLocator, { query: "widget", filters: { id: widgetKey } });
-      expect(queried.after).toHaveLength(1);
-      expect((queried.after[0] as Record<string, unknown>).label).toBe("hello");
-
-      const createdAfter = await runCommand(restoreLocator, { create: "widget", input: [{ label: "second" }] });
-      expect(createdAfter.after).toHaveLength(1);
-    });
-
-    it("restoreDataset upgrades restored data against the built-in's CURRENT model when it changed since the dump", async () => {
-      const tag = "restore-upgrade";
-      const { builtinLocator } = await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-      const createdBefore = await runCommand(locator, { create: "widget", input: [{ label: "hello" }] });
-      const widgetKey = (createdBefore.after[0] as Record<string, unknown>).id as string;
-      const dump = await dumpDataset(locator, "json");
-
-      // Built-in's widget gains a property with a default value AFTER the dump was taken.
-      const upgradeLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(upgradeLocator, {
-        kind: "update",
-        schema: "schema",
-        filters: { name: "widget" },
-        input: [
-          {
-            name: "widget",
-            is_root: null,
-            properties: [
-              { name: "label", type: "string" },
-              { name: "note", type: "string", default_value: "n/a" },
-            ],
-          },
-        ],
-      });
-      await upgradeDataset(builtinLocator, upgradeLocator);
-
-      const restoreLocator = newAreaLocator(tag);
-      await restoreDataset(restoreLocator, dump, "json");
-
-      const queried = await runCommand(restoreLocator, { query: "widget", filters: { id: widgetKey } });
-      expect(queried.after).toHaveLength(1);
-      expect((queried.after[0] as Record<string, unknown>).note).toBe("n/a"); // backfilled against the CURRENT built-in model
-    });
-
-    it("restoreDataset throws incompatible_upgrade when the built-in's change since the dump can't be applied automatically to restored data", async () => {
-      const tag = "restore-incompatible";
-      const { builtinLocator } = await seedBuiltinDataset(tag);
-      const consumerRest = newAreaRest(tag);
-      const locator = `${formatPrefix}:${consumerRest}`;
-      await initDataset(locator, "consumer");
-      await runCommand(locator, { create: "widget", input: [{ label: "existing" }] });
-      const dump = await dumpDataset(locator, "json");
-
-      const seedLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(seedLocator, {
-        create: "schema",
-        input: [{ name: "owner_ref", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
-      });
-      await upgradeDataset(builtinLocator, seedLocator);
-
-      // widget.label stays, but widget gains a MANDATORY relation with no default — no
-      // existing "widget" instance in the dump has a value for it, so restoring can't
-      // apply the built-in's current model automatically.
-      const upgradeLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(upgradeLocator, {
-        kind: "update",
-        schema: "schema",
-        filters: { name: "widget" },
-        input: [
-          {
-            name: "widget",
-            is_root: null,
-            properties: [
-              { name: "label", type: "string" },
-              { name: "owner", type: "owner_ref", mandatory: true },
-            ],
-          },
-        ],
-      });
-      await upgradeDataset(builtinLocator, upgradeLocator);
-
-      const restoreRest = newAreaRest(tag);
-      await expect(restoreDataset(`${formatPrefix}:${restoreRest}`, dump, "json")).rejects.toMatchObject({ code: "incompatible_upgrade" });
-      // A failed restore creates nothing at the locator.
-      expect(await impl.datasetExists(restoreRest)).toBe(false);
-    });
-
-    it("builtinRestFor returns a rest for every rest", () => {
-      expect(typeof impl.builtinRestFor(newAreaRest("builtin-rest"))).toBe("string");
-      expect(typeof impl.builtinRestFor(newLocator().slice(formatPrefix.length + 1))).toBe("string");
-    });
-
-    it("dumpDataset writes the built-in import's four versions as 0, whatever the built-in's own versions", async () => {
-      const tag = "dump-versions";
-      const { builtinLocator } = await seedBuiltinDataset(tag);
-      const upgradeLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(upgradeLocator, {
-        create: "schema",
-        input: [{ name: "extra", is_root: null, properties: [{ name: "n", type: "string" }] }],
-      });
-      await upgradeDataset(builtinLocator, upgradeLocator);
-      const builtinInfo = (await queryDataset(builtinLocator)) as Record<string, unknown>;
-      expect(builtinInfo.model_minor_version).not.toBe(0); // the built-in's own version moved
-
-      const locator = newAreaLocator(tag);
-      await initDataset(locator, "consumer");
-      const parsed = JSON.parse(await dumpDataset(locator, "json")) as Record<string, unknown>;
-      const builtinImport = (parsed.imports as Record<string, Record<string, unknown>>).builtin;
-      expect(builtinImport).toMatchObject({
-        model_major_version: 0,
-        model_minor_version: 0,
-        data_major_version: 0,
-        data_minor_version: 0,
-      });
-    });
-
-    it("restoreDataset checks every restored built-in instance, even when the dump's built-in versions match, and creates nothing on failure", async () => {
-      const tag = "restore-check-always";
-      const { builtinRest } = await seedBuiltinDataset(tag);
-      const ctx = { resolveSchema: () => undefined, resolveScalarType: () => undefined };
-      const level = processScalarTypeDescription({ name: "level", extends: "string", enum: ["low", "high"] }, ctx.resolveScalarType);
-      await impl.putInstance(builtinRest, "scalar_type", "level", level as unknown as TransientValue, NO_ROLES);
-      const levelCtx = { resolveSchema: () => undefined, resolveScalarType: (n: string) => (n === "level" ? level : undefined) };
-      const gauge = processSchemaDescription({ name: "gauge", is_root: true, properties: [{ name: "level", type: "level" }] }, levelCtx);
-      await impl.putInstance(builtinRest, "schema", "gauge", gauge as unknown as TransientValue, NO_ROLES);
-
-      const locator = newAreaLocator(tag);
-      await initDataset(locator, "consumer");
-      const created = await runCommand(locator, { create: "gauge", input: [{ level: "low" }] });
-      const gaugeKey = (created.after[0] as Record<string, unknown>).id as string;
-
-      const parsed = JSON.parse(await dumpDataset(locator, "json")) as Record<string, Record<string, Record<string, unknown>>>;
-      // The built-in has not moved since the dump; the dumped instance itself no longer fits its schema.
-      (parsed.data.gauge[gaugeKey] as Record<string, unknown>).level = "medium";
-
-      const restoreRest = newAreaRest(tag);
-      await expect(restoreDataset(`${formatPrefix}:${restoreRest}`, JSON.stringify(parsed), "json")).rejects.toMatchObject({
-        code: "incompatible_upgrade",
-      });
-      expect(await impl.datasetExists(restoreRest)).toBe(false);
-    });
-
-    it("restoreDataset keeps an instance of a missing schema dormant: hidden from commands, dumped back unchanged", async () => {
-      const tag = "dormant";
-      const { builtinLocator } = await seedBuiltinDataset(tag);
-      const locator = newAreaLocator(tag);
-      await initDataset(locator, "consumer");
-      await runCommand(locator, { create: "widget", input: [{ label: "hello" }] });
-
-      const parsed = JSON.parse(await dumpDataset(locator, "json")) as Record<string, Record<string, unknown>>;
-      const ghost = { id: "g1", note: "boo" };
-      // Written while a contributor of "ghost" was installed, restored without it.
-      parsed.data.ghost = { g1: ghost };
-
-      const restoreLocator = newAreaLocator(tag);
-      const result = await restoreDataset(restoreLocator, JSON.stringify(parsed), "json");
-      expect(result.pendingRealignment).toEqual([]);
-
-      // Not visible to commands; the rest of the dataset works as usual.
-      await expect(runCommand(restoreLocator, { query: "ghost" })).rejects.toBeTruthy();
-      expect((await runCommand(restoreLocator, { query: "widget" })).after).toHaveLength(1);
-      expect(((await queryDataset(restoreLocator)) as Record<string, unknown>).schemas).not.toContain("ghost");
-
-      // Written back unchanged, and kept through a second round trip.
-      const redumped = JSON.parse(await dumpDataset(restoreLocator, "json")) as Record<string, Record<string, unknown>>;
-      expect(redumped.data.ghost).toEqual({ g1: ghost });
-      const secondLocator = newAreaLocator(tag);
-      await restoreDataset(secondLocator, JSON.stringify(redumped), "json");
-      const reredumped = JSON.parse(await dumpDataset(secondLocator, "json")) as Record<string, Record<string, unknown>>;
-      expect(reredumped.data.ghost).toEqual({ g1: ghost });
-
-      // Once its schema is available again, the dormant instance is an ordinary one.
-      const upgradeLocator = await createUpgradeLocator(builtinLocator);
-      await runCommand(upgradeLocator, {
-        create: "schema",
-        input: [{ name: "ghost", is_root: null, properties: [{ name: "note", type: "string" }] }],
-      });
-      await upgradeDataset(builtinLocator, upgradeLocator);
-      const queried = await runCommand(restoreLocator, { query: "ghost" });
-      expect(queried.after).toHaveLength(1);
-      expect(queried.after[0]).toMatchObject({ id: "g1", note: "boo" });
-      const finalDump = JSON.parse(await dumpDataset(restoreLocator, "json")) as Record<string, Record<string, unknown>>;
-      expect(finalDump.data.ghost).toEqual({ g1: ghost });
-    });
-
-    it("rejects an invalid dataset name", async () => {
-      const tag = "dataset-name-validation";
-      const builtinRest = impl.builtinRestFor(newAreaRest(tag)) as string;
-      await impl.createDataset(builtinRest, "Builtin");
-      const ctx = { resolveSchema: () => undefined, resolveScalarType: () => undefined };
-      const identifier = processScalarTypeDescription(
-        { name: "identifier", extends: "string", pattern: "^[A-Za-z_][A-Za-z0-9_]*$" },
-        ctx.resolveScalarType,
-      );
-      await impl.putInstance(builtinRest, "scalar_type", "identifier", identifier as unknown as TransientValue, NO_ROLES);
-
-      const locator = newAreaLocator(tag);
-      await initDataset(locator, "original");
-
-      await expect(runCommand(locator, { kind: "update", schema: "dataset", input: { name: "" } })).rejects.toMatchObject({
-        code: "constraint_violation",
-      });
-      await expect(runCommand(locator, { kind: "update", schema: "dataset", input: { name: "two words" } })).rejects.toMatchObject({
-        code: "constraint_violation",
-      });
-
-      const dataset = await queryDataset(locator);
-      expect((dataset as Record<string, unknown>).name).toBe("original");
-    });
-  });
-
-  /**
    * Modules and names, per the Module, Names and The Core Module parts of
    * packages/core/docs/spec/meta-model.md. A manifest and a set of modules
    * live in the engine, apart from any dataset, so these cases run the same
@@ -2488,7 +1958,40 @@ schemas:
   facetCases(formatPrefix, newLocator);
   moduleUpgradeCases(impl, formatPrefix, newLocator);
   addModuleCases(formatPrefix, newLocator);
+  describe(`restored instances — ${formatPrefix}`, () => {
+    it("refuses a dump whose instances have no schema, and creates nothing", async () => {
+      const locator = newLocator();
+      await initDataset(locator, "source");
+      const dump = JSON.parse(await dumpDataset(locator, "json"));
+      dump.data = { ...dump.data, missing_schema: { a: { id: "a" } } };
+      const target = newLocator();
+      await expect(restoreDataset(target, JSON.stringify(dump), "json")).rejects.toMatchObject({ code: "invalid_dump" });
+      expect(await impl.datasetExists(target.slice(formatPrefix.length + 1))).toBe(false);
+    });
+  });
+
+  describe(`dataset names — ${formatPrefix}`, () => {
+    it("rejects an invalid dataset name", async () => {
+      const locator = newLocator();
+      await initDataset(locator, "original");
+      const upgrade = await createUpgradeLocator(locator);
+      await runCommand(upgrade, { create: "scalar_type", input: [{ name: "identifier", extends: "string", pattern: "^[A-Za-z_][A-Za-z0-9_]*$" }] });
+      await upgradeDataset(locator, upgrade);
+
+      await expect(runCommand(locator, { kind: "update", schema: "dataset", input: { name: "" } })).rejects.toMatchObject({
+        code: "constraint_violation",
+      });
+      await expect(runCommand(locator, { kind: "update", schema: "dataset", input: { name: "two words" } })).rejects.toMatchObject({
+        code: "constraint_violation",
+      });
+
+      const dataset = await queryDataset(locator);
+      expect((dataset as Record<string, unknown>).name).toBe("original");
+    });
+  });
+
   ruleCases(formatPrefix, newLocator);
+  writeCases(impl, formatPrefix);
   procedureCases(formatPrefix, newLocator);
 }
 

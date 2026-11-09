@@ -104,7 +104,7 @@ describe("phase C", () => {
   it("upgrades a dataset through a migration when it is opened", async () => {
     const env = environmentWith(current());
     const dataset = await env.datasets.create({ locator: "js:upgraded", modules: ["scflow:core"] });
-    await dataset.query({ create: "scflow.location", input: { display_name: { en: "Lyon" }, timezone: "Europe/Paris" } } as never);
+    await dataset.run("scflow/create_location", { display_name: { en: "Lyon" }, timezone: "Europe/Paris" });
     const dump = await dataset.dump("json");
 
     const reopened = await environmentWith(nextVersion()).datasets.restore("js:upgraded", dump, "json");

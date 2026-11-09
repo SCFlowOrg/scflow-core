@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createImport, dumpDataset, initDataset, readModuleManifest, runCommand } from "@scfloworg/core";
+import { readModuleManifest } from "@scfloworg/core";
+import { createImport, dumpDataset, initDataset, runCommand } from "@scfloworg/core/testing";
 import type { ModuleManifest } from "@scfloworg/core";
 
 type Row = Record<string, unknown>;

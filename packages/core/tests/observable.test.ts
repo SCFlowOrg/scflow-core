@@ -1,15 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  createApiSession,
-  deleteDataset,
-  dumpDataset,
-  initDataset,
-  registerPersistentFormat,
-  restoreDataset,
-  runCommand,
-  subscribeObservable,
-  type ObservableChange,
-} from "../src/api.js";
+import { type ObservableChange } from "../src/api.js";
+import { createApiSession, deleteDataset, dumpDataset, initDataset, registerPersistentFormat, restoreDataset, runCommand, subscribeObservable } from "../src/testing.js";
 import { ModelError } from "../src/errors.js";
 import { processSchemaDescription } from "../src/schemaProcessing.js";
 import type { TypeResolutionContext } from "../src/schemaProcessing.js";
@@ -51,8 +42,6 @@ function fakeFormat(): PersistenceInterface {
   const persistenceImpl = {
     name,
     supportsTransactions: true,
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
 
     async datasetExists(rest) {
       return datasets.has(rest);
@@ -189,7 +178,7 @@ describe("T078b: observable schema constraint and subscribeObservable", () => {
   describe("delta notifications", () => {
     it("fires on outermost commitTransaction with correct filtering to observable schemas only", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable");
+      const rest = "test-observable";
       
       // Seed two schemas: one observable, one not
       await impl.seedObservableTaskSchema(rest);
@@ -234,7 +223,7 @@ describe("T078b: observable schema constraint and subscribeObservable", () => {
 
     it("fires on a transaction made of a revert", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable");
+      const rest = "test-observable";
       await impl.seedObservableTaskSchema(rest);
 
       const changes: ObservableChange[] = [];
@@ -270,7 +259,7 @@ describe("T078b: observable schema constraint and subscribeObservable", () => {
 
     it("fires on the revert of a revert", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable");
+      const rest = "test-observable";
       await impl.seedObservableTaskSchema(rest);
 
       const changes: ObservableChange[] = [];
@@ -307,7 +296,7 @@ describe("T078b: observable schema constraint and subscribeObservable", () => {
 
     it("does not fire for nested (non-outermost) commit", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable");
+      const rest = "test-observable";
       await impl.seedObservableTaskSchema(rest);
 
       const changes: ObservableChange[] = [];
@@ -414,7 +403,7 @@ describe("T078b: observable schema constraint and subscribeObservable", () => {
 
     it("stops receiving notifications after unsubscribe", async () => {
       await initDataset(locator, "test");
-      const rest = impl.areaOf("test-observable");
+      const rest = "test-observable";
       await impl.seedObservableTaskSchema(rest);
 
       const changes: ObservableChange[] = [];

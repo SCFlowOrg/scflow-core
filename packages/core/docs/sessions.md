@@ -27,7 +27,11 @@ locator without embedding a copy of `core`.
 
 `createApiSession()` returns an `ApiSession`: the same `runCommand` and `runScript`
 as the free functions, plus a cache of the models, a queue per locator, and
-transactions.
+transactions. Like them, it refuses a write of data with `write_outside_action`.
+Only `Engine.createActionSession()`, for the host that builds the context of an
+action, gives a session that may write; a test imports `createApiSession` from
+`@scfloworg/core/testing` instead (see Writes and actions in
+`docs/spec/typescript-reference-implementation.md`).
 
 ```ts
 interface ApiSession {

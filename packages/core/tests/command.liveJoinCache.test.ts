@@ -37,8 +37,6 @@ function fakeImpl(): { impl: PersistenceInterface; listCalls: (schema: string) =
 
   const impl: PersistenceInterface = {
     name: "fake",
-    areaOf: (rest) => rest,
-    builtinRestFor: () => "no-builtin",
     datasetExists: async () => true,
     createDataset: async () => ({}),
     getDataset: async () => ({}),

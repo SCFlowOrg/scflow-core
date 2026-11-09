@@ -162,6 +162,29 @@ ApiSession.addModule(locator: string, manifests: ModuleManifest[]): Promise<stri
 | `transactions_not_supported` | The upgrade needs a migration and the format does not support transactions                  |
 | `incompatible_upgrade`       | After the migrations, an instance does not match the installed schemas; nothing is changed  |
 
+## Restoring a dump
+
+An instance of a dump has its schema in the dump, in a module of the dump or in the meta-model. `restoreDataset` refuses any other with `invalid_dump`, and creates nothing.
+
+## Writes and actions
+
+*Definition.*
+
+Every function and session of the API refuses, with `write_outside_action`, a `create`, `update` or `delete` of data, in a command or in a script. This holds for `runCommand`, `runScript`, a `ScriptSession` and an `ApiSession`. A query needs no action.
+
+The writes that stay below actions pass: a command on the schemas of the model, and everything the engine does itself, such as loading a dataset, a model upgrade and the creation of singleton instances.
+
+```ts
+Engine.createActionSession(): ApiSession
+```
+
+- An action session is an `ApiSession` that may write. It is for the one host that builds the context of an action, and that host checks the write limit before each command. Nothing else opens one.
+- A host never hands an action session to a caller: a caller reaches a dataset through actions and queries.
+
+An engine is made by `createEngine` with its formats, and nothing is shared between engines.
+
+The entry `@scfloworg/core/testing` holds an engine whose functions and sessions may write, so a test can set up data and check a command by itself. It is for tests only.
+
 ## Persistence Interface
 
 *Definition.*

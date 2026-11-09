@@ -27,8 +27,6 @@
   outside an action is not refused yet, so it may write any schema and any facet.
 - **Singletons are seeded when a dataset is created.** A singleton schema added
   to a module by a later upgrade gets no instance.
-- **Extensions stay beside facets.** The `extension` relation still works; it is
-  removed once the graph styles of `scflow-plugins` use facets.
 - **Embedded schemas are not command targets.** An embedded schema is a data shape
   inside its owner; a command addressed to it fails with `unknown_schema`.
 - **Unknown input keys are ignored.** A key of a `create` or `update` `input` that
@@ -53,13 +51,7 @@
 - **`restoreDataset` validates the dump's structure only.** It checks that the dump
   has the `dataset`, `schemas`, `scalar_types` and `data` shape of `dumpDataset`; it
   does not run schema processing or instance validation again over the dumped
-  entities. It creates the extension instances they lack.
-- **An extension instance is stored apart.** The instances of an extension schema
-  are stored under its name, so a persistent format lists them, a dump holds them
-  and a transaction delta records them; a command never returns them. An instance
-  written outside the engine with no extension instance reads without the
-  properties of its extensions: only an upgrade or a `restoreDataset` creates the
-  missing ones, from the defaults.
+  entities.
 - **A model upgrade is classified conservatively.** A property whose `type` or
   array-ness changes is incompatible outright, even when every stored value would
   still fit, as in a relation retargeted so that every existing reference still
