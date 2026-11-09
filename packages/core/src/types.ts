@@ -190,8 +190,7 @@ export type ObservableListener = (change: ObservableChange) => void;
 // ---------------------------------------------------------------------------
 
 /**
- * The storage contract of a persistent format, registered with
- * `registerPersistentFormat`. `core` runs the whole command language on top
+ * The storage contract of a persistent format, given to `createEngine`. `core` runs the whole command language on top
  * of it and depends on no format. `rest` is the part of a locator after the
  * format prefix, whose meaning the format decides.
  *
