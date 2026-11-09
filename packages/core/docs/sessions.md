@@ -12,9 +12,9 @@ interface MclAccess {
 `MclAccess` is defined by `core`, as types only, for code that must run commands by
 locator without embedding a copy of `core`.
 
-- `core` does not implement it as a class. The free functions `runCommand` and
-  `runScript`, and the `ApiSession` returned by `createApiSession()`, already have
-  these signatures and can be used as an `MclAccess`.
+- `core` does not implement it as a class. The `runCommand` and `runScript` of an
+  `Engine`, and the `ApiSession` it creates, already have these signatures and can
+  be used as an `MclAccess`.
 - A host application that wants to restrict what its consumers reach implements
   `MclAccess` itself, for instance by refusing a locator that is not a dataset it
   has opened, then calls `core` underneath.
@@ -25,8 +25,8 @@ locator without embedding a copy of `core`.
 
 ## Sessions and transactions
 
-`createApiSession()` returns an `ApiSession`: the same `runCommand` and `runScript`
-as the free functions, plus a cache of the models, a queue per locator, and
+`Engine.createApiSession()` returns an `ApiSession`: the same `runCommand` and
+`runScript` as the engine, plus a cache of the models, a queue per locator, and
 transactions. Like them, it refuses a write of data with `write_outside_action`.
 Only `Engine.createActionSession()`, for the host that builds the context of an
 action, gives a session that may write; a test imports `createApiSession` from
@@ -63,8 +63,8 @@ interface ApiSession {
   order; a failed operation does not stop the next. Operations on other locators do
   not wait. `queryDataset`, `dumpDataset` and `deleteDataset` are queued like the
   others, and the session's `deleteDataset` first rolls back the open transaction
-  and drops the cache. The free functions join no queue: use the session's own
-  methods when it is the session that owns the locator.
+  and drops the cache. The functions of the engine join no queue: use the
+  session's own methods when it is the session that owns the locator.
 - **Write lock.** A format that provides the optional `lock(rest)` of
   `PersistenceInterface` serializes its writers across sessions and processes. Each
   command takes the lock, and a transaction takes it at its outermost
@@ -113,7 +113,7 @@ interface ApiSession {
   [observability.md](observability.md).
 
 ```ts
-const session = createApiSession();
+const session = engine.createActionSession(); // the host that runs the actions
 
 const tx = await session.beginTransaction(doc, "add task");
 try {
