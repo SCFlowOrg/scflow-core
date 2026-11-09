@@ -1,8 +1,7 @@
 // Builds the packages under packages/ in dependency order, through the project
-// references of each package. Two packages are built after it by their own
-// script, see build:packages in package.json: core-plugin-core, which is not a
-// composite project, and scflow-core, which generates sources first and bundles
-// its module afterwards.
+// references of each package. One package is built after it by its own
+// script, see build:packages in package.json: scflow-core, which generates
+// sources first and bundles its module afterwards.
 {
   "files": [],
   "references": [

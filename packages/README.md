@@ -14,7 +14,6 @@ These packages are the source of truth. They are developed, versioned and publis
 | `repl` | The interactive REPL, and the `scflow` command that works on a project through actions | `core`, `format-js`, `workspace` |
 | `mcp` | The MCP server on the workspace | `actions`, `core`, `workspace` |
 | `repl-conformance` | The same kind of suite, through the REPL command-block parser | `core`, `repl` |
-| `core-plugin-core` | The runtime behind the `core-plugin` application plugin | `core`, `format-js` |
 | `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, the check of the code against the manifest, `modules.load` | `core` (not its `defineModule` entry) |
 | `environment` | The environment: the catalogue of modules with their code, formats given at creation, open datasets, the context of actions and the transaction of one action | `core`, `module` |
 | `project-file` | The project file: the sectioned envelope in its two shapes, the registry of sections, the preservation of what a reader does not know | none |
