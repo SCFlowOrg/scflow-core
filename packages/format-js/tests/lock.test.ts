@@ -1,4 +1,4 @@
-import { createApiSession, registerPersistentFormat } from "@scfloworg/core";
+import { createApiSession, registerPersistentFormat } from "@scfloworg/core/testing";
 import type { TransientObject } from "@scfloworg/core";
 import { describe, expect, it } from "vitest";
 import { createJsPersistenceInterface } from "../src/index.js";

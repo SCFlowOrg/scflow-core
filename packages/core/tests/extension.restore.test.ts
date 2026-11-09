@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dumpDataset, queryDataset, registerPersistentFormat, restoreDataset, runCommand } from "../src/index.js";
+import { dumpDataset, queryDataset, registerPersistentFormat, restoreDataset, runCommand } from "../src/testing.js";
 import { runSchemaCommand } from "../src/modelUpgrade.js";
 import { loadResolvers } from "../src/resolvers.js";
 import type { PersistenceInterface, TransientObject } from "../src/types.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModelError } from "../src/errors.js";
-import { registerPersistentFormat, runCommand } from "../src/index.js";
+import { registerPersistentFormat, runCommand } from "../src/testing.js";
 import { processSchemaDescription } from "../src/schemaProcessing.js";
 import type { TypeResolutionContext } from "../src/schemaProcessing.js";
 import type { Key, NormalizedSchema, PersistenceInterface, TransientObject, TransientValue } from "../src/types.js";

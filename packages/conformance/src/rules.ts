@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createApiSession,
-  createUpgradeLocator,
-  initDataset,
-  queryDataset,
-  readModuleManifest,
-  runCommand,
-  runScript,
-  upgradeDataset,
-} from "@scfloworg/core";
+import { readModuleManifest } from "@scfloworg/core";
+import { createApiSession, createUpgradeLocator, initDataset, queryDataset, runCommand, runScript, upgradeDataset } from "@scfloworg/core/testing";
 
 /** Runs a module upgrade through a session of its own. */
 const upgradeModule = (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) =>

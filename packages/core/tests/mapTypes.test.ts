@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runCommand } from "../src/index.js";
+import { runCommand } from "../src/testing.js";
 import { processSchemaDescription, resolveType } from "../src/schemaProcessing.js";
 import type { TypeResolutionContext } from "../src/schemaProcessing.js";
 import type { NormalizedSchema } from "../src/types.js";

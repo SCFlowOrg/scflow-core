@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { modelError } from "../src/errors.js";
-import { createApiSession, createScriptSession, registerPersistentFormat, runCommand, runScript } from "../src/index.js";
+import { createApiSession, createScriptSession, registerPersistentFormat, runCommand, runScript } from "../src/testing.js";
 import type { AuthoredCommand, Key, PersistenceInterface, TransientObject, TransientValue } from "../src/types.js";
 
 /**

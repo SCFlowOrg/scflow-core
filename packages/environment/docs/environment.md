@@ -252,8 +252,8 @@ interface ActionContext extends MclAccess {
   schemas of its module, and a property of a facet only if that facet is in its
   `writes`. A `read` action writes nothing. Each step of a script is checked
   before the script runs.
-- A write outside an action is not refused yet; `query` below runs any
-  command.
+- A write outside an action fails with `write_outside_action`: the context
+  of an action is the only way to write.
 
 ## Queries and saving
 
@@ -264,9 +264,8 @@ dataset.dump(format: "json" | "yaml"): Promise<string>
 dataset.close(): Promise<void>
 ```
 
-- `query` runs a command outside any action, for a read. A query needs no
-  action. A write through it is not refused yet; it will be with
-  `write_outside_action` once the engine checks write access.
+- `query` runs a query outside any action. Any other command fails with
+  `write_outside_action`.
 - `dump` writes the dataset with its modules embedded, as `dumpDataset` does,
   and `restore` reads it back in this environment or in another one.
 - `close` forgets the dataset: a later `open` reads it again. It does not

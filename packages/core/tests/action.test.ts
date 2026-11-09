@@ -1,5 +1,5 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
-import { createApiSession } from "../src/index.js";
+import { createApiSession } from "../src/testing.js";
 import type {
   MclAccess,
   ModelActionDefinition,

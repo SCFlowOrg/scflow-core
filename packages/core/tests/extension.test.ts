@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkUpgrade, createUpgradeLocator, registerPersistentFormat, runCommand, upgradeDataset } from "../src/index.js";
+import { checkUpgrade, createUpgradeLocator, registerPersistentFormat, runCommand, upgradeDataset } from "../src/testing.js";
 import { runSchemaCommand } from "../src/modelUpgrade.js";
 import { loadResolvers } from "../src/resolvers.js";
 import { processSchemaDescription } from "../src/schemaProcessing.js";

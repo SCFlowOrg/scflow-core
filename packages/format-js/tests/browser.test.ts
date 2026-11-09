@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { registerPersistentFormat, initDataset, runCommand, processSchemaDescription, NO_ROLES } from "@scfloworg/core";
+import { processSchemaDescription, NO_ROLES } from "@scfloworg/core";
+import { registerPersistentFormat, initDataset, runCommand } from "@scfloworg/core/testing";
 import type { NormalizedSchema, TransientObject, TransientValue } from "@scfloworg/core";
 import { createJsPersistenceInterface } from "../src/browser.js";
 

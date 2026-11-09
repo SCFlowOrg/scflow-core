@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModelError } from "../src/errors.js";
-import { createApiSession, registerPersistentFormat } from "../src/index.js";
+import { createApiSession, registerPersistentFormat } from "../src/testing.js";
 import type { ApiSession, Delta, PreparedTransaction } from "../src/index.js";
 import { applyInverseRelations } from "../src/modelUpgrade.js";
 import { processSchemaDescription } from "../src/schemaProcessing.js";

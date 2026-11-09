@@ -90,6 +90,20 @@ function newScope(formats: readonly PersistenceInterface[]): EngineScope {
 /** The scope of the free functions of the API. */
 const GLOBAL_SCOPE = newScope([]);
 
+/**
+ * Refuses, with `write_outside_action`, a command among `commands` that writes
+ * data, unless the caller `mayWrite`: only an action session or the entry for
+ * tests may. A command on the schemas of the model stays below actions.
+ */
+function refuseWriteOutsideAction(mayWrite: boolean, commands: readonly { kind: string; schema: string }[]): void {
+  if (mayWrite) return;
+  for (const command of commands) {
+    if ((command.kind === "create" || command.kind === "update" || command.kind === "delete") && !isModelSchema(command.schema)) {
+      throw modelError("write_outside_action", `a ${command.kind} of "${command.schema}" runs outside an action`);
+    }
+  }
+}
+
 /** Registers `impl` under `impl.name` for the free functions, the prefix of the locators it serves; a later registration under the same name replaces the earlier one. An engine made by `createEngine` does not see it. */
 export function registerPersistentFormat(impl: PersistenceInterface): void {
   GLOBAL_SCOPE.formats.set(impl.name, impl);
@@ -1457,9 +1471,10 @@ function isNoopDatasetRename(command: { kind: string; schema: string }, result: 
  * Throws `unknown_persistent_format`, `dataset_not_found`, `not_upgrade_locator`, `upgrade_locator`, and any Command or Filter exception.
  * See `docs/commands.md`.
  */
-async function runCommandIn(scope: EngineScope, locator: string, command: AuthoredCommand): Promise<CommandResult> {
+async function runCommandIn(scope: EngineScope, locator: string, command: AuthoredCommand, mayWrite: boolean): Promise<CommandResult> {
   const { impl, rest } = resolveImpl(scope, locator);
   const resolved = resolveCommandForm(command) as unknown as Command;
+  refuseWriteOutsideAction(mayWrite, [resolved]);
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
     const result = await runChecked(impl, rest, locator, resolvers, (checked) => runCommandEngine(checked, rest, resolved, resolvers));
@@ -1499,9 +1514,10 @@ async function runChecked<T>(
  * Runs the commands of `script` in order against the dataset at `locator` and returns the result of the last one;
  * a command names its result with `as` for later placeholders. Throws what `runCommand` throws, and `unknown_reference`.
  */
-async function runScriptIn(scope: EngineScope, locator: string, script: AuthoredScript): Promise<CommandResult> {
+async function runScriptIn(scope: EngineScope, locator: string, script: AuthoredScript, mayWrite: boolean): Promise<CommandResult> {
   const { impl, rest } = resolveImpl(scope, locator);
   const resolvedCommands = script.commands.map((c) => resolveCommandForm(c) as unknown as ScriptCommand);
+  refuseWriteOutsideAction(mayWrite, resolvedCommands);
   return withLock(impl, rest, async () => {
     const resolvers = await loadResolvers(impl, rest);
     const resolvedScript: Script = { commands: resolvedCommands };
@@ -1526,7 +1542,7 @@ async function runScriptIn(scope: EngineScope, locator: string, script: Authored
  * here bumps `data_minor_version` on its own if it wasn't a `query` — every
  * separately-typed command is its own change, not a batch.
  */
-async function createScriptSessionIn(scope: EngineScope, locator: string): Promise<ScriptSession> {
+async function createScriptSessionIn(scope: EngineScope, locator: string, mayWrite: boolean): Promise<ScriptSession> {
   const { impl, rest } = resolveImpl(scope, locator);
   const resolvers = await loadResolvers(impl, rest);
   // each run is a transaction of its own: its writes go through the capture of the current run
@@ -1540,7 +1556,8 @@ async function createScriptSessionIn(scope: EngineScope, locator: string): Promi
   const session = await createScriptSessionEngine(through, rest, async () => resolvers);
   return {
     variables: session.variables,
-    run(scriptCommand: ScriptCommand): Promise<CommandResult> {
+    async run(scriptCommand: ScriptCommand): Promise<CommandResult> {
+      refuseWriteOutsideAction(mayWrite, [scriptCommand]);
       return withLock(impl, rest, async () => {
         const result = await runChecked(impl, rest, locator, resolvers, async (checked) => {
           current = checked;
@@ -2214,7 +2231,7 @@ function decodeDelta(delta: Delta): { versions: DatasetVersions; entries: DeltaE
  * `deleteDataset`, which would otherwise read or act on an intermediate
  * state.
  */
-function createApiSessionIn(scope: EngineScope): ApiSession {
+function createApiSessionIn(scope: EngineScope, mayWrite: boolean): ApiSession {
   const resolversCache = new Map<string, Promise<CachedModel>>();
   const openTx = new Map<string, OpenTransaction>();
   const pending = new Map<string, Promise<void>>();
@@ -2507,6 +2524,7 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
           await revalidateModel(impl, rest, locator);
           const resolvers = await getResolvers(impl, rest, locator);
           const resolved = resolveCommandForm(command) as unknown as Command;
+          refuseWriteOutsideAction(mayWrite, [resolved]);
           const deltaImpl = wrapForDeltaCapture(impl, locator, openTx, () => getResolvers(impl, rest, locator));
           // inside a transaction the rules wait for its prepare phase; outside, the command is a transaction of its own
           const result = openTx.has(locator)
@@ -2537,6 +2555,7 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
         refuseIfPrepared(locator);
         const { impl, rest } = resolveImpl(scope, locator);
         const resolvedCommands = script.commands.map((c) => resolveCommandForm(c) as unknown as ScriptCommand);
+        refuseWriteOutsideAction(mayWrite, resolvedCommands);
         return withWriteLock(locator, impl, rest, async () => {
           await revalidateModel(impl, rest, locator);
           const resolvedScript: Script = { commands: resolvedCommands };
@@ -2566,7 +2585,8 @@ function createApiSessionIn(scope: EngineScope): ApiSession {
       const session = await createScriptSessionEngine(through, rest, () => getResolvers(impl, rest, locator));
       return {
         variables: session.variables,
-        run(scriptCommand: ScriptCommand): Promise<CommandResult> {
+        async run(scriptCommand: ScriptCommand): Promise<CommandResult> {
+          refuseWriteOutsideAction(mayWrite, [scriptCommand]);
           return serialize(locator, async () => {
             refuseIfPrepared(locator);
             return withWriteLock(locator, impl, rest, async () => {
@@ -2803,10 +2823,12 @@ export interface Engine {
   runScript(locator: string, script: AuthoredScript): Promise<CommandResult>;
   createScriptSession(locator: string): Promise<ScriptSession>;
   createApiSession(): ApiSession;
+  /** An `ApiSession` that may write: for the one host that builds the context of an action, never handed to a caller. See Writes and actions in `docs/spec/typescript-reference-implementation.md`. */
+  createActionSession(): ApiSession;
   subscribeObservable(locator: string, listener: ObservableListener): () => void;
 }
 
-function engineOf(scope: EngineScope): Engine {
+function engineOf(scope: EngineScope, mayWrite = false): Engine {
   return Object.freeze({
     formats: Object.freeze([...scope.formats.values()]),
     initDataset: (locator: string, name: string, options?: InitDatasetOptions) => initDatasetIn(scope, locator, name, options),
@@ -2824,10 +2846,11 @@ function engineOf(scope: EngineScope): Engine {
     queryUpgradeLocator: (upgradeLocator: string) => queryUpgradeLocatorIn(scope, upgradeLocator),
     checkUpgrade: (locator: string, upgradeLocator: string) => checkUpgradeIn(scope, locator, upgradeLocator),
     upgradeDataset: (locator: string, upgradeLocator: string) => upgradeDatasetIn(scope, locator, upgradeLocator),
-    runCommand: (locator: string, command: AuthoredCommand) => runCommandIn(scope, locator, command),
-    runScript: (locator: string, script: AuthoredScript) => runScriptIn(scope, locator, script),
-    createScriptSession: (locator: string) => createScriptSessionIn(scope, locator),
-    createApiSession: () => createApiSessionIn(scope),
+    runCommand: (locator: string, command: AuthoredCommand) => runCommandIn(scope, locator, command, mayWrite),
+    runScript: (locator: string, script: AuthoredScript) => runScriptIn(scope, locator, script, mayWrite),
+    createScriptSession: (locator: string) => createScriptSessionIn(scope, locator, mayWrite),
+    createApiSession: () => createApiSessionIn(scope, mayWrite),
+    createActionSession: () => createApiSessionIn(scope, true),
     subscribeObservable: (locator: string, listener: ObservableListener) => subscribeObservableIn(scope, locator, listener),
   });
 }
@@ -2868,3 +2891,11 @@ export const {
   createApiSession,
   subscribeObservable,
 } = engineOf(GLOBAL_SCOPE);
+
+/** The free functions with the right to write, for the entry `@scfloworg/core/testing` only. */
+export const TESTING_ENGINE: Engine = engineOf(GLOBAL_SCOPE, true);
+
+/** An engine with its own formats whose functions and sessions may write, for the entry `@scfloworg/core/testing` only. */
+export function createTestingEngine(options: EngineOptions = {}): Engine {
+  return engineOf(newScope(options.formats ?? []), true);
+}

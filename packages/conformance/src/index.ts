@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  bumpMajorVersions,
-  createApiSession,
-  createModuleSet,
-  checkUpgrade,
-  createUpgradeLocator,
-  MCL_CORE,
-  deleteDataset,
-  dumpDataset,
-  initDataset,
-  NO_ROLES,
-  processScalarTypeDescription,
-  processSchemaDescription,
-  queryDataset,
-  queryUpgradeLocator,
-  readModuleManifest,
-  registerPersistentFormat,
-  restoreDataset,
-  runCommand,
-  runScript,
-  upgradeDataset,
-} from "@scfloworg/core";
+import { createModuleSet, MCL_CORE, NO_ROLES, processScalarTypeDescription, processSchemaDescription, readModuleManifest } from "@scfloworg/core";
+import { bumpMajorVersions, createApiSession, checkUpgrade, createUpgradeLocator, deleteDataset, dumpDataset, initDataset, queryDataset, queryUpgradeLocator, registerPersistentFormat, restoreDataset, runCommand, runScript, upgradeDataset } from "@scfloworg/core/testing";
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
@@ -28,6 +8,7 @@ import { addModuleCases } from "./addModule.js";
 import { moduleUpgradeCases } from "./moduleUpgrade.js";
 import { procedureCases } from "./procedures.js";
 import { ruleCases } from "./rules.js";
+import { writeCases } from "./writes.js";
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -2489,6 +2470,7 @@ schemas:
   moduleUpgradeCases(impl, formatPrefix, newLocator);
   addModuleCases(formatPrefix, newLocator);
   ruleCases(formatPrefix, newLocator);
+  writeCases(impl, formatPrefix);
   procedureCases(formatPrefix, newLocator);
 }
 

@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createApiSession,
-  initDataset,
-  moduleDigest,
-  queryDataset,
-  readModuleManifest,
-  runCommand,
-} from "@scfloworg/core";
+import { moduleDigest, readModuleManifest } from "@scfloworg/core";
+import { createApiSession, initDataset, queryDataset, runCommand } from "@scfloworg/core/testing";
 import type {
   MigrationStep,
   ModuleManifest,

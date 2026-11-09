@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  createApiSession,
-  deleteDataset,
-  initDataset,
-  registerPersistentFormat,
-  subscribeObservable,
-  type ObservableChange,
-} from "../src/api.js";
+import { type ObservableChange } from "../src/api.js";
+import { createApiSession, deleteDataset, initDataset, registerPersistentFormat, subscribeObservable } from "../src/testing.js";
 import { ModelError } from "../src/errors.js";
 import { processSchemaDescription, SCHEMA_ROLES } from "../src/schemaProcessing.js";
 import type { TypeResolutionContext } from "../src/schemaProcessing.js";

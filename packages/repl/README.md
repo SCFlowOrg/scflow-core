@@ -18,16 +18,17 @@ model-repl [--init <file>] [--format-module <specifier>]... [--log-file <path>] 
 > new js:mydb db1
 created "db1" -> js:mydb (current)
 db1> run
-... kind: create
-... schema: task
-... input: [{title: "Ship the REPL"}]
+... kind: query
+... schema: dataset
 ...
-before: 0  after: 1  cascade-deleted: 0  updated-before: 0  updated-after: 0
-db1> print r.after.0.title
-Ship the REPL
+before: 1  after: 1  cascade-deleted: 0  updated-before: 0  updated-after: 0
+db1> print r.after.0.name
+db1
 ```
 
 Every line is a meta-command; `run` is the way to enter YAML. The commands, dataset contexts, variables, snippets and model upgrades are described in [docs/commands.md](docs/commands.md); `help` and `help mcl` list them in the REPL.
+
+The REPL reads a dataset and changes its model. A `create`, `update` or `delete` of data fails with `write_outside_action`: data changes through actions, with the `scflow` command. A test passes `createReplState` a session from `@scfloworg/core/testing`.
 
 ## Logging
 

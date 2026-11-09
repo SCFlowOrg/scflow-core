@@ -3,18 +3,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as YAML from "js-yaml";
-import { createLogger, createUpgradeLocator, initDataset, registerPersistentFormat, runCommand, upgradeDataset } from "@scfloworg/core";
+import { createLogger } from "@scfloworg/core";
+import { createApiSession, createUpgradeLocator, initDataset, registerPersistentFormat, runCommand, upgradeDataset } from "@scfloworg/core/testing";
 import type { PersistenceInterface } from "@scfloworg/core";
 import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import { registerOpenContext } from "../src/datasets.js";
 import type { LineSource, Output } from "../src/io.js";
-import { runRepl } from "../src/repl.js";
+import { runRepl as runReplOn } from "../src/repl.js";
 import { createReplState } from "../src/state.js";
 
 // A dedicated `js` impl instance for this test file, registered once under
 // its own format name so dataset state can't bleed across test files —
 // mirrors packages/conformance/src/index.ts's `runConformanceSuite`.
 registerPersistentFormat(createJsPersistenceInterface("repltest"));
+
+/** Runs the loop on a session that may write, as these tests check the commands themselves. */
+const runRepl = (lines: Parameters<typeof runReplOn>[0], out: Parameters<typeof runReplOn>[1], state = createReplState({ apiSession: createApiSession() })) => runReplOn(lines, out, state);
 
 let counter = 0;
 function newLocator(): string {
@@ -285,7 +289,7 @@ describe("@scfloworg/repl", () => {
   it("accepts a pre-populated ReplState, as cli.ts's --init flow provides", async () => {
     const locator = newLocator();
     await seedTaskDemo(locator);
-    const state = createReplState();
+    const state = createReplState({ apiSession: createApiSession() });
     await registerOpenContext(state, "pre", locator);
     expect(state.currentName).toBe("pre");
 
@@ -302,7 +306,7 @@ describe("@scfloworg/repl", () => {
     await seedTaskDemo(locator);
     const baseline = schemaLoads(); // seeding itself touches "schema" listInstances, against other rests (the upgrade locator) — snapshot after it's done
 
-    const state = createReplState();
+    const state = createReplState({ apiSession: createApiSession() });
     const { ctx: first } = await registerOpenContext(state, "first", locator);
     const { ctx: second } = await registerOpenContext(state, "second", locator);
 
@@ -323,8 +327,8 @@ describe("@scfloworg/repl", () => {
     await seedTaskDemo(locator);
     const baseline = schemaLoads();
 
-    const { ctx: a } = await registerOpenContext(createReplState(), "a", locator);
-    const { ctx: b } = await registerOpenContext(createReplState(), "b", locator);
+    const { ctx: a } = await registerOpenContext(createReplState({ apiSession: createApiSession() }), "a", locator);
+    const { ctx: b } = await registerOpenContext(createReplState({ apiSession: createApiSession() }), "b", locator);
 
     await a.session.run({ kind: "query", schema: "task" });
     await b.session.run({ kind: "query", schema: "task" });
@@ -338,7 +342,7 @@ describe("@scfloworg/repl", () => {
 
     // The --init pass: opens the dataset and runs one command, exactly as
     // cli.ts does before starting the real interactive loop.
-    const state = createReplState();
+    const state = createReplState({ apiSession: createApiSession() });
     const initOut = capturingOutput();
     await runRepl(
       arrayLineSource([`open ${locator}`, "run", "create: task", "as: seeded", 'input: [{title: "from init"}]', ""]),

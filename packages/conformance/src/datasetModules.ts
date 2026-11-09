@@ -1,18 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  checkImport,
-  createImport,
-  dumpDataset,
-  initDataset,
-  moduleDigest,
-  queryDataset,
-  readModuleManifest,
-  refreshImport,
-  removeImport,
-  restoreDataset,
-  runCommand,
-  setLocalModule,
-} from "@scfloworg/core";
+import { moduleDigest, readModuleManifest } from "@scfloworg/core";
+import { checkImport, createImport, dumpDataset, initDataset, queryDataset, refreshImport, removeImport, restoreDataset, runCommand, setLocalModule } from "@scfloworg/core/testing";
 import type { ModuleManifest, TransientValue } from "@scfloworg/core";
 
 type Row = Record<string, unknown>;

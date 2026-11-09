@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  registerPersistentFormat,
-  initDataset,
-  runCommand,
-  dumpDataset,
-  restoreDataset,
-  processSchemaDescription,
-  NO_ROLES,
-} from "@scfloworg/core";
+import { processSchemaDescription, NO_ROLES } from "@scfloworg/core";
+import { registerPersistentFormat, initDataset, runCommand, dumpDataset, restoreDataset } from "@scfloworg/core/testing";
 import type { NormalizedSchema, TransientObject, TransientValue } from "@scfloworg/core";
 import { createJsPersistenceInterface } from "../src/index.js";
 

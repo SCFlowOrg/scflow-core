@@ -58,13 +58,14 @@ export interface ReplState {
  * Creates an empty REPL state.
  *
  * @param options.logger - the process's logger; defaults to `noopLogger`.
+ * @param options.apiSession - the session the commands run on; defaults to one that refuses a write of data outside an action.
  */
-export function createReplState(options: { logger?: Logger } = {}): ReplState {
+export function createReplState(options: { logger?: Logger; apiSession?: ApiSession } = {}): ReplState {
   return {
     contexts: new Map(),
     currentName: null,
     snippets: new Map(),
-    apiSession: createApiSession(),
+    apiSession: options.apiSession ?? createApiSession(),
     logger: options.logger ?? noopLogger,
   };
 }

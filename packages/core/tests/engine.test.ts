@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { modelError } from "../src/errors.js";
-import { createEngine, queryDataset, registerPersistentFormat } from "../src/index.js";
+import { createEngine } from "../src/index.js";
+import { queryDataset, registerPersistentFormat } from "../src/testing.js";
 import type {
   Key,
   ObservableChange,
@@ -119,7 +120,7 @@ describe("createEngine", () => {
   it("runs commands and sessions on its own formats", async () => {
     const engine = createEngine({ formats: [memoryFormat("mem")] });
     await engine.initDataset("mem:plant", "plant");
-    const session = engine.createApiSession();
+    const session = engine.createActionSession();
     const tx = await session.beginTransaction("mem:plant", "rename");
     await session.runCommand("mem:plant", { update: "dataset", input: { name: "lyon" } });
     await session.commitTransaction("mem:plant", tx);
