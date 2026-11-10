@@ -72,6 +72,8 @@ export interface CreateDatasetOptions {
   locator?: string;
   /** The name of the dataset, `dataset` by default. */
   name?: string;
+  /** The ordered languages of the texts, the first being the source language; a host passes the language of its user interface. */
+  languages?: readonly string[];
 }
 
 /** `env.datasets`: the datasets of an environment. */
@@ -174,6 +176,14 @@ export interface OpenDataset {
    * back.
    */
   run(id: string, params?: unknown): Promise<ActionOutcome>;
+  /**
+   * Replaces the ordered `languages` of the dataset (see `languages` of
+   * `dataset` in `docs/spec/meta-model.md`), in one transaction unless one is
+   * open, which it joins: then `changed` is `false` and `delta` `null`, as for
+   * `run`. Fails with `constraint_violation` for a bad code or a duplicate,
+   * and with `read_only_dataset` on a read-only dataset.
+   */
+  setLanguages(languages: readonly string[]): Promise<{ changed: boolean; delta: Delta | null }>;
   /**
    * Opens a transaction that the next runs join, so that they are one step. A
    * joined run gives `changed: false` and `delta: null`: `prepare` tells for
@@ -285,7 +295,7 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
     async create(create: CreateDatasetOptions): Promise<OpenDataset> {
       const manifests = closure(modules, create.modules);
       const locator = create.locator ?? (await freeLocator(engine));
-      await engine.initDataset(locator, create.name ?? "dataset", { modules: manifests });
+      await engine.initDataset(locator, create.name ?? "dataset", { modules: manifests, ...(create.languages === undefined ? {} : { languages: [...create.languages] }) });
       return openAt(locator);
     },
     open: (locator, options) => openAt(locator, options),
@@ -531,6 +541,36 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       }
     }
 
+    async function setLanguages(languages: readonly string[]): Promise<{ changed: boolean; delta: Delta | null }> {
+      if (readOnly) throw modelError("read_only_dataset", `"${locator}" is open read only, so its languages cannot change`);
+      const command = { update: "dataset", input: [{ languages: [...languages] }] } as unknown as AuthoredCommand;
+      if (openTransaction !== null) {
+        try {
+          await session.runCommand(locator, command);
+          return { changed: false, delta: null };
+        } catch (error) {
+          await session.rollbackTransaction(locator, openTransaction);
+          openTransaction = null;
+          throw error;
+        }
+      }
+      if (!(await session.supportsTransactions(locator))) {
+        const before = await dataVersions();
+        await session.runCommand(locator, command);
+        return { changed: (await dataVersions()) !== before, delta: null };
+      }
+      const tx = await session.beginTransaction(locator, "Set languages");
+      try {
+        await session.runCommand(locator, command);
+        const { changed, delta } = await session.prepareTransaction(locator, tx);
+        await session.commitTransaction(locator, tx);
+        return { changed, delta };
+      } catch (error) {
+        await session.rollbackTransaction(locator, tx);
+        throw error;
+      }
+    }
+
     async function dataVersions(): Promise<string> {
       const info = (await session.queryDataset(locator)) as TransientObject;
       return `${info.data_major_version}.${info.data_minor_version}`;
@@ -551,6 +591,7 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       readOnly,
       addModule: (key: string) => inTurn(() => addModule(key)),
       run: (id: string, params?: unknown) => inTurn(() => run(id, params)),
+      setLanguages: (languages: readonly string[]) => inTurn(() => setLanguages(languages)),
       begin: (label?: string) =>
         inTurn(async () => {
           if (readOnly)

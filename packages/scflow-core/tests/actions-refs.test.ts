@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { setupActions } from "./actions-helpers.js";
 import { resolveRef } from "../src/actions/refs.js";
-import { toLocalized } from "../src/actions/text.js";
+import { localizedText, toLocalized } from "../src/actions/text.js";
 
 async function setup() {
   return setupActions();
@@ -90,8 +90,38 @@ describe("toLocalized", () => {
     expect(toLocalized("Main warehouse")).toEqual({ en: "Main warehouse" });
   });
 
+  it("stores a plain string under the language given", () => {
+    expect(toLocalized("Entrepôt principal", "fr")).toEqual({ fr: "Entrepôt principal" });
+  });
+
   it("keeps a localized map as it is", () => {
     expect(toLocalized({ en: "Warehouse", fr: "Entrepôt" })).toEqual({ en: "Warehouse", fr: "Entrepôt" });
   });
 
+});
+
+describe("localizedText", () => {
+  it("writes a plain string in the source language of the dataset", async () => {
+    const { mcl, locator } = await setupActions({ languages: ["fr", "en"] });
+    const context = { ...mcl, locator } as never;
+    expect(await localizedText(context, "Entrepôt")).toEqual({ fr: "Entrepôt" });
+  });
+
+  it("writes it under en when the dataset states no language", async () => {
+    const { mcl, locator } = await setupActions();
+    const context = { ...mcl, locator } as never;
+    expect(await localizedText(context, "Warehouse")).toEqual({ en: "Warehouse" });
+  });
+
+  it("keeps a map as it is, whatever the languages", async () => {
+    const { mcl, locator } = await setupActions({ languages: ["fr"] });
+    const context = { ...mcl, locator } as never;
+    expect(await localizedText(context, { en: "Warehouse", de: "Lager" })).toEqual({ en: "Warehouse", de: "Lager" });
+  });
+
+  it("is what an action does with a plain string", async () => {
+    const { run } = await setupActions({ languages: ["fr", "en"] });
+    const scope = await run("scflow/create_scope", { display_name: "Fabrication" });
+    expect(scope.display_name).toEqual({ fr: "Fabrication" });
+  });
 });

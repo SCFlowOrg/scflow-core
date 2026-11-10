@@ -19,7 +19,11 @@ An action is not a tool of its own, because a model has well over 80 actions, an
 | `run_action` | Runs the action `id` with `params` | No |
 | `batch` | Runs `commands` in one transaction, each `{ call, with, as }`, with `${name.path}` references to earlier results, and an optional `label` | No |
 | `query` | Instances of `schema`, with optional `filters` | Yes |
+| `get_languages` | The ordered languages of the project, the first being the source language; `[]` when not stated | Yes |
+| `set_languages` | Replaces the `languages`, as one step `undo` can reverse. A duplicate or a bad code is refused with `constraint_violation`. Texts in other languages are kept | No |
 | `undo`, `redo` | Moves through the history of this server | No |
+
+`describe_action` names the languages of the project, and its source language, in the description of each localized text parameter (see `toAiTools` in `@scfloworg/actions`).
 
 An action whose `exposure` is `hidden` is absent from `list_actions`, and calling it is refused with `unknown_action`, in a batch as well.
 

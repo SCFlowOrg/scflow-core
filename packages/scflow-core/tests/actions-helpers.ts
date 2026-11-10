@@ -20,7 +20,7 @@ const definition = defineModule(load(readFileSync(join(root, "module.yaml"), "ut
 let counter = 0;
 
 /** The name of a schema of scflow:core, qualified unless it already is. */
-const qualified = (schema: string) => (schema.includes(".") ? schema : `scflow.${schema}`);
+const qualified = (schema: string) => (schema.includes(".") || schema === "dataset" ? schema : `scflow.${schema}`);
 
 /** The command with its schema qualified, whichever form it is written in. */
 function qualify(command: AuthoredCommand): AuthoredCommand {
@@ -37,14 +37,14 @@ function qualify(command: AuthoredCommand): AuthoredCommand {
  * `create` and `mcl` write below the actions, to set up a state a test starts
  * from, which may be one no action can reach. They qualify the schema names.
  */
-export async function setupActions() {
+export async function setupActions(options: { languages?: string[] } = {}) {
   const format = createJsPersistenceInterface();
   const env = createEnvironment({ formats: [format] });
   const belowActions = createTestingEngine({ formats: [format] });
   env.modules.install(definition);
   counter += 1;
   const locator = `js:actions${counter}`;
-  const dataset = await env.datasets.create({ locator, modules: ["scflow:core"] });
+  const dataset = await env.datasets.create({ locator, modules: ["scflow:core"], ...(options.languages ? { languages: options.languages } : {}) });
 
   const mcl = {
     runCommand: (_locator: string, command: AuthoredCommand): Promise<CommandResult> => belowActions.runCommand(locator, qualify(command)),

@@ -5,6 +5,7 @@
  */
 
 import { actionIdOfTool, toAiTools } from "@scfloworg/actions";
+import { languagesOf } from "@scfloworg/core";
 import { AiError, createAiClient, runAgent, type AiFetch, type AiToolCall } from "@scfloworg/ai";
 import {
   createSkillTool,
@@ -67,10 +68,14 @@ export function askSettings(
 }
 
 /** The system prompt, with the catalogue of the offered skills: their ids and when to use them, never their bodies. */
-function systemPrompt(skillTool: SkillTool | null): string {
-  if (!skillTool) return SYSTEM;
+function systemPrompt(skillTool: SkillTool | null, languages: readonly string[]): string {
+  const base =
+    languages.length === 0
+      ? SYSTEM
+      : `${SYSTEM} The languages of the project are ${languages.join(", ")}, the source language being ${languages[0]}: write every localized text only in them.`;
+  if (!skillTool) return base;
   return [
-    SYSTEM,
+    base,
     "",
     `Skills are methods for kinds of requests. When one fits the request, call ${SKILL_TOOL} with its id and follow its instructions.`,
     ...skillTool.skills.map((skill) => `- ${skill.id}: ${skill.title}. ${skill.description}`),
@@ -87,6 +92,7 @@ export async function ask(
   settings: AskSettings,
   options: AskOptions,
 ): Promise<void> {
+  const languages = languagesOf((await doc.dataset.info()) as { languages?: unknown });
   const actions = doc.dataset.actions().filter((action) => action.exposure !== "hidden");
   const readOnly = new Set(
     actions.filter((action) => action.kind === "read").map((action) => action.id),
@@ -115,10 +121,10 @@ export async function ask(
     outcome = await runAgent({
       client,
       messages: [
-        { role: "system", content: systemPrompt(skillTool) },
+        { role: "system", content: systemPrompt(skillTool, languages) },
         { role: "user", content: options.prompt },
       ],
-      tools: [...toAiTools(actions), ...(skillTool ? [skillTool.spec] : [])],
+      tools: [...toAiTools(actions, { languages }), ...(skillTool ? [skillTool.spec] : [])],
       maxTurns: options.maxTurns,
       approve: async (turn) => {
         // Loading a skill reads its body: it needs no approval.

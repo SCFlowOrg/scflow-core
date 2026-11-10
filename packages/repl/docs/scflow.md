@@ -3,7 +3,8 @@
 `scflow` works on a project on disk, through actions. `model-repl` stays beside it for the command language and the fixtures of `repl-conformance`: its low-level commands reach only datasets that are not projects.
 
 ```text
-scflow <project> create --type <publisher:type> --title <title> --module <key>... [--modules <folder>]
+scflow <project> create --type <publisher:type> --title <title> --module <key>... [--language <code>]... [--modules <folder>]
+scflow <project> languages [<codes as JSON array>] [--modules <folder>]
 scflow <project> actions [--modules <folder>]
 scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
 scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
@@ -16,6 +17,7 @@ scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]
 | Command | Does |
 | --- | --- |
 | `create` | Creates and saves a project that uses the modules `--module` names, with their dependencies. Refused if a project is already there |
+| `languages` | Without an argument, prints `{ languages }`, the ordered languages of the project (`[]` when not stated). With a JSON array of language codes, replaces them as one undoable step, saves, and prints `{ languages, changed, written }`. The first is the source language. `create --language` (repeatable) seeds them |
 | `actions` | Lists the actions the project can run |
 | `run` | Runs one action, and saves the project if the action changed it |
 | `query` | Runs a query of a schema, with no action. It writes nothing |
@@ -37,6 +39,8 @@ A refusal prints `{ "error": { "code", "message" } }` on the standard error and 
 Undo lives in memory, so it exists only in the shell. In the shell, `run` does not save: `save` does, and the end of the input without a `save` loses the changes, which the shell says.
 
 ## Asking a model
+
+`ask` tells the model the languages of the project and its source language, in its instructions and in the description of each localized text parameter, so it writes only in them.
 
 `ask` gives the prompt to a language model, with the visible actions of the project as its tools, through the agent loop of `@scfloworg/ai`. The model reads and changes the project only through actions.
 

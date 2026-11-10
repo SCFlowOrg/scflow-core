@@ -1,6 +1,6 @@
 import { loadInstance, type Instance } from "./refs.js";
 import { cascadeParam, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** Parameters of `scflow/add_note`. */
 export interface AddNoteParams {
@@ -55,7 +55,7 @@ export const addNoteAction: ScflowActionDefinition<AddNoteParams, NoteSummary> =
     additionalProperties: false,
   },
   async run(params, context) {
-    const content = toLocalized(params.content);
+    const content = await localizedText(context, params.content);
 
     const { after } = await context.runCommand(context.locator, {
       kind: "create",
@@ -84,7 +84,7 @@ export const updateNoteAction: ScflowActionDefinition<UpdateNoteParams, NoteSumm
     additionalProperties: false,
   },
   async run(params, context) {
-    const content = toLocalized(params.content);
+    const content = await localizedText(context, params.content);
 
     const { after } = await context.runCommand(context.locator, {
       kind: "update",

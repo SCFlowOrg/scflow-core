@@ -2,7 +2,7 @@ import { type Instance } from "./refs.js";
 import { cascadeParam, unique, tagsParam, type ActionAccess, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
 import { deleteById } from "./delete-impact.js";
 import { holdItem } from "./items.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
 type Text = string | Record<string, string>;
@@ -100,9 +100,9 @@ export const createTransformationTypeAction: ScflowActionDefinition<
     additionalProperties: false,
   },
   async run(params, context) {
-    const input: Record<string, unknown> = { display_name: toLocalized(params.display_name) };
+    const input: Record<string, unknown> = { display_name: await localizedText(context, params.display_name) };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -136,8 +136,8 @@ export const createTransformationAction: ScflowActionDefinition<CreateTransforma
   },
   async run(params, context) {
     return insertTransformation(context, params.actor, params.type, {
-      ...(params.display_name === undefined ? {} : { display_name: toLocalized(params.display_name) }),
-      ...(params.description === undefined ? {} : { description: toLocalized(params.description) }),
+      ...(params.display_name === undefined ? {} : { display_name: await localizedText(context, params.display_name) }),
+      ...(params.description === undefined ? {} : { description: await localizedText(context, params.description) }),
       ...(params.tags === undefined ? {} : { tags: unique(params.tags) }),
     });
   },

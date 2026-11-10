@@ -3,7 +3,7 @@
  * `docs/scflow.md`). Everything but the process itself is here, so tests run it.
  */
 
-import type { AuthoredCommand } from "@scfloworg/core";
+import { languagesOf, type AuthoredCommand } from "@scfloworg/core";
 import type { Document } from "@scfloworg/workspace";
 import { createProjectHost, type ProjectHost } from "@scfloworg/workspace/host";
 import type { AiFetch } from "@scfloworg/ai";
@@ -24,7 +24,8 @@ export interface ScflowIo {
 class UsageError extends Error {}
 
 const USAGE = `usage:
-  scflow <project> create --type <publisher:type> --title <title> --module <key>... [--modules <folder>]
+  scflow <project> create --type <publisher:type> --title <title> --module <key>... [--language <code>]... [--modules <folder>]
+  scflow <project> languages [<codes as JSON array>] [--modules <folder>]
   scflow <project> actions [--modules <folder>]
   scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
   scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
@@ -85,6 +86,17 @@ function describeActions(doc: Document): unknown[] {
   }));
 }
 
+/** The ordered languages of the document, `[]` when not stated. */
+async function readLanguages(doc: Document): Promise<string[]> {
+  return languagesOf((await doc.dataset.info()) as { languages?: unknown });
+}
+
+/** The list given to `languages`, an array of codes; the engine checks the codes and the duplicates. */
+function parseLanguages(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new UsageError("languages needs a JSON array of language codes, such as [\"fr\",\"en\"]");
+  return value as string[];
+}
+
 async function runQuery(doc: Document, schema: string, filters: unknown): Promise<unknown[]> {
   const command = { query: schema, ...(filters === undefined ? {} : { filters }) } as unknown as AuthoredCommand;
   return (await doc.dataset.query(command)).after;
@@ -119,6 +131,16 @@ async function shell(doc: Document, io: ScflowIo): Promise<void> {
       case "actions":
         print(describeActions(doc));
         return true;
+      case "languages": {
+        if (argument === undefined) {
+          print({ languages: await readLanguages(doc) });
+          return true;
+        }
+        const { changed } = await doc.setLanguages(parseLanguages(parseJson([argument, rest].filter((part) => part !== undefined).join(" "))));
+        unsaved ||= changed;
+        print({ languages: await readLanguages(doc), changed });
+        return true;
+      }
       case "undo":
       case "redo": {
         const moved = await (command === "undo" ? doc.undo() : doc.redo());
@@ -168,6 +190,7 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
         modules: required(parsed, "module"),
         type: type as string,
         title: title as string,
+        ...(parsed.options.has("language") ? { languages: parsed.options.get("language") as string[] } : {}),
       });
       print({ written: (await doc.save()).written });
       return;
@@ -175,6 +198,19 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
     case "actions": {
       const doc = await (await host()).workspace.open(project, { readOnly: true });
       print(describeActions(doc));
+      return;
+    }
+    case "languages": {
+      if (first === undefined) {
+        const doc = await (await host()).workspace.open(project, { readOnly: true });
+        print({ languages: await readLanguages(doc) });
+        return;
+      }
+      const languages = parseLanguages(parseJson(first));
+      const doc = await (await host()).workspace.open(project);
+      const { changed } = await doc.setLanguages(languages);
+      const written = changed ? (await doc.save()).written : [];
+      print({ languages: await readLanguages(doc), changed, written });
       return;
     }
     case "query": {

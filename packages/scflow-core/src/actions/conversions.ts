@@ -1,7 +1,7 @@
 import { type Instance } from "./refs.js";
 import { type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { deleteById } from "./delete-impact.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
 type Text = string | Record<string, string>;
@@ -64,10 +64,10 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
   async run(params, context) {
     const input: Record<string, unknown> = { actor: params.actor, from_item: params.from_item, to_item: params.to_item };
     if (params.display_name !== undefined) {
-      input.display_name = toLocalized(params.display_name);
+      input.display_name = await localizedText(context, params.display_name);
     }
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -107,10 +107,10 @@ export const updateConversionAction: ScflowActionDefinition<UpdateConversionPara
     const patch: Record<string, unknown> = {};
 
     if (params.display_name !== undefined) {
-      patch.display_name = params.display_name === null ? null : { set: toLocalized(params.display_name) };
+      patch.display_name = params.display_name === null ? null : { set: await localizedText(context, params.display_name) };
     }
     if (params.description !== undefined) {
-      patch.description = params.description === null ? null : { set: toLocalized(params.description) };
+      patch.description = params.description === null ? null : { set: await localizedText(context, params.description) };
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {

@@ -25,5 +25,5 @@ export { createActionRegistry, createRunLog, entryOfRefusal } from "./registry.j
 export type { ActionRegistry, RunLog } from "./registry.js";
 export { runBatch } from "./batch.js";
 export type { Batch, BatchCall, BatchOutcome } from "./batch.js";
-export { actionIdOfTool, toAiTool, toAiTools, toolName } from "./tools.js";
-export type { AiTool } from "./tools.js";
+export { actionIdOfTool, languagesNote, parametersWithLanguages, toAiTool, toAiTools, toolName } from "./tools.js";
+export type { AiTool, ToolOptions } from "./tools.js";

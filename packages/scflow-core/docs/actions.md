@@ -18,7 +18,7 @@ The package exports them as `ACTIONS`. Each has a body `run(params, context)`, t
 - **Identifiers**: `scflow/<action_name>` (lowercase with underscores).
 - **Flexible Reference Resolution (ID or Name)**: To streamline AI calling and human scripting, a reference to an entity that has a `display_name` (actor, actor type, scope, location, item, item type, transformation, transformation type, conversion) accepts either its id or its display name. The id is tried first; otherwise the name must match exactly the `display_name` of one entity, in any language. No match is an error, and several matches are an error that lists the candidate ids. These references are parameters with the keyword `ref`, resolved by the registry before the body runs: a value that matches no instance or several is refused with `invalid_parameters`. An instance that has no name, such as an `item_at_actor`, can only be given by its id.
 - **Atomic Transactions**: An action either succeeds completely or rolls back without leaving partial mutations in the model dataset. The action opens no transaction itself: the host runs it inside one.
-- **Multilingual Support**: Text fields (`display_name`, `description`) accept either a plain string or a localized map `Record<string, string>`. An action receives no active language, so a plain string `s` is stored as `{ en: s }`.
+- **Multilingual Support**: Text fields (`display_name`, `description`) accept either a plain string or a localized map `Record<string, string>`. An action receives no active language, so a plain string `s` is stored in the source language of the dataset, the first of its `languages`: `{ fr: s }` for `["fr", "en"]`, and `{ en: s }` when the dataset states none.
 - **Parameter validation**: The registry checks `parameters` against their JSON Schema before the body runs and refuses a breach with `invalid_parameters`, so a body validates nothing by hand.
 - **CRUD parameters**: An action that takes the place of a CRUD operation of a schema, named by the `crud` of that schema, follows the CRUD parameters of the [meta-model](../../core/docs/spec/meta-model.md#action): a create takes the property names, an update takes `id` and the property names, and a delete takes `id` and `cascade`. A create takes every property of its schema, `tags` included.
 - **Write limit**: Each action declares the schemas it writes in `writes`; a write outside them is refused with `write_not_declared`.
@@ -310,7 +310,7 @@ A note is a free-form annotation of any entity of the model, in one or more lang
 Adds a note to an entity.
 - **Parameters**:
   - `annotated` *(string, required)*: Id of the annotated entity, whatever its schema.
-  - `content` *(string | Record<string, string>, required)*: Markdown text. A plain string is stored as `{ en: s }`.
+  - `content` *(string | Record<string, string>, required)*: Markdown text. A plain string is stored in the source language of the dataset, `en` when none is stated.
 - **Behavior**: The entity is found among all the entities, by its id or by a name that designates one instance; no match is refused with `invalid_parameters`. A note has no uniqueness rule: the same text can be added twice.
 - **Returns**: The created note `{ id, entity, content }`.
 

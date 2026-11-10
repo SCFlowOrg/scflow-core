@@ -122,12 +122,36 @@ describe("acceptance of phase D", () => {
   });
 });
 
+describe("languages", () => {
+  it("reads [] when not stated, sets the list, saves it and undoes it", async () => {
+    const dirs = await project();
+    const { call } = await connect(dirs);
+    expect((await call("get_languages")).value).toEqual({ languages: [] });
+    expect((await call("set_languages", { languages: ["fr", "en"] })).value).toEqual({ languages: ["fr", "en"], changed: true });
+    const read = await cli(dirs.path, "languages", "--modules", dirs.modules);
+    expect(JSON.parse(read.out[0] as string)).toEqual({ languages: ["fr", "en"] });
+    await call("undo");
+    expect((await call("get_languages")).value).toEqual({ languages: [] });
+  });
+
+  it("refuses a duplicate and a bad code, and changes nothing", async () => {
+    const { call } = await connect(await project());
+    await call("set_languages", { languages: ["fr"] });
+    for (const languages of [["en", "en"], ["english"]]) {
+      const refused = await call("set_languages", { languages });
+      expect(refused.isError).toBe(true);
+      expect(refused.value.error.code).toBe("constraint_violation");
+    }
+    expect((await call("get_languages")).value).toEqual({ languages: ["fr"] });
+  });
+});
+
 describe("tools", () => {
   it("exposes a catalogue, not one tool per action", async () => {
     const { client } = await connect(await project());
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
-      "batch", "describe_action", "list_actions", "query", "redo", "run_action", "undo",
+      "batch", "describe_action", "get_languages", "list_actions", "query", "redo", "run_action", "set_languages", "undo",
     ]);
     expect(tools.find((tool) => tool.name === "query")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((tool) => tool.name === "run_action")?.annotations?.readOnlyHint).toBe(false);
