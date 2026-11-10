@@ -162,6 +162,16 @@ describe("scflow ask", () => {
     ).toEqual(["One", "Two"]);
   });
 
+  it("tells the model the languages of the project", async () => {
+    const d = await created();
+    await scflow([d.project, "languages", '["fr","en"]', "--modules", d.modules]);
+    const fetch = fakeFetch(answer("Nothing to do."));
+    await scflow([d.project, "ask", "Hello", "--modules", d.modules], { fetch });
+    const system = (fetch.requests[0]?.messages as { role: string; content: string }[])[0];
+    expect(system?.content).toContain("fr, en");
+    expect(system?.content).toContain("source language being fr");
+  });
+
   it("asks one approval for the calls of an answer on the terminal", async () => {
     const d = await created();
     const fetch = fakeFetch(twoTasks(), answer("Done."));

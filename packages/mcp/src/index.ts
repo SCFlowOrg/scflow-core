@@ -5,8 +5,8 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { parametersSchema, runBatch, type ActionRegistry, type Batch } from "@scfloworg/actions";
-import type { AuthoredCommand } from "@scfloworg/core";
+import { parametersWithLanguages, runBatch, type ActionRegistry, type Batch } from "@scfloworg/actions";
+import { languagesOf, type AuthoredCommand } from "@scfloworg/core";
 import type { Document } from "@scfloworg/workspace";
 import type { ProjectHost } from "@scfloworg/workspace/host";
 
@@ -69,6 +69,23 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: "get_languages",
+    description: "Give the ordered languages of the project, the first being the source language. [] means not stated.",
+    inputSchema: NO_ARGUMENTS,
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "set_languages",
+    description:
+      "Replace the ordered languages of the project, as one step that undo can reverse. The first is the source language. The list offers and expects: texts in other languages are kept, and removing a language removes no text. The project is saved.",
+    inputSchema: {
+      type: "object",
+      properties: { languages: { type: "array", items: { type: "string", pattern: "^[a-z]{2}(-[A-Z]{2})?$" }, uniqueItems: true } },
+      required: ["languages"],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+  },
+  {
     name: "undo",
     description: "Undo the last step made through this server. The project is saved.",
     inputSchema: NO_ARGUMENTS,
@@ -96,6 +113,10 @@ function stringArgument(args: Args, name: string): string {
 export async function createMcpServer(options: McpServerOptions): Promise<Server> {
   const { host, path } = options;
   let doc: Document = await host.workspace.open(path);
+
+  async function languages(): Promise<string[]> {
+    return languagesOf((await doc.dataset.info()) as { languages?: unknown });
+  }
 
   function visibleAction(id: string) {
     const action = doc.dataset.actions().find((candidate) => candidate.id === id);
@@ -134,7 +155,7 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
     describe_action: async (args) => {
       const action = visibleAction(stringArgument(args, "id"));
       const { id, title, description, kind, destructive } = action;
-      return { id, title, description, kind, destructive, parameters: parametersSchema(action) };
+      return { id, title, description, kind, destructive, parameters: parametersWithLanguages(action, await languages()) };
     },
 
     run_action: async (args) => {
@@ -165,6 +186,16 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
       const schema = stringArgument(args, "schema");
       const filters = args.filters === undefined ? {} : { filters: args.filters };
       return (await doc.dataset.query({ query: schema, ...filters } as unknown as AuthoredCommand)).after;
+    },
+
+    get_languages: async () => ({ languages: await languages() }),
+
+    set_languages: async (args) => {
+      const value = args.languages;
+      if (!Array.isArray(value)) throw refusal("invalid_parameters", `"languages" must be an array of language codes`);
+      const { changed } = await doc.setLanguages(value as string[]);
+      if (changed) await save();
+      return { languages: await languages(), changed };
     },
 
     undo: async () => ({ undone: await move("undo") }),

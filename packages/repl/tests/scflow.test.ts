@@ -82,6 +82,53 @@ const run = (d: { project: string; modules: string }, action: string, params: un
 const query = (d: { project: string; modules: string }) =>
   scflow([d.project, "query", "tasks.task", "--modules", d.modules]);
 
+describe("languages", () => {
+  const languages = (d: { project: string; modules: string }, ...args: string[]) =>
+    scflow([d.project, "languages", ...args, "--modules", d.modules]);
+
+  it("reads [] for a project that does not state them", async () => {
+    const dirs = await created();
+    expect((await languages(dirs)).first).toEqual({ languages: [] });
+  });
+
+  it("is seeded by create --language, in order", async () => {
+    const dirs = workspaceDir();
+    const result = await scflow([
+      dirs.project, "create", "--type", "acme:tasks", "--title", "Demo", "--module", "acme:tasks",
+      "--language", "fr", "--language", "en", "--modules", dirs.modules,
+    ]);
+    expect(result.code).toBe(0);
+    expect((await languages(dirs)).first).toEqual({ languages: ["fr", "en"] });
+  });
+
+  it("sets the list, saves it, and refuses a duplicate", async () => {
+    const dirs = await created();
+    const set = await languages(dirs, '["de","fr"]');
+    expect(set.first).toMatchObject({ languages: ["de", "fr"], changed: true });
+    expect((await languages(dirs)).first).toEqual({ languages: ["de", "fr"] });
+    const refused = await languages(dirs, '["fr","fr"]');
+    expect(refused.code).toBe(1);
+    expect(JSON.parse(refused.err[0] as string).error.code).toBe("constraint_violation");
+    expect((await languages(dirs)).first).toEqual({ languages: ["de", "fr"] });
+  });
+
+  it("needs a JSON array", async () => {
+    const dirs = await created();
+    expect((await languages(dirs, '"fr"')).code).toBe(2);
+  });
+
+  it("is a command of the shell, undone by undo", async () => {
+    const dirs = await created();
+    const shell = await scflow([dirs.project, "shell", "--modules", dirs.modules], ['languages ["fr", "en"]', "languages", "undo", "languages", "exit"]);
+    expect(shell.out).toEqual([
+      { languages: ["fr", "en"], changed: true },
+      { languages: ["fr", "en"] },
+      { undo: true },
+      { languages: [] },
+    ]);
+  });
+});
+
 describe("create", () => {
   it("saves a project", async () => {
     const dirs = await created();

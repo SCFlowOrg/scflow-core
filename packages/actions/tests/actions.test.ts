@@ -5,6 +5,7 @@ import {
   createActionRegistry,
   createRunLog,
   runBatch,
+  toAiTools,
   toolName,
   validateParameters,
 } from "../src/index.js";
@@ -70,5 +71,42 @@ describe("run log", () => {
       },
     );
     expect(entry.steps).toEqual([{ command: { query: "x" }, result: '{"after":[]}' }]);
+  });
+});
+
+describe("tools and the languages of the project", () => {
+  const text = { type: "string", pattern: "\S" };
+  const action = {
+    id: "demo/rename",
+    description: "Renames.",
+    parameters: {
+      type: "object",
+      properties: {
+        label: { anyOf: [text, { type: "object", minProperties: 1, additionalProperties: text }], description: "The label." },
+        code: { type: "string", description: "A code." },
+      },
+    },
+  };
+  const descriptionOf = (tool: { inputSchema: Record<string, unknown> }, property: string) =>
+    ((tool.inputSchema.properties as Record<string, { description?: string }>)[property] as { description?: string }).description;
+
+  it("names the languages and the source language in a localized parameter only", () => {
+    const [tool] = toAiTools([action], { languages: ["fr", "en"] });
+    expect(descriptionOf(tool as never, "label")).toContain("fr, en");
+    expect(descriptionOf(tool as never, "label")).toContain("The source language is fr");
+    expect(descriptionOf(tool as never, "label")).toContain("The label.");
+    expect(descriptionOf(tool as never, "code")).toBe("A code.");
+  });
+
+  it("leaves the tool as it was when the languages are not stated", () => {
+    for (const options of [{}, { languages: [] }]) {
+      const [tool] = toAiTools([action], options);
+      expect(descriptionOf(tool as never, "label")).toBe("The label.");
+    }
+  });
+
+  it("does not change the definition", () => {
+    toAiTools([action], { languages: ["fr"] });
+    expect((action.parameters.properties.label as { description: string }).description).toBe("The label.");
   });
 });

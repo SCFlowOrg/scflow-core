@@ -4,6 +4,7 @@
  */
 
 import { actionIdOfTool, toAiTools } from "@scfloworg/actions";
+import { languagesOf } from "@scfloworg/core";
 import { AiError, createAiClient, runAgent, type AiFetch, type AiToolCall } from "@scfloworg/ai";
 import type { Document } from "@scfloworg/workspace";
 
@@ -63,6 +64,7 @@ export async function ask(
   settings: AskSettings,
   options: AskOptions,
 ): Promise<void> {
+  const languages = languagesOf((await doc.dataset.info()) as { languages?: unknown });
   const actions = doc.dataset.actions().filter((action) => action.exposure !== "hidden");
   const readOnly = new Set(
     actions.filter((action) => action.kind === "read").map((action) => action.id),
@@ -87,10 +89,16 @@ export async function ask(
     outcome = await runAgent({
       client,
       messages: [
-        { role: "system", content: SYSTEM },
+        {
+          role: "system",
+          content:
+            languages.length === 0
+              ? SYSTEM
+              : `${SYSTEM} The languages of the project are ${languages.join(", ")}, the source language being ${languages[0]}: write every localized text only in them.`,
+        },
         { role: "user", content: options.prompt },
       ],
-      tools: toAiTools(actions),
+      tools: toAiTools(actions, { languages }),
       maxTurns: options.maxTurns,
       approve: async (turn) => {
         const writes = turn.filter((call) => !readOnly.has(actionIdOfTool(call.name) ?? ""));

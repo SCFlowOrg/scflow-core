@@ -57,6 +57,13 @@ export interface BaseDocument {
   setSection(key: string, value: unknown): void;
   /** Runs an action, as one undo step, or as part of the open transaction. */
   run(id: string, params?: unknown): Promise<ActionOutcome>;
+  /**
+   * Replaces the ordered languages of the document (`languages` of its
+   * dataset), as one undo step, or as part of the open transaction. Fails with
+   * `constraint_violation` for a bad code or a duplicate, and with
+   * `read_only_dataset` on a read-only document.
+   */
+  setLanguages(languages: readonly string[]): Promise<{ changed: boolean }>;
   /** Runs `body` in one transaction, rolled back if it throws. */
   transaction<T>(label: string, body: (tx: DocumentTransaction) => Promise<T>): Promise<T>;
   begin(label: string): Promise<void>;
@@ -87,6 +94,8 @@ export interface NewDocumentOptions {
   /** The type of document, as `publisher:type`. */
   type: string;
   title: string;
+  /** The ordered languages of the texts, the first being the source language; a host passes the language of its user interface. */
+  languages?: readonly string[];
 }
 
 /** The checks a document gives an entry for what the entry adds to it. */
@@ -224,6 +233,21 @@ export function makeDocument<D extends BaseDocument>(
     return outcome;
   }
 
+  async function setLanguages(languages: readonly string[]): Promise<{ changed: boolean }> {
+    if (open) {
+      try {
+        return await dataset.setLanguages(languages);
+      } catch (error) {
+        // The environment rolled the whole transaction back.
+        open = null;
+        throw error;
+      }
+    }
+    const outcome = await dataset.setLanguages(languages);
+    if (outcome.changed && outcome.delta) pushStep({ label: "Set languages", delta: outcome.delta });
+    return { changed: outcome.changed };
+  }
+
   async function begin(label: string): Promise<void> {
     refuseIfReadOnly("a transaction");
     refuseIfOpen("a second transaction");
@@ -282,6 +306,7 @@ export function makeDocument<D extends BaseDocument>(
       project().sections.set(key, value);
     },
     run,
+    setLanguages,
     async transaction(label, body) {
       await begin(label);
       try {
@@ -341,6 +366,7 @@ export async function createDocument<D extends BaseDocument>(
     modules: options.modules,
     locator: locatorOf(file, key),
     name: options.name,
+    ...(options.languages === undefined ? {} : { languages: options.languages }),
   });
   const project = file.project(key);
   project.type = options.type;

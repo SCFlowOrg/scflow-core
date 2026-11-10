@@ -181,6 +181,8 @@ A hyphen never appears in an identifier, so `actionIdOfTool(name)` gives the id
 back for a call that comes from an AI client. An action whose `exposure` is
 `hidden` is left out; `toAiTool(action)` maps one action whatever its exposure.
 
+`toAiTools(actions, { languages })` takes the ordered languages of the dataset: the description of each localized text parameter (a string or a map of language to string, in an `anyOf`) then names them and the source language, the first. The schema forbids nothing more, because the list offers and expects; left out or empty, the tools are as before. `parametersWithLanguages(action, languages)` gives the same for one action.
+
 AI providers refuse `anyOf`, `oneOf` and `allOf` at the top level of a tool's
 schema, and one refused tool fails the whole request. The export leaves them out,
 and the action still checks its full `parameters` when it runs. An `anyOf` whose
