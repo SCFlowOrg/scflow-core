@@ -23,6 +23,17 @@ An action is not a tool of its own, because a model has well over 80 actions, an
 
 An action whose `exposure` is `hidden` is absent from `list_actions`, and calling it is refused with `unknown_action`, in a batch as well.
 
+## Prompts
+
+The server declares the `prompts` capability and exports each skill of its environment as an MCP prompt, as it exports the actions as tools, so any MCP client finds the methods of the modules. A skill is offered only when it is visible and every action of its `uses` is a visible action of the project, as `createSkillTool` of `@scfloworg/environment` decides; only the skills of the modules installed by `--modules` are offered, never those that come only with the project.
+
+| Request | Gives |
+| --- | --- |
+| `prompts/list` | One prompt per offered skill: `name` is the skill id, such as `scflow/image_to_model`, with its `title` and `description` |
+| `prompts/get` | The `description` of the skill and one `user` message whose text is the Markdown body of the skill. A name that is not an offered skill is an `InvalidParams` error |
+
+A prompt takes no arguments: the body is a method the client follows with the tools above.
+
 ## Saving
 
 Each change that succeeds is saved at once: an AI client has no notion of saving, and the project must be right when the chat ends. A tool that changes nothing writes nothing.

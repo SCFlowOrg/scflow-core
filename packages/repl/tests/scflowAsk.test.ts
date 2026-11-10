@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runScflow, type ScflowIo } from "../src/scflow.js";
 
@@ -219,5 +220,86 @@ describe("scflow ask", () => {
       error: { code: "ai_auth", message: expect.stringContaining("Incorrect API key") },
     });
     expect(snapshot(d.project)).toBe(before);
+  });
+});
+
+/** The folder of the module scflow:core, loaded with its built bundle and its skill. */
+const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scflow-core");
+
+// Each test loads and checks the bundle of scflow:core, twice.
+describe("scflow ask with skills", { timeout: 30000 }, () => {
+  async function model() {
+    const root = mkdtempSync(join(tmpdir(), "scflow-ask-skill-"));
+    temporary.push(root);
+    const project = join(root, "model");
+    const result = await scflow([
+      project,
+      "create",
+      "--type",
+      "scflow:model",
+      "--title",
+      "Model",
+      "--module",
+      "scflow:core",
+      "--modules",
+      scflowCore,
+    ]);
+    expect(result.code).toBe(0);
+    return project;
+  }
+
+  it("lists the skill in the prompt, offers use_skill, and gives the body to the model", async () => {
+    const project = await model();
+    const before = snapshot(project);
+    const fetch = fakeFetch(
+      toolCall([{ id: "s1", name: "use_skill", args: { skillId: "scflow/image_to_model" } }]),
+      answer("I will follow the method."),
+    );
+    const result = await scflow([project, "ask", "Model this diagram", "--modules", scflowCore], {
+      fetch,
+    });
+    expect(result.code).toBe(0);
+
+    const first = fetch.requests[0]?.messages as { role: string; content: string }[];
+    const system = first.find((m) => m.role === "system")?.content ?? "";
+    expect(system).toContain("- scflow/image_to_model: Image to model. Use when creating");
+    expect(system).not.toContain("# Create or refine a SCFLOW model");
+    const tools = fetch.requests[0]?.tools as {
+      function: { name: string; parameters: { properties: { skillId: { enum: string[] } } } };
+    }[];
+    const useSkill = tools.find((tool) => tool.function.name === "use_skill");
+    expect(useSkill?.function.parameters.properties.skillId.enum).toEqual([
+      "scflow/image_to_model",
+    ]);
+
+    // Loading a skill asks no approval, even without --yes, and changes nothing.
+    expect(result.err.some((line) => line.includes("Approve"))).toBe(false);
+    const second = fetch.requests[1]?.messages as { role: string; content: string }[];
+    const loaded = JSON.parse(second.find((m) => m.role === "tool")?.content ?? "null");
+    expect(loaded).toEqual({
+      skillId: "scflow/image_to_model",
+      title: "Image to model",
+      instructions: readFileSync(join(scflowCore, "skills", "image-to-model.md"), "utf8"),
+    });
+    expect(result.first).toMatchObject({
+      text: "I will follow the method.",
+      calls: [
+        { action: "use_skill", params: { skillId: "scflow/image_to_model" }, approved: true },
+      ],
+      changed: false,
+      written: [],
+    });
+    expect(snapshot(project)).toBe(before);
+  });
+
+  it("offers no skill whose actions the project lacks", async () => {
+    const d = await created();
+    const fetch = fakeFetch(answer("Nothing to do."));
+    const result = await scflow([d.project, "ask", "Hi", "--modules", d.modules], { fetch });
+    expect(result.code).toBe(0);
+    const tools = fetch.requests[0]?.tools as { function: { name: string } }[];
+    expect(tools.map((tool) => tool.function.name)).not.toContain("use_skill");
+    const system = (fetch.requests[0]?.messages as { role: string; content: string }[])[0]?.content;
+    expect(system).not.toContain("use_skill");
   });
 });

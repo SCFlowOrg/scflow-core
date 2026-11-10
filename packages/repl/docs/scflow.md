@@ -50,6 +50,10 @@ The connection comes from the environment; nothing is stored:
 
 A missing key or model is a wrong command line.
 
+### Skills
+
+The skills of the modules installed by `--modules` reach the model as the [environment](../../environment/docs/environment.md#skills) offers them: a skill is offered only when it is visible and every action of its `uses` is a visible action of the project, so a skill never gives the model an action it would not have. When a skill is offered, the system prompt lists the catalogue, each skill by its id, title and description, and the model has one more tool, `use_skill`, built by `createSkillTool` of `@scfloworg/environment`. The body of a skill never enters the prompt: the model calls `use_skill` with a `skillId` of the catalogue and gets `{ skillId, title, instructions }` back. Loading a skill reads nothing of the project and asks no approval; it appears in `calls` with the action `use_skill`. When no skill is offered there is no `use_skill` tool and the prompt names none.
+
 Each answer of the model may ask for several calls. The calls of read actions run at once. The calls of the other actions of one answer are listed on the standard error, and one question approves or refuses them together: `y` or `yes` on the standard input approves them, anything else, or the end of the input, refuses them, and the model is told so. `--yes` approves every call without asking; it is off by default. `--max-turns` bounds the number of answers, `10` by default.
 
 The text of the model and each call are shown on the standard error as they come. At the end `ask` saves the project if a call changed it, and prints `{ text, stopped, turns, calls, changed, written }`: `text` is the last answer, `stopped` is `done` or `turn-limit`, and `calls` lists each call with its `action`, `params`, `approved`, and its `result` or `error`. An error of the model (`auth`, `rate-limit`, `model-not-found`, …) is a refusal: it prints `{ "error": { "code": "ai_<kind>", "message" } }`, exits with `1`, and saves nothing.
