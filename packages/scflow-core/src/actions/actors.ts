@@ -2,7 +2,7 @@ import { type Instance } from "./refs.js";
 import { type ScflowActionDefinition, localizedTextParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { createActor } from "../actors.js";
 import { deleteById } from "./delete-impact.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
 type Text = string | Record<string, string>;
@@ -106,9 +106,9 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
     additionalProperties: false,
   },
   async run(params, context) {
-    const input: Record<string, unknown> = { display_name: toLocalized(params.display_name) };
+    const input: Record<string, unknown> = { display_name: await localizedText(context, params.display_name) };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -146,14 +146,14 @@ export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = toLocalized(params.display_name);
+    const display_name = await localizedText(context, params.display_name);
     const domains = unique(params.domains) ?? ["physical"];
     const input: Record<string, unknown> = { display_name, domains };
     if (params.default_scope !== undefined) {
       input.default_scope = params.default_scope;
     }
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -193,7 +193,7 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = toLocalized(params.display_name);
+    const display_name = await localizedText(context, params.display_name);
     const input: Parameters<typeof createActor>[2] = { display_name, type: params.type };
     if (params.scope !== undefined) {
       input.scope = params.scope;
@@ -205,7 +205,7 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
       input.parent_actor = params.parent_actor;
     }
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -244,10 +244,10 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
     const patch: Record<string, unknown> = {};
 
     if (params.display_name !== undefined) {
-      patch.display_name = { set: toLocalized(params.display_name) };
+      patch.display_name = { set: await localizedText(context, params.display_name) };
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description) };
+      patch.description = { set: await localizedText(context, params.description) };
     }
     if (params.type !== undefined) {
       patch.type = params.type;

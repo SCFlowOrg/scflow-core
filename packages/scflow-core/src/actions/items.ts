@@ -1,7 +1,7 @@
 import { type Instance } from "./refs.js";
 import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { deleteById } from "./delete-impact.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** A text parameter: a string, or a map of language to string. */
 type Text = string | Record<string, string>;
@@ -100,11 +100,11 @@ export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, 
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = toLocalized(params.display_name);
+    const display_name = await localizedText(context, params.display_name);
     const domain = params.domain;
     const input: Record<string, unknown> = { display_name, domain };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -134,10 +134,10 @@ export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSumm
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = toLocalized(params.display_name);
+    const display_name = await localizedText(context, params.display_name);
     const input: Record<string, unknown> = { display_name, type: params.type };
     if (params.description !== undefined) {
-      input.description = toLocalized(params.description);
+      input.description = await localizedText(context, params.description);
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
@@ -174,10 +174,10 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
     const patch: Record<string, unknown> = {};
 
     if (params.display_name !== undefined) {
-      patch.display_name = { set: toLocalized(params.display_name) };
+      patch.display_name = { set: await localizedText(context, params.display_name) };
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description) };
+      patch.description = { set: await localizedText(context, params.description) };
     }
     if (params.type !== undefined) {
       patch.type = params.type;

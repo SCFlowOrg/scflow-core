@@ -1,7 +1,7 @@
 import { type Instance } from "./refs.js";
 import { cascadeParam, type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, refParam, tagsParam, unique } from "./params.js";
 import { createFlow, setFlowItem } from "../flows.js";
-import { toLocalized } from "./text.js";
+import { localizedText } from "./text.js";
 
 /** Parameters of `scflow/create_flow`. */
 export interface CreateFlowParams {
@@ -78,8 +78,8 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
   },
   async run(params, context) {
     const bidirectional = params.bidirectional;
-    const display_name = params.display_name === undefined ? undefined : toLocalized(params.display_name);
-    const description = params.description === undefined ? undefined : toLocalized(params.description);
+    const display_name = params.display_name === undefined ? undefined : await localizedText(context, params.display_name);
+    const description = params.description === undefined ? undefined : await localizedText(context, params.description);
     const tags = unique(params.tags);
 
     const flow = await createFlow(context, context.locator, {
@@ -150,14 +150,14 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
     const patch: Record<string, unknown> = {};
 
     if (params.display_name !== undefined) {
-      patch.display_name = params.display_name === null ? null : { set: toLocalized(params.display_name) };
+      patch.display_name = params.display_name === null ? null : { set: await localizedText(context, params.display_name) };
     }
     const bidirectional = params.bidirectional;
     if (bidirectional !== undefined) {
       patch.bidirectional = bidirectional;
     }
     if (params.description !== undefined) {
-      patch.description = { set: toLocalized(params.description) };
+      patch.description = { set: await localizedText(context, params.description) };
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
