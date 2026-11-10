@@ -40,9 +40,14 @@ function matches(pattern: string, model: string): boolean {
  * `DEFAULT_PROFILES`, that matches its id, compared without case and without
  * a `provider/` prefix. `undefined` when none matches.
  */
-export function profileOf(model: string, rules: readonly ProfileRule[] = []): ModelProfile | undefined {
+export function profileOf(
+  model: string,
+  rules: readonly ProfileRule[] = [],
+): ModelProfile | undefined {
   const id = model.toLowerCase();
   const bare = id.slice(id.lastIndexOf("/") + 1);
-  const rule = [...rules, ...DEFAULT_PROFILES].find((candidate) => matches(candidate.match, bare) || matches(candidate.match, id));
+  const rule = [...rules, ...DEFAULT_PROFILES].find(
+    (candidate) => matches(candidate.match, bare) || matches(candidate.match, id),
+  );
   return rule ? { ...rule.profile } : undefined;
 }

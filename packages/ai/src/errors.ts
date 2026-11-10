@@ -16,7 +16,11 @@ export class AiError extends Error {
   /** The refused parameter, for `unsupported-parameter`. */
   readonly parameter: string | undefined;
 
-  constructor(kind: AiErrorKind, message: string, options: { status?: number; parameter?: string; cause?: unknown } = {}) {
+  constructor(
+    kind: AiErrorKind,
+    message: string,
+    options: { status?: number; parameter?: string; cause?: unknown } = {},
+  ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = "AiError";
     this.kind = kind;
@@ -34,7 +38,11 @@ export interface ProviderError {
 }
 
 const text = (value: unknown): string | undefined =>
-  typeof value === "string" && value !== "" ? value : typeof value === "number" ? String(value) : undefined;
+  typeof value === "string" && value !== ""
+    ? value
+    : typeof value === "number"
+      ? String(value)
+      : undefined;
 
 /** Reads `{ error: { message, code, type, param } }` or `{ error: "…" }`, else keeps the raw body. */
 export function readProviderError(body: string): ProviderError {
@@ -61,15 +69,23 @@ export function readProviderError(body: string): ProviderError {
   return { message: body.slice(0, 400) };
 }
 
-const CONTEXT = /context[_ ]length|maximum context|context window|too many tokens|prompt is too long|reduce the length/i;
-const MODEL = /model.*(not found|does not exist|not exist|unknown|invalid model)|no such model|unknown model/i;
-const UNSUPPORTED = /unsupported|not supported|does not support|unrecognized|unknown (parameter|field|argument)|not permitted|not allowed/i;
+const CONTEXT =
+  /context[_ ]length|maximum context|context window|too many tokens|prompt is too long|reduce the length/i;
+const MODEL =
+  /model.*(not found|does not exist|not exist|unknown|invalid model)|no such model|unknown model/i;
+const UNSUPPORTED =
+  /unsupported|not supported|does not support|unrecognized|unknown (parameter|field|argument)|not permitted|not allowed/i;
 
 /**
  * The error of a failed answer. `sent` lists the optional parameters of the
  * request: one of them named by the provider makes an `unsupported-parameter`.
  */
-export function errorOfAnswer(status: number, statusText: string, body: string, sent: readonly string[]): AiError {
+export function errorOfAnswer(
+  status: number,
+  statusText: string,
+  body: string,
+  sent: readonly string[],
+): AiError {
   const provider = readProviderError(body);
   const head = `${status}${statusText ? ` ${statusText}` : ""}`;
   const message = provider.message ? `${head}: ${provider.message}` : head;
@@ -79,7 +95,8 @@ export function errorOfAnswer(status: number, statusText: string, body: string, 
   if (status === 401 || status === 403 || /invalid_api_key|authentication/i.test(code)) {
     return new AiError("auth", message, options);
   }
-  if (status === 429 || /rate_limit|insufficient_quota/i.test(code)) return new AiError("rate-limit", message, options);
+  if (status === 429 || /rate_limit|insufficient_quota/i.test(code))
+    return new AiError("rate-limit", message, options);
   if (/context_length/i.test(code) || CONTEXT.test(provider.message)) {
     return new AiError("context-length", message, options);
   }
@@ -95,7 +112,9 @@ export function errorOfAnswer(status: number, statusText: string, body: string, 
 }
 
 function refusedParameter(provider: ProviderError, sent: readonly string[]): string | undefined {
-  const refused = /unsupported_(parameter|value)/i.test(provider.code ?? "") || UNSUPPORTED.test(provider.message);
+  const refused =
+    /unsupported_(parameter|value)/i.test(provider.code ?? "") ||
+    UNSUPPORTED.test(provider.message);
   if (!refused) return undefined;
   if (provider.param && sent.includes(provider.param)) return provider.param;
   return sent.find((name) => new RegExp(`\\b${name}\\b`).test(provider.message));

@@ -11,7 +11,8 @@ export function sse(text: string, size = 7): Response {
   const bytes = new TextEncoder().encode(text);
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      for (let at = 0; at < bytes.length; at += size) controller.enqueue(bytes.slice(at, at + size));
+      for (let at = 0; at < bytes.length; at += size)
+        controller.enqueue(bytes.slice(at, at + size));
       controller.close();
     },
   });
@@ -29,12 +30,18 @@ export interface Recorded {
 }
 
 /** A fetch that answers with the given responses in order, and records the requests. */
-export function fakeFetch(...answers: (Response | (() => Response | Promise<Response>))[]): AiFetch & {
+export function fakeFetch(
+  ...answers: (Response | (() => Response | Promise<Response>))[]
+): AiFetch & {
   requests: Recorded[];
 } {
   const requests: Recorded[] = [];
   const fetch = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
-    requests.push({ url, headers: init.headers, body: JSON.parse(init.body) as Record<string, unknown> });
+    requests.push({
+      url,
+      headers: init.headers,
+      body: JSON.parse(init.body) as Record<string, unknown>,
+    });
     const answer = answers.shift();
     if (!answer) throw new Error("no more answers");
     return typeof answer === "function" ? answer() : answer;

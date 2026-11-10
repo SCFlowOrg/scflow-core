@@ -88,12 +88,18 @@ function wireMessage(message: AiMessage): Record<string, unknown> {
 
 function optionalParameters(request: AiChatRequest, profile: ModelProfile | undefined): Optional {
   const optional: Optional = { stream_options: { include_usage: true } };
-  if (request.temperature !== undefined && profile?.temperature !== false) optional.temperature = request.temperature;
-  if (request.maxTokens !== undefined) optional[profile?.lengthLimit ?? "max_tokens"] = request.maxTokens;
+  if (request.temperature !== undefined && profile?.temperature !== false)
+    optional.temperature = request.temperature;
+  if (request.maxTokens !== undefined)
+    optional[profile?.lengthLimit ?? "max_tokens"] = request.maxTokens;
   return optional;
 }
 
-function checkProfile(request: AiChatRequest, profile: ModelProfile | undefined, model: string): void {
+function checkProfile(
+  request: AiChatRequest,
+  profile: ModelProfile | undefined,
+  model: string,
+): void {
   const refuse = (parameter: string, what: string) =>
     new AiError("unsupported-parameter", `The model ${model} takes no ${what}`, { parameter });
   if (profile?.images === false && request.messages.some((message) => message.images?.length)) {
@@ -103,7 +109,10 @@ function checkProfile(request: AiChatRequest, profile: ModelProfile | undefined,
 }
 
 /** Drops the refused parameter, or gives the length limit its other name. */
-function withoutRefused(optional: Optional, error: AiError): { optional: Optional; retried: AiRetry } {
+function withoutRefused(
+  optional: Optional,
+  error: AiError,
+): { optional: Optional; retried: AiRetry } {
   const parameter = error.parameter as string;
   const { [parameter]: value, ...rest } = optional;
   const replacedBy = LENGTH_NAMES[parameter];
@@ -127,7 +136,10 @@ function decoder(): Decoder {
 }
 
 /** The `data:` payloads of a stream of server-sent events, `[DONE]` left out. */
-async function* events(body: NonNullable<AiResponse["body"]>, signal: AiSignal | undefined): AsyncGenerator<string> {
+async function* events(
+  body: NonNullable<AiResponse["body"]>,
+  signal: AiSignal | undefined,
+): AsyncGenerator<string> {
   const reader = body.getReader();
   const text = decoder();
   let buffer = "";
@@ -139,9 +151,13 @@ async function* events(body: NonNullable<AiResponse["body"]>, signal: AiSignal |
         read = await reader.read();
       } catch (error) {
         if (isAbort(error, signal)) throw error;
-        throw new AiError("network", `The stream was cut: ${(error as Error)?.message ?? String(error)}`, {
-          cause: error,
-        });
+        throw new AiError(
+          "network",
+          `The stream was cut: ${(error as Error)?.message ?? String(error)}`,
+          {
+            cause: error,
+          },
+        );
       }
       buffer += read.done ? text.decode() : text.decode(read.value, { stream: true });
       const lines = buffer.split(/\r?\n/);
@@ -161,7 +177,14 @@ async function* events(body: NonNullable<AiResponse["body"]>, signal: AiSignal |
 
 interface StreamPayload {
   choices?: {
-    delta?: { content?: string | null; tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] };
+    delta?: {
+      content?: string | null;
+      tool_calls?: {
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }[];
+    };
     finish_reason?: string | null;
   }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
@@ -171,7 +194,8 @@ interface StreamPayload {
 function streamError(payload: StreamPayload): AiError {
   const provider = readProviderError(JSON.stringify(payload));
   const code = (payload.error as { code?: unknown } | null)?.code;
-  if (typeof code === "number" && code >= 400) return errorOfAnswer(code, "", JSON.stringify(payload), []);
+  if (typeof code === "number" && code >= 400)
+    return errorOfAnswer(code, "", JSON.stringify(payload), []);
   return new AiError("provider", provider.message);
 }
 
@@ -180,11 +204,19 @@ export function createAiClient(options: AiClientOptions): AiClient {
   const { connection, profiles, onUsage } = options;
   const now = options.now ?? (() => Date.now());
 
-  async function* chat(request: AiChatRequest, chatOptions: AiChatOptions = {}): AsyncGenerator<AiChunk> {
+  async function* chat(
+    request: AiChatRequest,
+    chatOptions: AiChatOptions = {},
+  ): AsyncGenerator<AiChunk> {
     const { signal } = chatOptions;
     const model = request.model ?? connection.model;
     const started = now();
-    const usage: AiUsage = { model, connection: connection.kind, durationMs: 0, outcome: "aborted" };
+    const usage: AiUsage = {
+      model,
+      connection: connection.kind,
+      durationMs: 0,
+      outcome: "aborted",
+    };
     try {
       const profile = profileOf(model, profiles);
       checkProfile(request, profile, model);
@@ -210,7 +242,11 @@ export function createAiClient(options: AiClientOptions): AiClient {
       if (request.tools?.length) {
         base.tools = request.tools.map((tool) => ({
           type: "function",
-          function: { name: tool.name, description: tool.description ?? "", parameters: tool.inputSchema },
+          function: {
+            name: tool.name,
+            description: tool.description ?? "",
+            parameters: tool.inputSchema,
+          },
         }));
         base.tool_choice = "auto";
       }
@@ -226,9 +262,13 @@ export function createAiClient(options: AiClientOptions): AiClient {
           });
         } catch (error) {
           if (isAbort(error, signal)) throw error;
-          throw new AiError("network", `No answer from ${url}: ${(error as Error)?.message ?? String(error)}`, {
-            cause: error,
-          });
+          throw new AiError(
+            "network",
+            `No answer from ${url}: ${(error as Error)?.message ?? String(error)}`,
+            {
+              cause: error,
+            },
+          );
         }
       };
       const failed = async (response: AiResponse, optional: Optional): Promise<AiError> =>
@@ -250,7 +290,8 @@ export function createAiClient(options: AiClientOptions): AiClient {
         response = await send(optional);
         if (!response.ok) throw await failed(response, optional);
       }
-      if (!response.body) throw new AiError("provider", `${url} answered with no body`, { status: response.status });
+      if (!response.body)
+        throw new AiError("provider", `${url} answered with no body`, { status: response.status });
 
       const calls = new Map<number, AiToolCall>();
       let finishReason: string | undefined;
@@ -263,8 +304,10 @@ export function createAiClient(options: AiClientOptions): AiClient {
         }
         if (payload.error) throw streamError(payload);
         if (payload.usage) {
-          if (payload.usage.prompt_tokens !== undefined) usage.inputTokens = payload.usage.prompt_tokens;
-          if (payload.usage.completion_tokens !== undefined) usage.outputTokens = payload.usage.completion_tokens;
+          if (payload.usage.prompt_tokens !== undefined)
+            usage.inputTokens = payload.usage.prompt_tokens;
+          if (payload.usage.completion_tokens !== undefined)
+            usage.outputTokens = payload.usage.completion_tokens;
         }
         const choice = payload.choices?.[0];
         if (!choice) continue;

@@ -12,7 +12,7 @@ These packages are the source of truth. They are developed, versioned and publis
 | `format-js` | The `js` persistent format, in memory | `core` |
 | `format-file` | The `file` persistent format: a dataset stored in a project file, with a deterministic serialization | `core`, `format-js`, `project-file` |
 | `conformance` | The suite a `PersistenceInterface` implementation runs against itself | `core` |
-| `repl` | The interactive REPL, and the `scflow` command that works on a project through actions | `core`, `format-js`, `workspace` |
+| `repl` | The interactive REPL, and the `scflow` command that works on a project through actions, by hand or by a language model (`ask`) | `actions`, `ai`, `core`, `format-js`, `workspace` |
 | `mcp` | The MCP server on the workspace | `actions`, `core`, `workspace` |
 | `repl-conformance` | The same kind of suite, through the REPL command-block parser | `core`, `repl` |
 | `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, the check of the code against the manifest, `modules.load` | `core` (not its `defineModule` entry) |

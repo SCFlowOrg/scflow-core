@@ -83,7 +83,10 @@ export interface AiResponse {
   readonly status: number;
   readonly statusText: string;
   readonly body: {
-    getReader(): { read(): Promise<{ done: boolean; value?: Uint8Array | undefined }>; cancel?(): Promise<void> };
+    getReader(): {
+      read(): Promise<{ done: boolean; value?: Uint8Array | undefined }>;
+      cancel?(): Promise<void>;
+    };
   } | null;
   text(): Promise<string>;
 }

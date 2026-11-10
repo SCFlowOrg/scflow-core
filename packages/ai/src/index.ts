@@ -18,7 +18,12 @@ export type {
   AiToolCall,
   AiToolSpec,
 } from "./types.js";
-export type { AiConnection, AiConnectionKind, AiTransportKind, ByokConnection } from "./connection.js";
+export type {
+  AiConnection,
+  AiConnectionKind,
+  AiTransportKind,
+  ByokConnection,
+} from "./connection.js";
 export { AiError } from "./errors.js";
 export type { AiErrorKind } from "./errors.js";
 export { DEFAULT_PROFILES, profileOf } from "./profiles.js";

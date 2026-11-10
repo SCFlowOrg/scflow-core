@@ -5,7 +5,14 @@
  */
 
 import type { AiClient } from "./client.js";
-import type { AiChatRequest, AiChunk, AiMessage, AiSignal, AiToolCall, AiToolSpec } from "./types.js";
+import type {
+  AiChatRequest,
+  AiChunk,
+  AiMessage,
+  AiSignal,
+  AiToolCall,
+  AiToolSpec,
+} from "./types.js";
 
 /** `true` approves every call of the turn, `false` none, a list of call ids those calls only. */
 export type AiApproval = boolean | readonly string[];
@@ -13,7 +20,13 @@ export type AiApproval = boolean | readonly string[];
 export type AiEvent =
   | { type: "text"; text: string }
   | { type: "tool-calls"; calls: AiToolCall[] }
-  | { type: "tool-result"; call: AiToolCall; result?: unknown; error?: string | undefined; refused?: boolean }
+  | {
+      type: "tool-result";
+      call: AiToolCall;
+      result?: unknown;
+      error?: string | undefined;
+      refused?: boolean;
+    }
   | Extract<AiChunk, { type: "done" }>;
 
 export interface AgentOptions {
@@ -75,17 +88,25 @@ export async function runAgent(options: AgentOptions): Promise<AgentOutcome> {
     throwIfAborted(signal);
     text = "";
     const calls: AiToolCall[] = [];
-    for await (const chunk of client.chat({ ...request, messages: [...messages] }, signal ? { signal } : {})) {
+    for await (const chunk of client.chat(
+      { ...request, messages: [...messages] },
+      signal ? { signal } : {},
+    )) {
       if (chunk.type === "text") text += chunk.text;
       if (chunk.type === "tool-call") calls.push(chunk.call);
       else onEvent?.(chunk);
     }
-    messages.push(calls.length ? { role: "assistant", content: text, toolCalls: calls } : { role: "assistant", content: text });
+    messages.push(
+      calls.length
+        ? { role: "assistant", content: text, toolCalls: calls }
+        : { role: "assistant", content: text },
+    );
     if (!calls.length) return { messages, text, turns: turn, stopped: "done" };
 
     onEvent?.({ type: "tool-calls", calls });
     const approval = approve ? await approve(calls) : true;
-    const approved = (call: AiToolCall) => (typeof approval === "boolean" ? approval : approval.includes(call.id));
+    const approved = (call: AiToolCall) =>
+      typeof approval === "boolean" ? approval : approval.includes(call.id);
     for (const call of calls) {
       throwIfAborted(signal);
       let content: unknown;

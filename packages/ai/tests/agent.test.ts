@@ -52,14 +52,21 @@ describe("the agent loop", () => {
     expect(outcome).toMatchObject({ text: "3", turns: 2, stopped: "done" });
     expect(client.requests[1]?.messages).toEqual([
       { role: "user", content: "1+2?" },
-      { role: "assistant", content: "", toolCalls: [{ id: "c1", name: "add", arguments: '{"a":1,"b":2}' }] },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "c1", name: "add", arguments: '{"a":1,"b":2}' }],
+      },
       { role: "tool", toolCallId: "c1", content: '{"sum":3}' },
     ]);
     expect(client.requests[0]?.tools).toEqual([tool]);
   });
 
   it("asks approval once per turn with all its calls, and answers refused calls with an error", async () => {
-    const client = scripted([call("c1", "add", {}), call("c2", "add", {}), call("c3", "add", {}), done], [done]);
+    const client = scripted(
+      [call("c1", "add", {}), call("c2", "add", {}), call("c3", "add", {}), done],
+      [done],
+    );
     const approvals: AiToolCall[][] = [];
     const executed: string[] = [];
     const outcome = await runAgent({
@@ -114,7 +121,13 @@ describe("the agent loop", () => {
 
   it("stops at the turn limit", async () => {
     const client = scripted([call("c1", "add", {}), done], [call("c2", "add", {}), done], [done]);
-    const outcome = await runAgent({ client, messages: [], tools: [tool], execute: async () => 0, maxTurns: 2 });
+    const outcome = await runAgent({
+      client,
+      messages: [],
+      tools: [tool],
+      execute: async () => 0,
+      maxTurns: 2,
+    });
     expect(outcome).toMatchObject({ turns: 2, stopped: "turn-limit" });
     expect(client.requests).toHaveLength(2);
     expect(outcome.messages.at(-1)).toMatchObject({ role: "tool", toolCallId: "c2" });
@@ -165,7 +178,11 @@ describe("the agent loop", () => {
       title: "Create a task",
       description: "Creates a task",
       kind: "action",
-      parameters: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
+      parameters: {
+        type: "object",
+        properties: { title: { type: "string" } },
+        required: ["title"],
+      },
       run: (params: unknown) => ({ id: "t1", ...(params as object) }),
     });
     const tools = toAiTools(registry.list());
@@ -187,7 +204,9 @@ describe("the agent loop", () => {
         },
       },
     ]);
-    const results = outcome.messages.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content) as unknown);
+    const results = outcome.messages
+      .filter((m) => m.role === "tool")
+      .map((m) => JSON.parse(m.content) as unknown);
     expect(results).toEqual([
       { id: "t1", title: "One" },
       { id: "t1", title: "Two" },
