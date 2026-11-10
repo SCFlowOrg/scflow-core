@@ -171,14 +171,22 @@ The package runs a batch whose steps are calls, each with `with` and `as` only.
 | Tool | From the action |
 | --- | --- |
 | `name` | `toolName(id)`: the slash replaced by a hyphen, `scflow/create_actor` gives `scflow-create_actor` |
-| `title`, `description` | As they are |
-| `inputSchema` | `parameters`, `ref` included, or an empty object schema |
+| `title` | As it is |
+| `description` | As it is, followed by the rule of a top-level `anyOf` of `required` alone |
+| `inputSchema` | `parameters`, `ref` included, without `anyOf`, `oneOf` or `allOf` at its top level, or an empty object schema |
 | `annotations.readOnlyHint` | `kind: read` |
 | `annotations.destructiveHint` | `destructive` |
 
 A hyphen never appears in an identifier, so `actionIdOfTool(name)` gives the id
 back for a call that comes from an AI client. An action whose `exposure` is
 `hidden` is left out; `toAiTool(action)` maps one action whatever its exposure.
+
+AI providers refuse `anyOf`, `oneOf` and `allOf` at the top level of a tool's
+schema, and one refused tool fails the whole request. The export leaves them out,
+and the action still checks its full `parameters` when it runs. An `anyOf` whose
+branches each hold only a `required` of one property means "at least one of
+these": the description states it, as `Give at least one of: color, icon.`
+These keywords stay at any deeper level, where providers accept them.
 
 ## Hand-off to the engine
 

@@ -938,5 +938,35 @@ export function runActionConformanceSuite(impl: ActionImplementation): void {
         },
       ]);
     });
+
+    const styled = { color: { type: "string" }, icon: { type: "string" } };
+    const toolOf = (parameters: Record<string, unknown>, description?: string) =>
+      impl.toAiTools([
+        { id: "demo/style", ...(description === undefined ? {} : { description }), parameters, run: () => null },
+      ])[0] as { description?: string; inputSchema: Record<string, unknown> };
+
+    it("leaves anyOf, oneOf and allOf out of the top level of a tool", () => {
+      for (const keyword of ["anyOf", "oneOf", "allOf"]) {
+        const schema = toolOf({ type: "object", properties: styled, [keyword]: [{ required: ["color"] }, { required: ["icon"] }] }).inputSchema;
+        expect(schema).toEqual({ type: "object", properties: styled });
+      }
+    });
+
+    it("states an anyOf of required properties in the description", () => {
+      const parameters = { type: "object", properties: styled, anyOf: [{ required: ["color"] }, { required: ["icon"] }] };
+      expect(toolOf(parameters, "Styles a type.").description).toBe("Styles a type. Give at least one of: color, icon.");
+      expect(toolOf(parameters).description).toBe("Give at least one of: color, icon.");
+    });
+
+    it("keeps the description of another combinator as it is", () => {
+      const parameters = { type: "object", properties: styled, oneOf: [{ required: ["color"] }, { required: ["icon"] }] };
+      expect(toolOf(parameters, "Styles a type.").description).toBe("Styles a type.");
+    });
+
+    it("keeps anyOf below the top level", () => {
+      const name = { anyOf: [{ type: "string" }, { type: "object" }] };
+      const parameters = { type: "object", properties: { name } };
+      expect(toolOf(parameters).inputSchema).toEqual(parameters);
+    });
   });
 }

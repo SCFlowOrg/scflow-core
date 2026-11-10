@@ -52,7 +52,7 @@ const tools = toAiTools(registry.list()); // MCP tool definitions, hidden action
 | `validateParameters` | The check of parameters against their JSON Schema, with defaults and `ref` resolution |
 | `createActionRegistry` | `register`, `get`, `list` and `run`: one call, checked and recorded |
 | `runBatch` | A batch of `call` steps with `${name.path}` references |
-| `toAiTools`, `toolName`, `actionIdOfTool` | The export to AI tools, a plain mapping |
+| `toAiTools`, `toolName`, `actionIdOfTool` | The export to AI tools, in the schema AI providers accept |
 | `RunEntry`, `createRunLog`, `canonicalJson` | The run log of the specification, in canonical JSON |
 | `ActionError` | The error of the package; callers branch on `.code` |
 
