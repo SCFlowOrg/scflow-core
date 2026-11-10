@@ -29,6 +29,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@scfloworg/actions": "^0.1.0",
+    "@scfloworg/ai": "^0.1.0",
     "@scfloworg/core": "^0.1.0",
     "@scfloworg/format-js": "^0.1.0",
     "@scfloworg/workspace": "^0.1.0",

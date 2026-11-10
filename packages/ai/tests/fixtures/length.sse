@@ -1,0 +1,8 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-3","provider":"OpenAI","model":"openai/gpt-4o-mini","object":"chat.completion.chunk","created":1762790402,"choices":[{"index":0,"delta":{"role":"assistant","content":"Cut"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
+
+data: {"id":"gen-3","provider":"OpenAI","model":"openai/gpt-4o-mini","object":"chat.completion.chunk","created":1762790402,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"length","native_finish_reason":"length","logprobs":null}]}
+
+data: [DONE]
+

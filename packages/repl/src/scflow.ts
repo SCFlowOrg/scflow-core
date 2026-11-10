@@ -6,6 +6,8 @@
 import type { AuthoredCommand } from "@scfloworg/core";
 import type { Document } from "@scfloworg/workspace";
 import { createProjectHost, type ProjectHost } from "@scfloworg/workspace/host";
+import type { AiFetch } from "@scfloworg/ai";
+import { ask, askSettings } from "./scflowAsk.js";
 
 /** Where the command reads and writes. */
 export interface ScflowIo {
@@ -13,6 +15,10 @@ export interface ScflowIo {
   err(line: string): void;
   /** The lines of the standard input, read by `shell`. */
   lines: AsyncIterable<string>;
+  /** The environment, read by `ask` for its connection; none when left out. */
+  env?: Readonly<Record<string, string | undefined>> | undefined;
+  /** The `fetch` of `ask`; the global one when left out. */
+  fetch?: AiFetch | undefined;
 }
 
 class UsageError extends Error {}
@@ -22,7 +28,11 @@ const USAGE = `usage:
   scflow <project> actions [--modules <folder>]
   scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
   scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
-  scflow <project> shell [--modules <folder>]`;
+  scflow <project> shell [--modules <folder>]
+  scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]`;
+
+/** Options that take no value. */
+const FLAGS = new Set(["yes"]);
 
 interface ParsedArgs {
   positional: string[];
@@ -36,6 +46,10 @@ function parseArgs(args: string[]): ParsedArgs {
     const arg = args[i] as string;
     if (!arg.startsWith("--")) {
       positional.push(arg);
+      continue;
+    }
+    if (FLAGS.has(arg.slice(2))) {
+      options.set(arg.slice(2), ["true"]);
       continue;
     }
     const value = args[++i];
@@ -182,6 +196,28 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
     case "shell":
       await shell(await (await host()).workspace.open(project), io);
       return;
+    case "ask": {
+      if (first === undefined) throw new UsageError("ask needs a prompt");
+      const settings = askSettings(io.env ?? {});
+      if (typeof settings === "string") throw new UsageError(`ask needs ${settings} in the environment`);
+      const turns = parsed.options.get("max-turns")?.at(-1);
+      const maxTurns = turns === undefined ? 10 : Number(turns);
+      if (!Number.isInteger(maxTurns) || maxTurns < 1) throw new UsageError("--max-turns needs a positive integer");
+      const lines = io.lines[Symbol.asyncIterator]();
+      await ask(await (await host()).workspace.open(project), settings, {
+        prompt: first,
+        yes: parsed.options.has("yes"),
+        maxTurns,
+        fetch: io.fetch,
+        out: io.out,
+        err: io.err,
+        readLine: async () => {
+          const next = await lines.next();
+          return next.done ? undefined : next.value;
+        },
+      });
+      return;
+    }
     default:
       throw new UsageError(`unknown command: ${command}`);
   }

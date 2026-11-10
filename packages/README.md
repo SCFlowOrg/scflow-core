@@ -8,10 +8,11 @@ These packages are the source of truth. They are developed, versioned and publis
 | --- | --- | --- |
 | `core` | The MCL engine: schema processing, commands, scripts, filters, the TypeScript API; works only against `PersistenceInterface` | none |
 | `actions` | The neutral action package: the action type aligned on MCP tools, parameters checked by Ajv, a registry, batches of calls, the export to AI tools and the run log | none (Ajv only) |
+| `ai` | The neutral AI package: the types of a conversation with a language model, connections, an OpenAI-compatible transport over `fetch`, model profiles, normalized errors, usage reports and the agent loop | none |
 | `format-js` | The `js` persistent format, in memory | `core` |
 | `format-file` | The `file` persistent format: a dataset stored in a project file, with a deterministic serialization | `core`, `format-js`, `project-file` |
 | `conformance` | The suite a `PersistenceInterface` implementation runs against itself | `core` |
-| `repl` | The interactive REPL, and the `scflow` command that works on a project through actions | `core`, `format-js`, `workspace` |
+| `repl` | The interactive REPL, and the `scflow` command that works on a project through actions, by hand or by a language model (`ask`) | `actions`, `ai`, `core`, `format-js`, `workspace` |
 | `mcp` | The MCP server on the workspace | `actions`, `core`, `workspace` |
 | `repl-conformance` | The same kind of suite, through the REPL command-block parser | `core`, `repl` |
 | `module` | The code of a module package: `defineModule`, the build of one bundle per module package, the bundle check, the check of the code against the manifest, `modules.load` | `core` (not its `defineModule` entry) |
@@ -20,7 +21,7 @@ These packages are the source of truth. They are developed, versioned and publis
 | `workspace` | The workspace: documents, their sections, transactions and undo, with no UI | `core`, `environment`, `format-file`, `project-file` |
 | `scflow-core` | The supply chain flow model: schemas and domain logic, the module `scflow:core` | `core`, `module` (at build), `environment` (in tests) |
 
-Every package but `actions` and `project-file`, which are neutral, depends on `core`, so a change to `core` is built and tested on the whole repo.
+Every package but `actions`, `ai` and `project-file`, which are neutral, depends on `core`, so a change to `core` is built and tested on the whole repo.
 
 Rules:
 - Packages must never import from `src/`, which holds the UI harness.

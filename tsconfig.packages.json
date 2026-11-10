@@ -6,6 +6,7 @@
   "files": [],
   "references": [
     { "path": "packages/actions" },
+    { "path": "packages/ai" },
     { "path": "packages/conformance" },
     { "path": "packages/core" },
     { "path": "packages/environment" },
