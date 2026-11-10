@@ -1,12 +1,16 @@
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { runScflow } from "@scfloworg/repl/scflow";
 import { createProjectHost } from "@scfloworg/workspace/host";
 import { createMcpServer } from "../src/index.js";
+
+/** The folder of the module scflow:core, loaded with its built bundle and its skills. */
+const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scflow-core");
 
 const moduleYaml = `
 name: acme:tasks
@@ -254,5 +258,60 @@ describe("a change made on disk meanwhile", () => {
     expect((await call("run_action", { id: "tasks/create_task", params: { title: "Late" } })).isError).toBe(false);
     const rows = (await call("query", { schema: "tasks.task" })).value as { title: string }[];
     expect(rows.map((row) => row.title).sort()).toEqual(["Late", "Mine", "Other"]);
+  });
+});
+
+// Each test loads and checks the bundle of scflow:core, twice.
+describe("prompts", { timeout: 30000 }, () => {
+  /** A project on scflow:core, served by a host where acme:tasks is installed too. */
+  async function scflowProject() {
+    const { path: tasks, modules } = await project();
+    const path = join(dirname(tasks), "model");
+    const created = await cli(
+      path, "create", "--type", "scflow:model", "--title", "Model", "--module", "scflow:core", "--modules", scflowCore,
+    );
+    expect(created.code).toBe(0);
+    return { path, tasks, modules };
+  }
+
+  async function connectBoth(path: string, modules: string) {
+    const host = await createProjectHost({ modules });
+    await host.environment.modules.load(scflowCore);
+    const server = await createMcpServer({ host, path });
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverSide);
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await client.connect(clientSide);
+    return client;
+  }
+
+  it("declares the prompts capability", async () => {
+    const { path, modules } = await scflowProject();
+    const client = await connectBoth(path, modules);
+    expect(client.getServerCapabilities()?.prompts).toBeDefined();
+  });
+
+  it("lists and gets the skill scflow/image_to_model, its body as the message", async () => {
+    const { path, modules } = await scflowProject();
+    const client = await connectBoth(path, modules);
+    const { prompts } = await client.listPrompts();
+    expect(prompts).toEqual([
+      {
+        name: "scflow/image_to_model",
+        title: "Image to model",
+        description: expect.stringContaining("supply-chain diagram"),
+      },
+    ]);
+    const prompt = await client.getPrompt({ name: "scflow/image_to_model" });
+    const body = readFileSync(join(scflowCore, "skills", "image-to-model.md"), "utf8");
+    expect(prompt.description).toBe(prompts[0]?.description);
+    expect(prompt.messages).toEqual([{ role: "user", content: { type: "text", text: body } }]);
+  });
+
+  it("offers no skill whose actions the project lacks", async () => {
+    const { tasks, modules } = await scflowProject();
+    const client = await connectBoth(tasks, modules);
+    expect((await client.listPrompts()).prompts).toEqual([]);
+    await expect(client.getPrompt({ name: "scflow/image_to_model" })).rejects.toThrow(/No prompt/);
   });
 });

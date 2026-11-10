@@ -240,8 +240,10 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
       const maxTurns = turns === undefined ? 10 : Number(turns);
       if (!Number.isInteger(maxTurns) || maxTurns < 1) throw new UsageError("--max-turns needs a positive integer");
       const lines = io.lines[Symbol.asyncIterator]();
-      await ask(await (await host()).workspace.open(project), settings, {
+      const { environment, workspace } = await host();
+      await ask(await workspace.open(project), settings, {
         prompt: first,
+        skills: environment.skills,
         yes: parsed.options.has("yes"),
         maxTurns,
         fetch: io.fetch,
