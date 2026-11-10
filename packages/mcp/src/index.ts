@@ -1,12 +1,22 @@
 /**
- * An MCP server on one project of a workspace (see `docs/mcp.md`). It speaks
- * through any MCP transport; `cli.ts` connects it to the standard streams.
+ * An MCP server on one project of a workspace (see `docs/mcp.md`). It offers
+ * the actions of the project as tools and the skills of its environment as
+ * prompts, and speaks through any MCP transport; `cli.ts` connects it to the
+ * standard streams.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
 import { parametersSchema, runBatch, type ActionRegistry, type Batch } from "@scfloworg/actions";
 import type { AuthoredCommand } from "@scfloworg/core";
+import { createSkillTool } from "@scfloworg/environment";
 import type { Document } from "@scfloworg/workspace";
 import type { ProjectHost } from "@scfloworg/workspace/host";
 
@@ -124,6 +134,19 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
     return moved;
   }
 
+  /**
+   * The skills offered as prompts: the visible skills of the environment
+   * whose `uses` are all visible actions of the project, so a prompt never
+   * names an action the client cannot run.
+   */
+  function offeredSkills() {
+    const actions = doc.dataset
+      .actions()
+      .filter((action) => action.exposure !== "hidden")
+      .map((action) => action.id);
+    return createSkillTool(host.environment.skills, { actions })?.skills ?? [];
+  }
+
   const handlers: Record<string, (args: Args) => Promise<unknown>> = {
     list_actions: async () =>
       doc.dataset
@@ -179,7 +202,7 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
     return run;
   };
 
-  const server = new Server({ name: "scflow", version: "0.1.0" }, { capabilities: { tools: {} } });
+  const server = new Server({ name: "scflow", version: "0.1.0" }, { capabilities: { tools: {}, prompts: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const handler = handlers[request.params.name];
@@ -192,6 +215,18 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
       const text = JSON.stringify({ error: { code: code ?? "error", message: message ?? String(error) } });
       return { isError: true, content: [{ type: "text" as const, text }] };
     }
+  });
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: offeredSkills().map(({ id, title, description }) => ({ name: id, title, description })),
+  }));
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const skill = offeredSkills().find((candidate) => candidate.id === request.params.name);
+    if (!skill) throw new McpError(ErrorCode.InvalidParams, `No prompt "${request.params.name}"`);
+    const { instructions } = await host.environment.skills.load(skill.id);
+    return {
+      description: skill.description,
+      messages: [{ role: "user" as const, content: { type: "text" as const, text: instructions } }],
+    };
   });
   return server;
 }

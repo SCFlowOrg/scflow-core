@@ -1,10 +1,17 @@
 /**
  * `scflow <project> ask <prompt>`: a language model works on the project
- * through its actions (see `docs/scflow.md#asking-a-model`).
+ * through its actions, with the skills of the environment that rely on them
+ * (see `docs/scflow.md#asking-a-model`).
  */
 
 import { actionIdOfTool, toAiTools } from "@scfloworg/actions";
 import { AiError, createAiClient, runAgent, type AiFetch, type AiToolCall } from "@scfloworg/ai";
+import {
+  createSkillTool,
+  SKILL_TOOL,
+  type SkillCatalogue,
+  type SkillTool,
+} from "@scfloworg/environment";
 import type { Document } from "@scfloworg/workspace";
 
 export interface AskOptions {
@@ -13,6 +20,12 @@ export interface AskOptions {
   yes: boolean;
   maxTurns: number;
   fetch?: AiFetch | undefined;
+  /**
+   * The skills of the environment. The model is offered those whose `uses`
+   * are all actions of the project, listed in the prompt and loaded with
+   * `use_skill`; none when left out.
+   */
+  skills?: SkillCatalogue | undefined;
   out(line: string): void;
   err(line: string): void;
   /** The next line of the standard input, `undefined` at its end. */
@@ -53,6 +66,17 @@ export function askSettings(
   return { baseUrl: env.SCFLOW_AI_BASE_URL || DEFAULT_BASE_URL, apiKey, model };
 }
 
+/** The system prompt, with the catalogue of the offered skills: their ids and when to use them, never their bodies. */
+function systemPrompt(skillTool: SkillTool | null): string {
+  if (!skillTool) return SYSTEM;
+  return [
+    SYSTEM,
+    "",
+    `Skills are methods for kinds of requests. When one fits the request, call ${SKILL_TOOL} with its id and follow its instructions.`,
+    ...skillTool.skills.map((skill) => `- ${skill.id}: ${skill.title}. ${skill.description}`),
+  ].join("\n");
+}
+
 function describe(call: AiToolCall): string {
   return `${actionIdOfTool(call.name) ?? call.name} ${call.arguments}`;
 }
@@ -67,6 +91,10 @@ export async function ask(
   const readOnly = new Set(
     actions.filter((action) => action.kind === "read").map((action) => action.id),
   );
+  // A skill is offered only with every action of its uses, so it never widens what the model can do.
+  const skillTool = options.skills
+    ? createSkillTool(options.skills, { actions: actions.map((action) => action.id) })
+    : null;
   const client = createAiClient({
     connection: { kind: "byok", ...settings },
     fetch: options.fetch,
@@ -87,13 +115,16 @@ export async function ask(
     outcome = await runAgent({
       client,
       messages: [
-        { role: "system", content: SYSTEM },
+        { role: "system", content: systemPrompt(skillTool) },
         { role: "user", content: options.prompt },
       ],
-      tools: toAiTools(actions),
+      tools: [...toAiTools(actions), ...(skillTool ? [skillTool.spec] : [])],
       maxTurns: options.maxTurns,
       approve: async (turn) => {
-        const writes = turn.filter((call) => !readOnly.has(actionIdOfTool(call.name) ?? ""));
+        // Loading a skill reads its body: it needs no approval.
+        const writes = turn.filter(
+          (call) => call.name !== SKILL_TOOL && !readOnly.has(actionIdOfTool(call.name) ?? ""),
+        );
         let approved = options.yes || writes.length === 0;
         if (!approved) {
           options.err(
@@ -116,6 +147,7 @@ export async function ask(
         return ids;
       },
       execute: async (call, args) => {
+        if (skillTool && call.name === SKILL_TOOL) return skillTool.call(args);
         const outcome = await doc.run(actionIdOfTool(call.name) as string, args);
         changed ||= outcome.changed;
         return outcome.result;
