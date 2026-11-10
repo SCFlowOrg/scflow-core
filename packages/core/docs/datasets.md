@@ -42,6 +42,13 @@ transactions and can be reverted.
 - `update` with `input: { name }` renames the dataset; `filters` are optional. The
   name must satisfy the `identifier` scalar type of the dataset's model
   when it has one (see the doc comment of `resolveType`); otherwise the command fails with `constraint_violation`.
+- `update` with `input: { languages }` replaces the ordered list of languages of the
+  document (`[language_code]`, no duplicate; the first is the source language). A bad
+  code or a duplicate fails with `constraint_violation` and nothing changes. The list
+  offers and expects, never forbids: texts outside it are kept, and removing a
+  language removes no text. An absent list reads as `[]`. Like the rename it is a write,
+  so it runs in an action session. `languagesOf` reads it, `resolveLocalizedText`
+  reads a localized text with the fallback from `pt-BR` to `pt` and then to the source language.
 - `model_major_version`, `model_minor_version`, `data_major_version`,
   `data_minor_version`, `created_at`, `updated_at`, `model_only`, `schemas`,
   `scalar_types`, `modules` and `imports` are maintained by the engine or by a model upgrade: an `update`
@@ -49,8 +56,8 @@ transactions and can be reverted.
   is not a property of `dataset` is ignored, as elsewhere.
 - `create` and `delete` fail with `constraint_violation`: `initDataset` and
   `restoreDataset` create a dataset, `deleteDataset` removes it.
-- A rename that changes the name is a change of the data part: it increments
-  `data_minor_version` and records `updated_at`. A rename to the current name
+- An update that changes `name` or `languages` is a change of the data part: it increments
+  `data_minor_version` and records `updated_at`. An update to the current values
   changes nothing.
 - Inside an `ApiSession` transaction, a rename joins the transaction's changes and
   can be reverted like any other change; outside a transaction it commits
@@ -64,7 +71,7 @@ transactions and can be reverted.
 ## Lifecycle
 
 ```ts
-initDataset(locator, name, options?: { modules?: ModuleManifest[] }): Promise<TransientValue>
+initDataset(locator, name, options?: { modules?: ModuleManifest[]; languages?: string[] }): Promise<TransientValue>
 queryDataset(locator): Promise<TransientValue>           // null when nothing is there
 bumpMajorVersions(locator, bumpModel: boolean, bumpData: boolean): Promise<TransientValue>
 deleteDataset(locator): Promise<TransientValue>          // returns the dataset as it was

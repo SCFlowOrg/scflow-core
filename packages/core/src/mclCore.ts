@@ -139,6 +139,7 @@ const SCHEMAS: NormalizedSchema[] = [
     "the unit of persistence, holds data and the modules it uses",
     [
       prop("name", "identifier"),
+      prop("languages", "language_code", array),
       prop("data_major_version", "integer"),
       prop("data_minor_version", "integer"),
       prop("created_at", "date_time"),

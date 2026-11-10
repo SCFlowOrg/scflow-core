@@ -10,6 +10,7 @@ import {
   qualifiedNamespacesOf,
   writeFacetValues,
 } from "./facets.js";
+import { validateLanguages } from "./languages.js";
 import { resolveCreateId } from "./ids.js";
 import { checkFilter, checkFilterOnCandidates, matchFilter, valueOnPath } from "./filter.js";
 import type { Filter as CommandFilter } from "./types.js";
@@ -2114,21 +2115,28 @@ async function executeDatasetCommand(
         }
       }
 
-      // Only handle name updates
-      if (Object.prototype.hasOwnProperty.call(patchObj, "name")) {
-        const newName = patchObj.name;
-        if (typeof newName !== "string") {
-          throw modelError("constraint_violation", `"name" must be a string`);
-        }
-        
-        // Validate against identifier scalar type unconditionally
-        const resolved = resolveType("identifier", resolvers.ctx);
-        if (resolved.kind === "scalar") {
-          validateScalarValue("name", resolved.base, newName, { ...resolved.constraints });
-        }
+      // `name` and `languages` are the writable properties
+      const hasName = Object.prototype.hasOwnProperty.call(patchObj, "name");
+      const hasLanguages = Object.prototype.hasOwnProperty.call(patchObj, "languages");
+      if (hasName || hasLanguages) {
+        const datasetPatch: TransientObject = {};
+        if (hasName) {
+          const newName = patchObj.name;
+          if (typeof newName !== "string") {
+            throw modelError("constraint_violation", `"name" must be a string`);
+          }
 
-        // Only patch the name - version bumping is handled by the generic layer
-        await impl.updateDataset(rest, { name: newName });
+          // Validate against identifier scalar type unconditionally
+          const resolved = resolveType("identifier", resolvers.ctx);
+          if (resolved.kind === "scalar") {
+            validateScalarValue("name", resolved.base, newName, { ...resolved.constraints });
+          }
+          datasetPatch.name = newName;
+        }
+        if (hasLanguages) datasetPatch.languages = validateLanguages(patchObj.languages);
+
+        // Only patch what was given - version bumping is handled by the generic layer
+        await impl.updateDataset(rest, datasetPatch);
 
         const after = await buildDatasetTransientForm(impl, rest);
 

@@ -124,6 +124,7 @@ export const META_SCHEMAS: Record<string, NormalizedSchema> = {
     cannot_be_extended: true,
     properties: [
       { name: "name", type: "identifier", default_value: null, null_value: null, constraints: {} },
+      { name: "languages", type: "language_code", default_value: null, null_value: null, constraints: { is_array: true } },
       { name: "model_major_version", type: "integer", default_value: null, null_value: null, constraints: {} },
       { name: "model_minor_version", type: "integer", default_value: null, null_value: null, constraints: {} },
       { name: "data_major_version", type: "integer", default_value: null, null_value: null, constraints: {} },

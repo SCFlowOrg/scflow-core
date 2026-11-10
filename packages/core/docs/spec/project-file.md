@@ -46,7 +46,7 @@ Three sections belong to the document:
 
 The `data` section is written in a fixed form, so an unchanged dataset gives the same bytes and a change of one instance changes the lines of that instance:
 
-- `name`, `data_major_version` and `data_minor_version` come first, the other properties of the dataset follow sorted by key, and `instances` comes next. Model versions equal to zero are left out.
+- `name`, `data_major_version` and `data_minor_version` come first, the other properties of the dataset follow sorted by key, and `instances` comes next. Model versions equal to zero are left out. `languages`, when present, is an ordinary array in its own order; a file without it loads unchanged.
 - Schemas in `instances` are sorted by name, and the instances of a schema by key, each with the keys of every object sorted. A schema with no instance is left out.
 - The key of an instance is its `id` when it has one, and its `name` otherwise. An instance stored under another key is written under `other_instances`, by schema and then by key, which is left out when empty.
 - The sections `modules` and `model` keep the order of the modules of the dataset.
