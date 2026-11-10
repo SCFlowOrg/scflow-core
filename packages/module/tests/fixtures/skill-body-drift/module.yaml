@@ -1,0 +1,10 @@
+# A module whose code gives a skill a body that is not the text of its file.
+name: acme:drift
+namespace: drift
+version: 1.0.0
+mcl: ^1.0
+skills:
+  - id: drift/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    file: skills/write-tips.md

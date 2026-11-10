@@ -13,6 +13,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isBodies = (value: unknown): value is Record<string, ModuleBody> =>
   isRecord(value) && Object.values(value).every((body) => typeof body === "function");
 
+const isTexts = (value: unknown): value is Record<string, string> =>
+  isRecord(value) && Object.values(value).every((body) => typeof body === "string");
+
+/** What `checkModuleCode` returns: the bodies of the code by action id, by version and by skill id. */
+export interface CheckedCode {
+  actions: Map<string, ModuleBody>;
+  migrations: Map<string, ModuleBody>;
+  /** The Markdown body of each skill the code gives, by skill id; empty for a module with no code. */
+  skills: Map<string, string>;
+}
+
 /**
  * Checks the code of a module against its manifest and returns its bodies by
  * action id and by version. `bundle` holds the default export of the bundle,
@@ -21,15 +32,18 @@ const isBodies = (value: unknown): value is Record<string, ModuleBody> =>
  * inlines is not `manifest` by name and version, when an action of the code is
  * not declared, when a declared action with no `body` has no code, and when a
  * migration of the code reaches a version no migration of the manifest
- * declares.
+ * declares. With code, every declared skill has its body, a string, and the
+ * code has no body for a skill the manifest does not declare; a module with no
+ * code gives its skill bodies as files, which the host reads.
  */
 export function checkModuleCode(
   manifest: ModuleManifest,
   bundle: { readonly default: unknown } | null,
-): { actions: Map<string, ModuleBody>; migrations: Map<string, ModuleBody> } {
+): CheckedCode {
   const key = manifest.name;
   const actions = new Map<string, ModuleBody>();
   const migrations = new Map<string, ModuleBody>();
+  const skills = new Map<string, string>();
 
   if (bundle !== null) {
     const code = bundle.default;
@@ -37,7 +51,8 @@ export function checkModuleCode(
       !isRecord(code) ||
       !isRecord(code.manifest) ||
       !isBodies(code.actions) ||
-      !isBodies(code.migrations)
+      !isBodies(code.migrations) ||
+      (code.skills !== undefined && !isTexts(code.skills))
     ) {
       throw modelError(
         "constraint_violation",
@@ -75,6 +90,23 @@ export function checkModuleCode(
       }
       migrations.set(version, body);
     }
+    const declaredSkills = new Set((manifest.skills ?? []).map((skill) => skill.id));
+    for (const [name, body] of Object.entries(definition.skills ?? {})) {
+      const id = `${manifest.namespace}/${name}`;
+      if (!declaredSkills.has(id))
+        throw modelError(
+          "constraint_violation",
+          `the bundle of "${key}" has a body for the skill "${id}", which it does not declare`,
+        );
+      skills.set(id, body);
+    }
+    for (const id of declaredSkills) {
+      if (!skills.has(id))
+        throw modelError(
+          "constraint_violation",
+          `skill "${id}" of "${key}" has no body in the code: give its file under skills in defineModule`,
+        );
+    }
   }
 
   for (const action of manifest.actions) {
@@ -86,5 +118,5 @@ export function checkModuleCode(
         `action "${id}" of "${key}" has no procedure and no code`,
       );
   }
-  return { actions, migrations };
+  return { actions, migrations, skills };
 }

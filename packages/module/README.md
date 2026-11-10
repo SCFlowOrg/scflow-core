@@ -6,11 +6,12 @@ package, the bundle check, and `modules.load`. The rules are in
 
 | Entry | Holds | Runs in |
 | --- | --- | --- |
-| `@scfloworg/module` | `defineModule(manifest, { actions, migrations })` and its types. No runtime dependency: a bundle inlines it | A bundle |
+| `@scfloworg/module` | `defineModule(manifest, { actions, migrations, skills })` and its types. No runtime dependency: a bundle inlines it | A bundle |
 | `@scfloworg/module/build` | `buildModule(folder)`, which builds `src/module.ts` to `dist/module.js`, and `checkBundle(code)` | Node, at build |
 | `@scfloworg/module/code` | `checkModuleCode(manifest, bundle)`, which checks the code of a module against its manifest. It reads no file | A host, Node or browser |
-| `@scfloworg/module/host` | `modules.load(path)`, which reads `module.yaml`, validates it, checks and imports the bundle when there is one | Node, in a host |
+| `@scfloworg/module/host` | `modules.load(path)`, which reads `module.yaml`, validates it, checks and imports the bundle when there is one, and gives a loader for each skill body | Node, in a host |
 | `@scfloworg/module/yaml` | The type of a `.yaml` import, for the type checker | Types only |
+| `@scfloworg/module/markdown` | The type of a `.md` import, the body of a skill, for the type checker | Types only |
 
 ```ts
 // src/module.ts of a module package

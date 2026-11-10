@@ -1,0 +1,18 @@
+# A module whose skill uses an action that does not exist: schema processing
+# refuses it.
+name: acme:wrong_tips
+namespace: wrong_tips
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+skills:
+  - id: wrong_tips/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: [wrong_tips/create_tip, wrong_tips/publish_tip]
+    file: skills/write-tips.md

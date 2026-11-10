@@ -838,7 +838,7 @@ Storage stays free: a host can keep a loaded module wherever it wants, and this 
 
 *Feature.*
 
-A module is the unit that contributes schemas, scalar types and actions to a model. Every schema, scalar type and action belongs to exactly one module, which owns it.
+A module is the unit that contributes schemas, scalar types and actions to a model, with the skills that use its actions. Every schema, scalar type, action and skill belongs to exactly one module, which owns it.
 
 A module is declared in a **manifest**, a `module.yaml` file that holds its identity and its whole content in one file. A manifest is an instance of the `module` schema, so it is validated like any instance and needs no format of its own. It is read without running code, so a tool can list a module without trusting it.
 
@@ -893,6 +893,10 @@ properties:
     type: "[action]"
     owns:
     description: the actions this module declares
+  - name: skills
+    type: "[skill]"
+    owns:
+    description: the skills this module declares, see Skill
   - name: migrations
     type: "[migration]"
     description: the steps that carry a dataset to a version of this module, see Model Upgrade
@@ -912,7 +916,7 @@ properties:
 - **Name.** The name of a module is `publisher:module`, for example `acme:carbon`. It is the key of the module (see [Keys](#keys)).
 - **Version.** The semantic version is the only version of a module. Its patch marks a change of code only, and a change of the schemas that is not compatible needs a new major (see [Model Upgrade](#model-upgrade)).
 - **Dependencies.** A dependency is a range of versions, such as `^1.3`. `mcl:core` is not listed there: the `mcl` property gives its range.
-- **Ownership.** A schema name, a scalar type name and an action id are unique in their module, not across modules. Two modules can define the same name.
+- **Ownership.** A schema name, a scalar type name, an action id and a skill id are unique in their module, not across modules. Two modules can define the same name.
 - **References.** A schema refers only to its own module, to its dependencies and to `mcl:core`, through `extends`, `facet_of` or a relation. An action calls only the actions of the same modules.
 
 ## Action
@@ -1068,6 +1072,59 @@ A step holds either a `command` with its `result`, or a `call`. A command is rec
 - **No dataset is needed.** A `ref` value stands for itself in a replay, because a recorded entry holds keys. A body that names an instance to a nested call by its id or its `display_name`, instead of by a key, does not pass the replay, since the entry no longer holds what the body gave.
 - **A call refused by its parameters** ran no body, so its replay gives the same refusal and no step.
 
+## Skill
+
+*Feature.*
+
+A skill is a method of a module, written in Markdown, that an AI assistant loads when a request needs it. It tells the model how to work with the actions it already has: it adds no action, no tool and no permission. A module declares its skills beside its actions, and the body of a skill is a Markdown file of the module, apart from the manifest, as the body of an action is.
+
+```yaml
+# module.yaml of scflow:core
+skills:
+  - id: scflow/image_to_model
+    title: Image to model
+    description: Use when creating or refining a model from a diagram, sketch or photograph.
+    uses: [scflow/create_actor, scflow/create_flow, scflow/define_process]
+    file: skills/image-to-model.md
+```
+
+```yaml
+name: skill
+description: a method of a module, in Markdown, that an AI assistant loads on demand
+properties:
+  - name: id
+    type: string
+    description: the namespace of the module, a slash and a name, for example scflow/image_to_model
+  - name: title
+    type: string
+  - name: description
+    type: string
+    description: when to use the skill, since a model chooses a skill from it
+  - name: uses
+    type: "[string]"
+    description: the ids of the actions the skill relies on
+  - name: exposure
+    type: string
+    enum: [visible, hidden]
+    default_value: visible
+  - name: file
+    type: string
+    description: the path of the body, a Markdown file of the module package
+```
+
+- **Id.** The prefix of a skill id is the namespace of its module, as for an action. A skill id is unique in its module; it may equal an action id, since the two are never looked up together.
+- **Title and description.** Both are given. The `description` says when to use the skill.
+- **`uses`** names the actions the skill relies on, by id, as `writes` names the schemas of an action: actions of the module or of its dependencies, declared or generated (see [Action](#action)). An assistant offers a skill only when it offers every action in `uses`, so a skill never widens what an assistant can do.
+- **`exposure`** says whether an AI sees the skill, as for an action: `visible`, the default, or `hidden`.
+- **`file`** is a relative path in the package of the module, with `/` between its parts and the extension `.md`. A URL, an absolute path, a part `.` or `..`, and a `\` are refused, so a body never comes from outside the module.
+- **Version.** The version of the module covers its skills. A change of an action in `uses` that is not compatible needs a new major of the module of that action, and the dependency range of the skill's module shows it.
+
+A manifest that declares no skill has no `skills` entry once validated, so the digest of a module without skills does not depend on this section.
+
+**The body** is data written by the author of the module, read without running code, like the manifest. A host never follows instructions from elsewhere as a skill: only the modules installed in an environment offer skills, never a module that comes only embedded in a dataset, because a dataset received from someone else would then give instructions to the model. The check that the action ids a body cites appear in `uses` belongs to the tests of the module.
+
+The body of a skill travels with the code of its module (see `@scfloworg/module`, `docs/module-packages.md`), and a host gets it only when the model asks for it: the catalogue of an environment holds the id, title, description and `uses` of each skill, and loads a body on demand (see `@scfloworg/environment`, `docs/environment.md`, Skills).
+
 ## Names
 
 *Feature.*
@@ -1093,7 +1150,7 @@ The `name` of a schema or a scalar type is always the short name, and it stays a
 
 *Feature.*
 
-`mcl:core` holds the central concepts of MCL, in the same manifest format as any module: the meta-model (`schema`, `property`, `constraint`, `scalar_type`, `dataset`, `import`, `module`, `action`) and the standard types of [Scalar Types](#scalar-types). The two cannot be separated, since `schema.name` is an `identifier` and `dataset.created_at` a `date_time`. `string`, `number`, `integer` and `boolean` stay primitives of the engine, which `mcl:core` exposes and cannot define.
+`mcl:core` holds the central concepts of MCL, in the same manifest format as any module: the meta-model (`schema`, `property`, `constraint`, `scalar_type`, `dataset`, `import`, `module`, `action`, `skill`) and the standard types of [Scalar Types](#scalar-types). The two cannot be separated, since `schema.name` is an `identifier` and `dataset.created_at` a `date_time`. `string`, `number`, `integer` and `boolean` stay primitives of the engine, which `mcl:core` exposes and cannot define.
 
 | | Ordinary module | `mcl:core` |
 | --- | --- | --- |

@@ -132,6 +132,37 @@ export function generatedActions(model: DatasetModel, module: LoadedModule): Gen
   return actions;
 }
 
+/**
+ * The ids of the actions generated for the schemas of `module`, without a
+ * dataset: the same ids as `generatedActions` gives, which a skill may name in
+ * its `uses` (see Skill in `docs/spec/meta-model.md`). The schemas of a module
+ * set are those of a dataset model less the properties of facets and the
+ * generated inverse relations, which no signature holds.
+ */
+export function generatedActionIds(module: LoadedModule): string[] {
+  const ids: string[] = [];
+  const namespace = module.namespace;
+  for (const [short, schema] of module.schemas) {
+    if (schema.constraints.abstract === true || isEmbedded(schema)) continue;
+    if (facetTargetOf(schema) !== undefined) {
+      if (crudOf(schema, "update") === "generated" && updatableProperties(schema, null).length > 0)
+        ids.push(`${namespace}/update_${short}`);
+      ids.push(`${namespace}/get_${short}`);
+      continue;
+    }
+    const singleton = schema.constraints.singleton === true;
+    if (!singleton && crudOf(schema, "create") === "generated") ids.push(`${namespace}/create_${short}`);
+    if (
+      crudOf(schema, "update") === "generated" &&
+      schema.constraints.constant !== true &&
+      updatableProperties(schema, keyPropertyName(schema)).length > 0
+    )
+      ids.push(`${namespace}/update_${short}`);
+    if (!singleton && crudOf(schema, "delete") === "generated") ids.push(`${namespace}/delete_${short}`);
+  }
+  return ids;
+}
+
 const firstOf = (result: CommandResult): TransientValue => result.after[0] ?? null;
 
 /** The parameter `id` of an action on an instance of `schema`, and its filter. */

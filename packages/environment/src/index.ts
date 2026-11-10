@@ -32,4 +32,14 @@ export type {
   OpenOptions,
 } from "./environment.js";
 export type { InstalledModule, ModuleCatalogue } from "./catalogue.js";
+export { SKILL_TOOL, checkSkillCitations, citedActionIds, createSkillTool } from "./skills.js";
+export type {
+  SkillCatalogue,
+  SkillCitationFinding,
+  SkillContent,
+  SkillEntry,
+  SkillTool,
+  SkillToolOptions,
+  SkillToolSpec,
+} from "./skills.js";
 export type { Action, RunEntry } from "@scfloworg/actions";

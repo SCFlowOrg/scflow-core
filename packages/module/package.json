@@ -28,12 +28,16 @@
     },
     "./yaml": {
       "types": "./yaml.d.ts"
+    },
+    "./markdown": {
+      "types": "./markdown.d.ts"
     }
   },
   "files": [
     "dist",
     "docs",
-    "yaml.d.ts"
+    "yaml.d.ts",
+    "markdown.d.ts"
   ],
   "scripts": {
     "build": "tsc -b",

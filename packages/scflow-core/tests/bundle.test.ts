@@ -37,6 +37,11 @@ describe("the bundle of scflow:core", () => {
     expect(module.migrations.size).toBe(0);
   });
 
+  it("carries the body of every skill, the text of its file", async () => {
+    expect([...module.skills.keys()]).toEqual(["scflow/image_to_model"]);
+    expect(await module.skills.get("scflow/image_to_model")!()).toBe(readFileSync(join(root, "skills", "image-to-model.md"), "utf8"));
+  });
+
   it("runs a body on the one engine the host gives", async () => {
     const doc = await setupActions();
     const createActorType = module.actions.get("scflow/create_actor_type")!;

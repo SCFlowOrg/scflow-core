@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 import { modelError, readModuleManifest, type ModuleManifest } from "@scfloworg/core";
 import { checkModuleCode } from "./code.js";
 import { checkBundle, formatFindings } from "./check.js";
-import type { ModuleBody } from "./index.js";
+import type { ModuleBody, SkillLoader } from "./index.js";
 
 export { checkModuleCode };
 
@@ -30,13 +30,45 @@ export interface ModulePackage {
   readonly actions: ReadonlyMap<string, ModuleBody>;
   /** The body of each migration of the code, by the version it reaches. */
   readonly migrations: ReadonlyMap<string, ModuleBody>;
+  /** The loader of the Markdown body of each skill, by skill id. */
+  readonly skills: ReadonlyMap<string, SkillLoader>;
+}
+
+/**
+ * The loaders of the skill bodies of a module: those of the code when it has
+ * code, else the files of its folder, read when a body is asked for. A file
+ * that does not exist throws `constraint_violation`.
+ */
+export function skillLoaders(
+  manifest: ModuleManifest,
+  folder: string | null,
+  fromCode: ReadonlyMap<string, string>,
+): Map<string, SkillLoader> {
+  const loaders = new Map<string, SkillLoader>();
+  for (const skill of manifest.skills ?? []) {
+    const body = fromCode.get(skill.id);
+    if (body !== undefined) {
+      loaders.set(skill.id, async () => body);
+      continue;
+    }
+    const path = folder === null ? null : join(folder, skill.file);
+    if (path === null || !existsSync(path))
+      throw modelError(
+        "constraint_violation",
+        `skill "${skill.id}" of "${manifest.name}" names the file "${skill.file}", which the package does not hold`,
+      );
+    loaders.set(skill.id, () => readFile(path, "utf8"));
+  }
+  return loaders;
 }
 
 /**
  * Loads the module of a folder: reads `module.yaml` and validates it as an
  * instance of `module` (`readModuleManifest` of `@scfloworg/core`); when
  * `dist/module.js` exists, checks it with `checkBundle` before it imports it;
- * then checks the code against the manifest (`checkModuleCode`). A bundle that
+ * then checks the code against the manifest (`checkModuleCode`). The body of a
+ * skill comes from the bundle, or, for a module with no code, from its file,
+ * which must exist and is read when it is asked for. A bundle that
  * breaks the bundle check throws `constraint_violation` and never runs. An
  * error of the file system, such as a missing `module.yaml`, is thrown as is.
  */
@@ -50,8 +82,8 @@ async function load(path: string): Promise<ModulePackage> {
     bundle = bundlePath;
     exported = await importBundle(manifest.name, bundlePath, await readFile(bundlePath, "utf8"));
   }
-  const { actions, migrations } = checkModuleCode(manifest, exported);
-  return { path: folder, manifest, bundle, actions, migrations };
+  const { actions, migrations, skills } = checkModuleCode(manifest, exported);
+  return { path: folder, manifest, bundle, actions, migrations, skills: skillLoaders(manifest, folder, skills) };
 }
 
 /**

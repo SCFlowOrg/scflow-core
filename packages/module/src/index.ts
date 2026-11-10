@@ -16,6 +16,9 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ModuleBody = (...args: any[]) => unknown;
 
+/** Reads the Markdown body of a skill when a host needs it. */
+export type SkillLoader = () => Promise<string>;
+
 /** The manifest of a module as `src/module.ts` imports it from `module.yaml`. */
 export type ModuleManifestSource = Readonly<Record<string, unknown>>;
 
@@ -25,6 +28,13 @@ export interface ModuleCode {
   readonly actions?: Readonly<Record<string, ModuleBody>>;
   /** The body of each migration, by the version it reaches. */
   readonly migrations?: Readonly<Record<string, ModuleBody>>;
+  /**
+   * The body of each skill, by its name: the part of its id after the slash.
+   * A body is the Markdown text of the `file` the manifest names, which
+   * `src/module.ts` imports; `buildModule` inlines it and checks it against
+   * the file.
+   */
+  readonly skills?: Readonly<Record<string, string>>;
 }
 
 /** What `defineModule` returns: the default export of a bundle. */
@@ -32,6 +42,7 @@ export interface ModuleDefinition {
   readonly manifest: ModuleManifestSource;
   readonly actions: Readonly<Record<string, ModuleBody>>;
   readonly migrations: Readonly<Record<string, ModuleBody>>;
+  readonly skills: Readonly<Record<string, string>>;
 }
 
 /**
@@ -44,5 +55,6 @@ export function defineModule(manifest: ModuleManifestSource, code: ModuleCode = 
     manifest,
     actions: Object.freeze({ ...(code.actions ?? {}) }),
     migrations: Object.freeze({ ...(code.migrations ?? {}) }),
+    skills: Object.freeze({ ...(code.skills ?? {}) }),
   });
 }

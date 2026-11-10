@@ -28,6 +28,9 @@ const copy = await createEnvironment({ formats: [createJsPersistenceInterface()]
 | --- | --- |
 | `createEnvironment({ formats })` | An engine of its own, made by `createEngine` of `@scfloworg/core`: two environments share nothing |
 | `env.modules` | One active version of each module, with its code: `install`, `load`, `get`, `list` |
+| `env.skills` | The skills of the installed modules: `list`, `get`, and `load`, which reads a body on demand |
+| `createSkillTool(env.skills, { actions })` | `use_skill` for an assistant, shaped as an `AiToolSpec` of `@scfloworg/ai`: only the skills whose `uses` it offers |
+| `checkSkillCitations(env.skills)` | The test of a module's skills: the action ids a body cites that its `uses` does not name |
 | `env.datasets` | `create`, `open`, `restore`, `get`, `list`; `open` upgrades a dataset to the installed modules, with their migrations, unless it is opened read only |
 | `dataset.run(id, params)` | One action, in one transaction the environment opens; its body receives an `ActionContext` |
 | `dataset.actions()`, `deleteImpact(schema, filters)` | The declared and generated actions of the dataset, and what a delete would remove |

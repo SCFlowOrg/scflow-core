@@ -179,6 +179,7 @@ const SCHEMAS: NormalizedSchema[] = [
       prop("schemas", "schema", { ...array, owns: true }),
       prop("scalar_types", "scalar_type", { ...array, owns: true }),
       prop("actions", "action", { ...array, owns: true }),
+      prop("skills", "skill", { ...array, owns: true }),
       prop("migrations", "migration", array),
     ],
     { shared_by_name: true },
@@ -200,6 +201,14 @@ const SCHEMAS: NormalizedSchema[] = [
     prop("writes", "schema", array),
     prop("body", "action_body"),
   ]),
+  schema("skill", "a method of a module, in Markdown, that an AI assistant loads on demand", [
+    prop("id", "string"),
+    prop("title", "string"),
+    prop("description", "string"),
+    prop("uses", "string", array),
+    prop("exposure", "string", { enum: ["visible", "hidden"] }, "visible"),
+    prop("file", "string"),
+  ]),
 ];
 
 /** The shape of a module manifest, `module.yaml`, once validated against the `module` schema. */
@@ -220,8 +229,28 @@ export interface ModuleManifest {
   scalar_types: Array<Record<string, TransientValue>>;
   /** The actions the module declares, their `id`, `kind` and `exposure` checked, the rest as authored. */
   actions: Array<Record<string, TransientValue>>;
+  /**
+   * The skills the module declares, checked as instances of `skill`; absent
+   * when it declares none, so the digest of a module without skills does not
+   * depend on this section.
+   */
+  skills?: ModuleSkill[];
   /** The migrations of the module, as authored; `upgradeModule` runs those it needs, by their `to` (see `migrations.ts`). */
   migrations: TransientValue[];
+}
+
+/** A skill of a module: a method in Markdown that an AI assistant loads on demand (see Skill in `docs/spec/meta-model.md`). */
+export interface ModuleSkill {
+  /** The namespace of the module, a slash and a name, such as `scflow/image_to_model`. */
+  id: string;
+  title: string;
+  /** When to use the skill. */
+  description: string;
+  /** The ids of the actions the skill relies on. */
+  uses: string[];
+  exposure: "visible" | "hidden";
+  /** The path of the body, a Markdown file of the module package. */
+  file: string;
 }
 
 /** A module another module depends on, with the versions it accepts. */

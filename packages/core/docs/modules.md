@@ -1,8 +1,9 @@
 # Modules and names
 
-A module owns schemas, scalar types and actions. It is declared in a manifest,
-`module.yaml`, read without running code. The rules are in the specification:
-[Module](spec/meta-model.md#module), [Names](spec/meta-model.md#names) and
+A module owns schemas, scalar types, actions and skills. It is declared in a
+manifest, `module.yaml`, read without running code. The rules are in the
+specification: [Module](spec/meta-model.md#module),
+[Skill](spec/meta-model.md#skill), [Names](spec/meta-model.md#names) and
 [The Core Module](spec/meta-model.md#the-core-module). This page shows the API.
 
 The code of a module, its bundle, and `modules.load`, which reads a module from
@@ -50,10 +51,20 @@ A manifest is refused with `constraint_violation` when:
   such as a qualified name, or with a primitive (`string`, `number`, `integer`,
   `boolean`);
 - an action id is not the namespace of the module, a slash and an identifier, or
-  its `kind` or `exposure` is outside its enum.
+  its `kind` or `exposure` is outside its enum;
+- a skill id is not the namespace of the module, a slash and an identifier; its
+  `title` or `description` is empty; a name of its `uses` is not an action id;
+  its `exposure` is outside its enum; or its `file` is not a relative path to a
+  `.md` file of the package (`isSkillFile`): a URL, an absolute path, a part `.`
+  or `..`, and a `\` are refused.
 
-A name used twice in a module, by schemas and scalar types together, or an action
-id used twice, throws `duplicate_name`.
+A name used twice in a module, by schemas and scalar types together, an action
+id or a skill id used twice, throws `duplicate_name`.
+
+The skills are kept in `skills`, each with its defaults set (`exposure` is
+`visible`). A manifest with no skill has no `skills` entry, so its digest does
+not depend on the section. The presence of the file is checked where the package
+is read, by `@scfloworg/module`.
 
 The manifest keeps its schemas and scalar types as authored. They are processed
 when the module joins a module set, where the names they use resolve. The
@@ -83,6 +94,9 @@ set.requireSchema("actor");                 // throws unknown_schema
   with `unknown_scalar_type`, an `extends` with `unknown_extends_target`.
 - A dependency missing from the set is not refused, but its names do not
   resolve. Versions are not checked.
+- Each name in the `uses` of a skill must be an action of the module or of a
+  dependency in the set, declared or generated (`generatedActionIds` gives the
+  ids a dataset generates for a module), else `constraint_violation`.
 
 ## Resolve a name
 
@@ -175,7 +189,7 @@ await runCommand(locator, { update: "scflow.actor", filters: { name: "acme" }, i
 `MCL_CORE` is the manifest of `mcl:core`, embedded in the engine: namespace
 `mcl`, version `MCL_CORE_VERSION`, `1.0.0`. It holds the meta-model (`schema`,
 `property`, `constraint`, `scalar_type`, `dataset`, `dataset_module`, `import`,
-`module`, `module_dependency`, `action`) and the standard scalar types with the
+`module`, `module_dependency`, `action`, `skill`) and the standard scalar types with the
 patterns of the specification, plus `markdown`. Unlike any other manifest, its
 schemas and scalar types are already normalized: the meta-model names types built
 into the engine, such as `constraint_value`, that have no schema of their own.
