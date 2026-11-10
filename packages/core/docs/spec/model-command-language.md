@@ -313,6 +313,8 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Actions.** Schema processing builds the generated actions of a schema (see [Action](meta-model.md#action)) and checks the declarations, and each breach is a `constraint_violation`: a declared action has no procedure and no bundle; a bundle has no declaration; an id named by `crud` or `updated_by` is not an action of the module; a schema named by `writes` belongs to another module; a module declares the `crud` of a schema of another module; `crud` offers a create or a delete on a facet or a `singleton`, or `updated_by` is set on a `constant` property.
 
+**Skills.** Schema processing checks the skills of a module (see [Skill](meta-model.md#skill)), and each breach is a `constraint_violation`: a skill id is not the namespace of the module, a slash and an identifier, or is declared twice in the module; a `title` or a `description` is empty; a `file` is not a relative path to a `.md` file inside the package; a name in `uses` is not the id of an action, declared or generated, of the module or of one of its dependencies used with it. The presence of the file is checked where the package is read: by the build of the module and when a host loads it.
+
 **Rules.** `checks`, `unique`, `acyclic` and `set_once` are validated here, and each breach is a `constraint_violation`: a rule name is declared twice on a schema; a `checks` entry has both `require` and `exists`, or neither; `each` appears without `exists`; a path crosses an array relation; a `unique` group names something other than a direct scalar or single-valued relation; `acyclic` is set on a relation whose target is neither the schema nor an ancestor of it; `set_once` is set with `constant`, on an array or on a map; a rule is set on a schema of another module.
 
 **Out of scope: placeholders.** Schema processing does not resolve `${...}` placeholders in `default_value` — those are left as literal strings on the normalized `property`. Placeholder resolution happens later, at instance construction time, per [Placeholders](meta-model.md#placeholders). Schema processing only has to guarantee the string survives normalization untouched.
@@ -336,7 +338,7 @@ The inverse is generated once, on behalf of the schema that declares the relatio
 | `inverse_name_conflict` | a virtual relation's target name collides with an existing, non-generated property on the target schema |
 | `reference_outside_module` | a schema refers to a module that is neither its own, nor a dependency, nor `mcl:core` (see [Module](meta-model.md#module)) |
 | `namespace_conflict` | two modules used in one dataset have the same namespace (see [Names](meta-model.md#names)) |
-| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*), or declares a rule that is not valid (see *Rules*), or an action that is not valid (see *Actions*) |
+| `constraint_violation` | a schema breaks the rules of a facet (see *Facets*), or declares a rule that is not valid (see *Rules*), or an action that is not valid (see *Actions*), or a skill that is not valid (see *Skills*) |
 
 ## Examples
 

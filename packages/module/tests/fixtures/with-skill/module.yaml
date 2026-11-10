@@ -1,0 +1,20 @@
+# A module with code and a skill: the bundle carries the body of the skill.
+name: acme:tips
+namespace: tips
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+actions:
+  - id: tips/publish_tip
+    title: Publish a tip
+skills:
+  - id: tips/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: [tips/publish_tip, tips/create_tip]
+    file: skills/write-tips.md

@@ -1,0 +1,17 @@
+# A module with no code and a skill: the host reads its body from its file.
+name: acme:plain_tips
+namespace: plain_tips
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+skills:
+  - id: plain_tips/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: [plain_tips/create_tip]
+    file: skills/write-tips.md

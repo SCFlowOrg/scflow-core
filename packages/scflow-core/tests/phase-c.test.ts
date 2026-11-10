@@ -25,7 +25,12 @@ const current = (): Manifest => load(readFileSync(join(root, "module.yaml"), "ut
 /** An environment holding one version of the module, with the action bodies of the package. */
 function environmentWith(manifest: Manifest) {
   const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
-  env.modules.install(defineModule(manifest as never, { actions: ACTION_BODIES }));
+  env.modules.install(
+    defineModule(manifest as never, {
+      actions: ACTION_BODIES,
+      skills: { image_to_model: readFileSync(join(root, "skills", "image-to-model.md"), "utf8") },
+    }),
+  );
   return env;
 }
 

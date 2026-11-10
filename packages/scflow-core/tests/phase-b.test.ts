@@ -46,7 +46,7 @@ describe("phase B", () => {
     });
     expect(dataset.readOnly).toBe(false);
     expect(dataset.modules).toEqual([
-      { module: "scflow:core", version: "1.1.0", installed: "1.1.0", state: "current" },
+      { module: "scflow:core", version: "1.2.0", installed: "1.2.0", state: "current" },
       { module: "acme:carbon", version: "1.0.0", installed: "1.0.0", state: "current" },
     ]);
 

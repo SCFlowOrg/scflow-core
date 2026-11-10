@@ -1,0 +1,10 @@
+# A module whose skill names a file the package does not hold.
+name: acme:lost_tips
+namespace: lost_tips
+version: 1.0.0
+mcl: ^1.0
+skills:
+  - id: lost_tips/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    file: skills/write-tips.md

@@ -46,7 +46,7 @@ function packageRoot(file: string): string | null {
  * Keeps out of the bundle what a module must not hold, as an import the check
  * refuses: the engine, the Node built-ins and the files of another module
  * package, a folder with its own `module.yaml`. It inlines a `.yaml` import as
- * data.
+ * data, and a `.md` import, such as the body of a skill, as its text.
  */
 function modulePlugin(folder: string): Plugin {
   return {
@@ -61,6 +61,7 @@ function modulePlugin(folder: string): Plugin {
       return resolved;
     },
     async load(id) {
+      if (/\.md$/.test(id)) return { code: `export default ${JSON.stringify(await readFile(id, "utf8"))};\n`, moduleType: "js" };
       if (!/\.ya?ml$/.test(id)) return null;
       const data = parseYaml(await readFile(id, "utf8"));
       return { code: `export default ${JSON.stringify(data)};\n`, moduleType: "js" };
@@ -73,11 +74,13 @@ function modulePlugin(folder: string): Plugin {
  * ES module, `dist/module.js`, with the manifest inlined, `defineModule` and the
  * other libraries of the package bundled in, and a default export.
  *
- * It validates `module.yaml` first. A module with no `src/module.ts` has no
+ * It validates `module.yaml` first, and checks that the file of each skill
+ * exists in the package. A module with no `src/module.ts` has no
  * bundle: it writes nothing, removes a `dist/module.js` left by an earlier
  * build and returns `bundle: null`. The bundle is checked with `checkBundle`
  * before it is written, then imported and checked against the manifest with
- * `checkModuleCode`; a failure throws `constraint_violation` and leaves no
+ * `checkModuleCode`, and the body of each skill it holds must be the text of
+ * the skill's file; a failure throws `constraint_violation` and leaves no
  * bundle.
  */
 export async function buildModule(folder: string): Promise<BuildResult> {
@@ -85,6 +88,16 @@ export async function buildModule(folder: string): Promise<BuildResult> {
   const manifest = readModuleManifest(readFileSync(join(root, MANIFEST_FILE), "utf8"));
   const target = join(root, BUNDLE_FILE);
   const entry = join(root, ENTRY_FILE);
+  const skillFiles = new Map<string, string>();
+  for (const skill of manifest.skills ?? []) {
+    const file = join(root, skill.file);
+    if (!existsSync(file))
+      throw modelError(
+        "constraint_violation",
+        `skill "${skill.id}" of "${manifest.name}" names the file "${skill.file}", which the package does not hold`,
+      );
+    skillFiles.set(skill.id, readFileSync(file, "utf8"));
+  }
   if (!existsSync(entry)) {
     rmSync(target, { force: true });
     return { bundle: null };
@@ -119,7 +132,14 @@ export async function buildModule(folder: string): Promise<BuildResult> {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, code);
   try {
-    checkModuleCode(manifest, await importBundle(manifest.name, target, code));
+    const { skills } = checkModuleCode(manifest, await importBundle(manifest.name, target, code));
+    for (const [id, body] of skills) {
+      if (body !== skillFiles.get(id))
+        throw modelError(
+          "constraint_violation",
+          `the bundle of "${manifest.name}" gives skill "${id}" a body that is not the text of its file`,
+        );
+    }
   } catch (error) {
     rmSync(target, { force: true });
     throw error;

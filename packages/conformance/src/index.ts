@@ -1952,6 +1952,111 @@ schemas:
 `);
       expect(() => createModuleSet([readModuleManifest(scflow), careless])).toThrow(expect.objectContaining({ code: "unknown_scalar_type" }));
     });
+
+    // Skill, in meta-model.md, and Skills of Schema Processing
+    const skillOf = (skill: string, dependencies = "") => `
+name: acme:guide
+namespace: guide
+version: 1.0.0
+mcl: ^1.0
+${dependencies}
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+actions:
+  - id: guide/publish_tip
+    title: Publish a tip
+skills:
+${skill}
+`;
+    const withScflow = "dependencies:\n  - module: scflow:core\n    version: ^1.3";
+
+    it("reads the skills of a manifest, with their defaults", () => {
+      const manifest = readModuleManifest(skillOf(`
+  - id: guide/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: [guide/publish_tip]
+    file: skills/write-tips.md`));
+      expect(manifest.skills).toEqual([
+        {
+          id: "guide/write_tips",
+          title: "Write tips",
+          description: "Use when writing tips.",
+          uses: ["guide/publish_tip"],
+          exposure: "visible",
+          file: "skills/write-tips.md",
+        },
+      ]);
+      // a manifest with no skill has no skills entry, so its digest does not change
+      expect("skills" in readModuleManifest(carbon)).toBe(false);
+    });
+
+    it("refuses a skill that breaks the skill schema", () => {
+      const skill = (fields: Record<string, string>) =>
+        "  - " +
+        Object.entries({ id: "guide/write_tips", title: "Write tips", description: "Use when writing tips.", file: "skills/write-tips.md", ...fields })
+          .filter(([, value]) => value !== "")
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("\n    ");
+      const refused = (fields: Record<string, string>) =>
+        expect(() => readModuleManifest(skillOf(skill(fields)))).toThrow(expect.objectContaining({ code: "constraint_violation" }));
+      // the prefix of the id is the namespace of the module
+      refused({ id: "scflow/write_tips" });
+      refused({ id: "write_tips" });
+      // a title and a description are given
+      refused({ title: "" });
+      refused({ description: "" });
+      // the file is a relative path to a Markdown file of the package
+      refused({ file: "" });
+      refused({ file: "skills/write-tips.txt" });
+      refused({ file: "/skills/write-tips.md" });
+      refused({ file: "C:/skills/write-tips.md" });
+      refused({ file: "https://example.com/write-tips.md" });
+      refused({ file: "../other/write-tips.md" });
+      refused({ file: "skills/../write-tips.md" });
+      refused({ file: "./write-tips.md" });
+      refused({ file: '"skills\\\\write-tips.md"' });
+      // uses names action ids, and exposure takes its enum
+      refused({ uses: "[publish_tip]" });
+      refused({ exposure: "ai" });
+      // a skill id is unique in its module
+      const twice = `${skill({})}\n${skill({})}`;
+      expect(() => readModuleManifest(skillOf(twice))).toThrow(expect.objectContaining({ code: "duplicate_name" }));
+    });
+
+    it("accepts in uses the actions of the module and of its dependencies, declared or generated", () => {
+      const manifest = readModuleManifest(skillOf(`
+  - id: guide/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: [guide/publish_tip, guide/create_tip, guide/delete_tip, scflow/create_actor, scflow/update_actor]
+    file: skills/write-tips.md`, withScflow));
+      expect(() => createModuleSet([readModuleManifest(scflow), manifest])).not.toThrow();
+    });
+
+    it("refuses a skill that uses an unknown action or an action outside its dependencies", () => {
+      const refused = (uses: string, dependencies = withScflow) => {
+        const manifest = readModuleManifest(skillOf(`
+  - id: guide/write_tips
+    title: Write tips
+    description: Use when writing tips.
+    uses: ${uses}
+    file: skills/write-tips.md`, dependencies));
+        expect(() => createModuleSet([readModuleManifest(scflow), manifest])).toThrow(expect.objectContaining({ code: "constraint_violation" }));
+      };
+      // no such action in the module
+      refused("[guide/remove_tip]");
+      // no such action in the dependency
+      refused("[scflow/create_flow]");
+      // an action of a module that is not a dependency
+      refused("[scflow/create_actor]", "");
+      // a namespace no module of the set declares
+      refused("[carbon/create_site]");
+    });
   });
 
   datasetModuleCases(formatPrefix, newLocator);

@@ -1,9 +1,15 @@
 {
   "name": "@scfloworg/scflow-core",
   "description": "Business package of the supply chain flow model: MCL schemas and pure domain logic.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist",
+    "docs",
+    "module.yaml",
+    "skills"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

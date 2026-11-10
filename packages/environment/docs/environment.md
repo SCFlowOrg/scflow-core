@@ -63,8 +63,9 @@ env.modules.list(): readonly InstalledModule[]
   digest, is left alone. It is refused on a read-only dataset, with
   `read_only_dataset`, and during a transaction, with `transaction_open`.
 - An `InstalledModule` gives the validated `manifest`, its `key` and
-  `version`, the body of each action by id in `actions`, and the body of
-  each migration by version in `migrations`.
+  `version`, the body of each action by id in `actions`, the body of
+  each migration by version in `migrations`, and the loader of each skill body
+  by skill id in `skills`.
 - Installing a module again with the same manifest, in canonical form, returns
   the module already installed. Another version, or the same version with
   another manifest, so another digest, fails
@@ -75,6 +76,54 @@ env.modules.list(): readonly InstalledModule[]
   local module, which no catalogue holds, fails with `constraint_violation`.
 - Dependencies are not checked at install, so modules install in any order.
   They are checked when a dataset uses the modules.
+
+## Skills
+
+`env.skills` holds the catalogue of the skills of the installed modules (see
+[Skill](../../core/docs/spec/meta-model.md#skill)). Only the catalogue enters a
+prompt; a body is read when a model asks for it.
+
+```ts
+env.skills.list(): readonly SkillEntry[]   // id, module, title, description, uses, exposure
+env.skills.get(id: string): SkillEntry | undefined
+env.skills.load(id: string): Promise<SkillContent> // { skillId, title, instructions }
+```
+
+- **Only installed modules offer skills.** A dataset embeds its modules, but a
+  module that comes only with a dataset is not installed, and its skills never
+  enter the catalogue: a file received from someone else would otherwise give
+  instructions to the model.
+- `list` gives the skills in the order of the installed modules, then of their
+  manifests. `load` reads the body with the loader of its module and fails with
+  `key_not_found` for an id the catalogue does not hold.
+
+`createSkillTool(catalogue, { actions })` builds `use_skill` for one assistant,
+with the actions it offers, as ids or as a test on an id.
+
+```ts
+const tool = createSkillTool(env.skills, { actions: offeredActionIds });
+tool?.spec;                                // { name: "use_skill", title, description, inputSchema, annotations }
+await tool?.call({ skillId: "scflow/image_to_model" }); // { skillId, title, instructions }
+```
+
+- **A skill is offered only when it is `visible` and the assistant offers every
+  action of its `uses`.** A skill never widens the tools of an assistant nor
+  bypasses an approval. With no skill to offer, `createSkillTool` returns
+  `null`.
+- `spec` has the shape of an `AiToolSpec` of `@scfloworg/ai`, which knows
+  nothing of skills: its `inputSchema` takes `skillId`, one of the offered ids,
+  and its `description` lists each offered skill with its title and description,
+  so a host may also list them in its prompt from `tool.skills`. The tool only
+  reads: `readOnlyHint` is set.
+- `call` fails with `invalid_parameters` for an input that names no offered
+  skill. Its result is the shape the `use_skill` of the framework returns.
+
+`checkSkillCitations(catalogue, ids?)` is the test of a module's skills: it
+loads each body and returns, as `{ skill, action }`, every action id the body
+cites in a code span that its `uses` does not name. A module runs it in its own
+tests, so a name that drifts fails there. `citedActionIds(body)` gives the cited
+ids alone: a code span whose text is a namespace, a slash and a name, such as
+`` `scflow/create_flow` ``.
 
 ## Datasets
 

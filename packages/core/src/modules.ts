@@ -4,7 +4,8 @@ import { coerceScalar, validateScalarValue } from "./command.js";
 import { modelError } from "./errors.js";
 import { parseMapType, LOCALIZED_MAP_TYPES } from "./mapTypes.js";
 import { MCL_CORE, MCL_CORE_KEY, MCL_NAMESPACE } from "./mclCore.js";
-import type { ModuleDependency, ModuleManifest } from "./mclCore.js";
+import type { ModuleDependency, ModuleManifest, ModuleSkill } from "./mclCore.js";
+import { generatedActionIds } from "./moduleActions.js";
 import {
   processScalarTypeDescription,
   processSchemaDescription,
@@ -25,7 +26,7 @@ import type {
  * Modules and names, per packages/core/docs/spec/meta-model.md#module,
  * #names and #the-core-module.
  *
- * A module owns its schemas, scalar types and actions. `readModuleManifest`
+ * A module owns its schemas, scalar types, actions and skills. `readModuleManifest`
  * reads a `module.yaml` and validates it as an instance of the `module` schema
  * of `mcl:core`. `createModuleSet` puts modules together, always with
  * `mcl:core`, refuses two modules with one namespace, and processes the schemas
@@ -135,6 +136,17 @@ function validateCoreInstance(
   return out;
 }
 
+/**
+ * Whether `file` is a path a skill may name: relative, inside the package of
+ * its module, with `/` between its parts and the extension `.md`. A URL, an
+ * absolute path, a drive, a part `.` or `..` and a `\` are refused (see Skill
+ * in `docs/spec/meta-model.md`).
+ */
+export function isSkillFile(file: string): boolean {
+  if (!file.endsWith(".md") || file.includes("\\") || file.includes(":") || file.startsWith("/")) return false;
+  return file.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+}
+
 /** The list of mappings a manifest gives for `what`, or `[]` when it gives none. */
 function listOfMappings(
   value: TransientValue,
@@ -167,6 +179,13 @@ function listOfMappings(
  *   slash and an identifier, unique in the module (`duplicate_name`), and its
  *   `kind` and `exposure` take their enums. Its `parameters`, `writes` and
  *   `body` are kept as given.
+ * - Each skill is a `skill`: its `id` is the namespace of the module, a slash
+ *   and an identifier, unique in the module (`duplicate_name`); its `title` and
+ *   `description` are given; each name of `uses` is an action id; `exposure`
+ *   takes its enum; `file` is a relative `.md` path (`isSkillFile`). Whether the
+ *   actions of `uses` exist is checked in a module set (`createModuleSet`), and
+ *   whether the file exists where the package is read. A manifest with no skill
+ *   has no `skills` entry.
  * - `migrations` are kept as given.
  *
  * The schemas and scalar types themselves are processed when the module joins
@@ -174,7 +193,7 @@ function listOfMappings(
  * Every other breach throws `constraint_violation`.
  */
 export function validateModuleManifest(raw: unknown): ModuleManifest {
-  const owned = new Set(["schemas", "scalar_types", "actions", "migrations"]);
+  const owned = new Set(["schemas", "scalar_types", "actions", "skills", "migrations"]);
   const module = validateCoreInstance("module", raw, "the module", owned);
   const key = module.name as string;
   const namespace = module.namespace as string;
@@ -243,6 +262,33 @@ export function validateModuleManifest(raw: unknown): ModuleManifest {
     return action;
   });
 
+  const anyActionId = /^[A-Za-z_][A-Za-z0-9_]*\/[A-Za-z_][A-Za-z0-9_]*$/;
+  const skillIds = new Set<string>();
+  const skills = listOfMappings(module.skills, `the skills of "${key}"`).map((entry, i): ModuleSkill => {
+    const skill = validateCoreInstance("skill", entry, `the skill ${i} of "${key}"`);
+    const id = skill.id as string;
+    const fail = (message: string): never => {
+      throw modelError("constraint_violation", `skill "${id}" of module "${key}" ${message}`);
+    };
+    if (!actionId.test(id)) fail(`must be named "${namespace}/" and an identifier`);
+    if (skillIds.has(id)) throw modelError("duplicate_name", `module "${key}" declares skill "${id}" twice`);
+    skillIds.add(id);
+    if ((skill.title as string).trim() === "") fail("has no title");
+    if ((skill.description as string).trim() === "") fail("has no description, which says when to use it");
+    const uses = skill.uses as string[];
+    for (const name of uses) if (!anyActionId.test(name)) fail(`uses ${JSON.stringify(name)}, which is not an action id`);
+    const file = skill.file as string;
+    if (!isSkillFile(file)) fail(`names the file ${JSON.stringify(file)}, which is not a relative path to a .md file of the package`);
+    return {
+      id,
+      title: skill.title as string,
+      description: skill.description as string,
+      uses: [...uses],
+      exposure: skill.exposure as ModuleSkill["exposure"],
+      file,
+    };
+  });
+
   const migrations = module.migrations;
   if (!Array.isArray(migrations))
     throw modelError("constraint_violation", `the migrations of "${key}" must be a list`);
@@ -257,6 +303,7 @@ export function validateModuleManifest(raw: unknown): ModuleManifest {
     schemas,
     scalar_types: scalarTypes,
     actions,
+    ...(skills.length > 0 ? { skills } : {}),
     migrations,
   };
 }
@@ -601,6 +648,42 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
     for (const short of entry.authoredSchemas.keys()) schemaOf(entry, short);
   }
   for (const entry of byKey.values()) checkActionDeclarations(entry);
+  for (const entry of byKey.values()) checkSkillUses(entry);
+
+  /**
+   * The check of Schema Processing, *Skills*, that needs the module set: each
+   * name of `uses` is an action, declared or generated, of the module or of a
+   * dependency of it in the set. A breach is a `constraint_violation`.
+   */
+  function checkSkillUses(entry: Entry): void {
+    const skills = (entry.manifest as ModuleManifest).skills ?? [];
+    if (skills.length === 0) return;
+    const reachable = new Map<string, Entry>([[entry.namespace, entry]]);
+    for (const key of entry.dependencyKeys) {
+      const dependency = byKey.get(key);
+      if (dependency) reachable.set(dependency.namespace, dependency);
+    }
+    const idsOf = new Map<Entry, Set<string>>();
+    const actionsOf = (owner: Entry): Set<string> => {
+      let ids = idsOf.get(owner);
+      if (!ids) {
+        ids = new Set([...owner.actions.keys(), ...generatedActionIds(owner)]);
+        idsOf.set(owner, ids);
+      }
+      return ids;
+    };
+    for (const skill of skills) {
+      for (const name of skill.uses) {
+        const owner = reachable.get(name.slice(0, name.indexOf("/")));
+        if (!owner || !actionsOf(owner).has(name)) {
+          throw modelError(
+            "constraint_violation",
+            `module "${entry.key}": skill "${skill.id}" uses "${name}", not an action of the module or of a dependency`,
+          );
+        }
+      }
+    }
+  }
 
   /**
    * The checks of Schema Processing, *Actions*, each breach a

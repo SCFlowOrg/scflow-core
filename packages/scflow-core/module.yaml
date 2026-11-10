@@ -1,13 +1,13 @@
 # The manifest of the module scflow:core: its identity, its scalar types, its
-# schemas and the declarations of its actions (docs/spec/implementation.md,
-# Schemas Package). The schemas follow docs/spec/schemas.md; the actions are
+# schemas, the declarations of its actions and its skills
+# (docs/spec/implementation.md, Schemas Package). The schemas follow docs/spec/schemas.md; the actions are
 # implemented by src/actions and must agree with ACTIONS. The scalar types and
 # the schemas are compiled to src/schemas.generated.ts by scripts/build-schemas.mjs.
 
 name: scflow:core
 namespace: scflow
 # always the version of package.json
-version: 1.1.0
+version: 1.2.0
 mcl: ^1.0
 title: Supply chain flow
 
@@ -1071,3 +1071,27 @@ actions:
       required:
         - targets
       additionalProperties: false
+
+# The skills of the module: methods in Markdown that an AI assistant loads on
+# demand. The body of each is its file, given to defineModule by src/module.ts;
+# a test checks that every action id a body cites is in its uses.
+skills:
+  - id: scflow/image_to_model
+    title: Image to model
+    description: Use when creating or refining a SCFLOW model from a supply-chain diagram, process map, whiteboard photograph or sketch.
+    uses:
+      - scflow/create_scope
+      - scflow/create_actor_type
+      - scflow/create_actor
+      - scflow/create_item_type
+      - scflow/create_item
+      - scflow/hold_item
+      - scflow/create_flow
+      - scflow/set_flow_item
+      - scflow/create_conversion
+      - scflow/create_transformation_type
+      - scflow/create_transformation
+      - scflow/connect_transformation_line
+      - scflow/define_process
+      - scflow/add_note
+    file: skills/image-to-model.md

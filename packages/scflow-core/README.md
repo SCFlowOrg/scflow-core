@@ -12,11 +12,19 @@ its identity, its scalar types, its schemas and the declarations of its actions,
 
 Its code is one bundle, `dist/module.js`, built from `src/module.ts` by `buildModule` of
 `@scfloworg/module` (see its [docs](../module/docs/module-packages.md)): the default export
-`defineModule(manifest, { actions })` gives each action of `ACTIONS` as a body that calls its `run(params, context)`.
+`defineModule(manifest, { actions, skills })` gives each action of `ACTIONS` as a body that calls its `run(params, context)`,
+and the text of each skill file.
 The package imports only types from `@scfloworg/core`, so the bundle holds no copy of the
 engine. A host loads the module with `modules.load(folder)` of `@scfloworg/module/host`;
 `tests/bundle.test.ts` builds, checks and loads the bundle. `tsc -b` leaves `src/module.ts` out,
 since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
+
+## Skills
+
+The module declares its skills in `module.yaml`, each with its body in `skills/`:
+`scflow/image_to_model` is the method to create or refine a model from a diagram, a sketch or a
+photograph. `tests/skills.test.ts` checks that every action id a body cites is in the `uses` of
+its skill, and that the skill is offered by `use_skill` only with those actions.
 
 ## Exports
 

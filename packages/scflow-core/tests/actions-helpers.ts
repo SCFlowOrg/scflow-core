@@ -14,6 +14,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** The module scflow:core from its sources, so these tests need no built bundle. */
 const definition = defineModule(load(readFileSync(join(root, "module.yaml"), "utf8")) as never, {
   actions: ACTION_BODIES,
+  skills: { image_to_model: readFileSync(join(root, "skills", "image-to-model.md"), "utf8") },
 });
 
 let counter = 0;
