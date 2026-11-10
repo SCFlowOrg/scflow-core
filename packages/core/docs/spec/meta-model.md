@@ -329,7 +329,7 @@ display_name: { en: Plant, fr: Usine }
 
 The dataset holds every language; CORE has no notion of a current language. A reader, typically an application, chooses the language to show and its fallback, and the other entries stay available to compare and to translate directly. Translating is an ordinary update of an instance by a user, not a configuration of the application and not a bulk operation on the dataset: `{update: actor_type, filters: {name: plant}, input: {display_name: {set: {fr: Usine}}}}` sets one language and leaves the others as they are (see [Command](model-command-language.md#command), "Map operations"). A language is filtered like any entry of a map (see [Filter](model-command-language.md#filter)).
 
-Not covered yet: which entry is the source language, and detecting a translation that a change of the source made stale.
+The languages of the document are declared by the [`languages`](#dataset) of the dataset; its first item is the source language. Not covered yet: detecting a translation that a change of the source made stale.
 
 ## Constraints
 
@@ -778,7 +778,7 @@ Every relation must be with an instance in the dataset, the modeling language wi
 
 A dataset keeps one version, for its data (see [Version Upgrade](why-modelling.md#version-upgrade)). It is a major.minor pair: minor increments automatically on any change; major is a deliberate bump. The version of the model is the version of each module.
 
-A dataset has a `name`, plus creation/update information.
+A dataset has a `name`, the ordered list of its `languages`, plus creation/update information.
 Datasets have a schema `dataset` which is part of the meta-model.
 Querying for `dataset` in a dataset will not be very exciting, it returns itself. The dataset is a singleton, there is only one instance per dataset (a very special singleton).
 
@@ -799,10 +799,22 @@ properties:
     type: date_time
   - name: updated_at
     type: date_time
+  - name: languages
+    type: "[language_code]"
+    description: the ordered languages of the multilingual texts; the first is the source language
   - name: modules
     type: "[dataset_module]"
     description: every module this dataset uses
 ```
+
+**Languages.** `languages` declares the languages the `localized_string` and `localized_markdown` texts of the document are written in (see [Internationalization](#internationalization)). It is a fact about the document, so it lives on `dataset` and every host reads it.
+
+- Each item is a `language_code`, and an item appears once: a duplicate is a constraint violation. The order is the author's.
+- The first language is the **source language** and the fallback of every read.
+- An absent `languages` reads as `[]`, which means *not stated*: a host behaves as it did before the list existed. Existing files load unchanged.
+- The list **offers and expects, it never forbids.** A key of a localized text outside the list is kept as it is and is never rejected, and removing a language from the list removes no text: a purge is a separate, deliberate act, never a side effect of editing the list.
+- A language is a full `language_code`. A read of a localized text for `pt-BR` falls back to `pt` when only the base language is present, then to the source language (see `resolveLocalizedText` in `@scfloworg/core`). The engine has no current language: the reader chooses the one it asks for.
+- A new dataset is created with the languages its creator passes (`initDataset`'s `languages` option); a host passes the language of its user interface, so a document is not created *not stated*. Without the option `languages` stays absent.
 
 ```yaml
 name: dataset_module
@@ -823,10 +835,10 @@ Every root schema — [`import`](#import), and any root schema of a module the d
 **Commands on `dataset`.** `dataset` is a command target like any schema, with these rules:
 
 - `query` returns the dataset itself; `filters` apply to that one instance.
-- `update` renames the dataset: only `name` (an `identifier`) can be updated. The versions, the two timestamps and `modules` are maintained by the engine or by model upgrade, so an `update` carrying one of them is a constraint violation.
+- `update` changes `name` (an `identifier`) and `languages` (a `[language_code]` with no duplicate). Both are written through this one `update`, with one answer for the two properties: no `mcl:core` action is added, and the command is a write like the rename is today, so it runs in an action session (a host's own, as for the rename) and is refused with `write_outside_action` outside one. The versions, the two timestamps and `modules` are maintained by the engine or by model upgrade, so an `update` carrying one of them is a constraint violation. `languages` replaces the whole list; an invalid item or a duplicate is a `constraint_violation` and nothing changes.
 - `create` and `delete` are refused: a dataset is created and removed by the persistence lifecycle (see [Persistence Interface](typescript-reference-implementation.md#persistence-interface)), not by command.
-- A rename that changes the name is a change of the data: the minor data version is incremented and `updated_at` recorded. A rename to the current name changes nothing.
-- The rename joins a transaction's delta like any other update (see `@scfloworg/core`'s `docs/sessions.md`).
+- An update that changes `name` or `languages` is a change of the data: the minor data version is incremented and `updated_at` recorded. An update to the current values changes nothing.
+- The update joins a transaction's delta like any other update (see `@scfloworg/core`'s `docs/sessions.md`).
 
 **Local module.** A local module holds the schemas of one project. Its name is `local:<name>`, it is embedded in the file, it is absent from any catalogue and it stays editable. It keeps a dataset autonomous with a model of its own, and it can be published later.
 

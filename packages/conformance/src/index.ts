@@ -8,6 +8,7 @@ import { addModuleCases } from "./addModule.js";
 import { moduleUpgradeCases } from "./moduleUpgrade.js";
 import { procedureCases } from "./procedures.js";
 import { ruleCases } from "./rules.js";
+import { languageCases } from "./languages.js";
 import { writeCases } from "./writes.js";
 
 /**
@@ -2097,6 +2098,7 @@ ${skill}
 
   ruleCases(formatPrefix, newLocator);
   writeCases(impl, formatPrefix);
+  languageCases(impl, formatPrefix);
   procedureCases(formatPrefix, newLocator);
 }
 

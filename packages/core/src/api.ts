@@ -6,6 +6,7 @@ import type { DatasetModel as LoadedDatasetModel } from "./datasetModules.js";
 import type { Filter as CommandFilter } from "./types.js";
 import { META_SCHEMAS } from "./builtins.js";
 import { modelError } from "./errors.js";
+import { validateLanguages } from "./languages.js";
 import {
   computeModelDiff,
   clone as cloneUpgrade,
@@ -232,6 +233,14 @@ export interface InitDatasetOptions {
    * always there and is never listed.
    */
   modules?: ModuleManifest[];
+  /**
+   * The ordered languages of the multilingual texts, the first being the
+   * source language (see `languages` in `docs/spec/meta-model.md#dataset`). A
+   * host passes the language of its user interface. Absent, `languages` stays
+   * absent and reads as `[]`. Throws `constraint_violation` for a value that is
+   * not a list of distinct language codes.
+   */
+  languages?: string[];
 }
 
 /**
@@ -246,8 +255,10 @@ export interface InitDatasetOptions {
 async function initDatasetIn(scope: EngineScope, locator: string, name: string, options: InitDatasetOptions = {}): Promise<TransientValue> {
   const { impl, rest } = resolveImpl(scope, locator);
   const manifests = (options.modules ?? []).map((m) => validateModuleManifest(m));
+  const languages = options.languages === undefined ? undefined : validateLanguages(options.languages);
   if (manifests.length > 0) buildDatasetModel(manifests);
   await impl.createDataset(rest, name);
+  if (languages !== undefined) await impl.updateDataset(rest, { languages });
   if (manifests.length > 0) {
     await writeModules(impl, rest, manifests);
     try {
@@ -1250,7 +1261,9 @@ async function upgradeDatasetIn(scope: EngineScope, locator: string, upgradeLoca
 function isNoopDatasetRename(command: { kind: string; schema: string }, result: CommandResult): boolean {
   if (command.schema !== "dataset" || command.kind !== "update") return false;
   if (result.before.length === 0 || result.after.length === 0) return false;
-  return (result.before[0] as TransientObject).name === (result.after[0] as TransientObject).name;
+  const before = result.before[0] as TransientObject;
+  const after = result.after[0] as TransientObject;
+  return before.name === after.name && JSON.stringify(before.languages ?? []) === JSON.stringify(after.languages ?? []);
 }
 
 /**
@@ -1808,29 +1821,23 @@ function wrapForDeltaCapture(
       if (!state) {
         return impl.updateDataset(rest, patch);
       }
-      // Only capture name changes in the delta - versions/timestamps are
+      // Only capture name and languages changes in the delta - versions/timestamps are
       // bumped by the engine and must move forward on revert, not restore
       // old values
       const patchObj = patch as TransientObject;
-      if (Object.prototype.hasOwnProperty.call(patchObj, "name")) {
+      if (Object.prototype.hasOwnProperty.call(patchObj, "name") || Object.prototype.hasOwnProperty.call(patchObj, "languages")) {
         const current = (await impl.getDataset(rest)) as TransientObject;
-        const currentName = current.name;
+        const snapshot = (info: TransientObject): TransientObject => ({ name: info.name, languages: Array.isArray(info.languages) ? [...info.languages] : [] });
+        const beforeValue = snapshot(current);
         const result = await impl.updateDataset(rest, patch);
-        const resultObj = result as TransientObject;
-        const newName = resultObj.name;
-        // Only record a delta if the name actually changed
-        if (currentName !== newName) {
-          touchDelta(
-            state,
-            "dataset",
-            "dataset",
-            { name: currentName },
-            { name: newName },
-          );
+        const afterValue = snapshot(result as TransientObject);
+        // Only record a delta if one of them actually changed
+        if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+          touchDelta(state, "dataset", "dataset", beforeValue, afterValue);
         }
         return result;
       }
-      // Version-only patch (no name change) - no delta entry
+      // Version-only patch (no name or languages change) - no delta entry
       return impl.updateDataset(rest, patch);
     },
 
@@ -1877,12 +1884,12 @@ function wrapForDeltaCapture(
 async function applyEntries(impl: PersistenceInterface, rest: string, resolvers: Resolvers, entries: DeltaEntry[], useBefore: boolean): Promise<void> {
   for (const entry of entries) {
     if (entry.schema === "dataset" && entry.key === "dataset") {
-      // Dataset singleton: replay via updateDataset with just the name field
+      // Dataset singleton: replay via updateDataset with the name and the languages
       // (versions/timestamps are bumped by the engine, not restored)
       const value = useBefore ? entry.before : entry.after;
       if (value !== undefined) {
         const valueObj = value as TransientObject;
-        await impl.updateDataset(rest, { name: valueObj.name });
+        await impl.updateDataset(rest, { name: valueObj.name, languages: Array.isArray(valueObj.languages) ? valueObj.languages : [] });
       }
       continue;
     }

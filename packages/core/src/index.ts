@@ -2,6 +2,7 @@ export * from "./types.js";
 export * from "./errors.js";
 export { createEngine } from "./api.js";
 export type { Engine, EngineOptions, InitDatasetOptions } from "./api.js";
+export { languagesOf, resolveLocalizedText, validateLanguages } from "./languages.js";
 export { resolveClockPlaceholders, runProcedure } from "./procedure.js";
 export type { Procedure, ProcedureHost } from "./procedure.js";
 export type { RuleViolation } from "./rules.js";
