@@ -1,0 +1,4 @@
+data: {"id":"gen-4","object":"chat.completion.chunk","created":1762790403,"model":"openai/gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Par"},"finish_reason":null}]}
+
+data: {"error":{"message":"The upstream provider failed","code":502}}
+
