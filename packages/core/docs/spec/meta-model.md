@@ -909,6 +909,10 @@ properties:
     type: "[skill]"
     owns:
     description: the skills this module declares, see Skill
+  - name: docs
+    type: "[topic]"
+    owns:
+    description: the documentation topics this module declares, see Topic
   - name: migrations
     type: "[migration]"
     description: the steps that carry a dataset to a version of this module, see Model Upgrade
@@ -928,7 +932,7 @@ properties:
 - **Name.** The name of a module is `publisher:module`, for example `acme:carbon`. It is the key of the module (see [Keys](#keys)).
 - **Version.** The semantic version is the only version of a module. Its patch marks a change of code only, and a change of the schemas that is not compatible needs a new major (see [Model Upgrade](#model-upgrade)).
 - **Dependencies.** A dependency is a range of versions, such as `^1.3`. `mcl:core` is not listed there: the `mcl` property gives its range.
-- **Ownership.** A schema name, a scalar type name, an action id and a skill id are unique in their module, not across modules. Two modules can define the same name.
+- **Ownership.** A schema name, a scalar type name, an action id, a skill id and a topic id with its locale are unique in their module, not across modules. Two modules can define the same name.
 - **References.** A schema refers only to its own module, to its dependencies and to `mcl:core`, through `extends`, `facet_of` or a relation. An action calls only the actions of the same modules.
 
 ## Action
@@ -1136,6 +1140,68 @@ A manifest that declares no skill has no `skills` entry once validated, so the d
 **The body** is data written by the author of the module, read without running code, like the manifest. A host never follows instructions from elsewhere as a skill: only the modules installed in an environment offer skills, never a module that comes only embedded in a dataset, because a dataset received from someone else would then give instructions to the model. The check that the action ids a body cites appear in `uses` belongs to the tests of the module.
 
 The body of a skill travels with the code of its module (see `@scfloworg/module`, `docs/module-packages.md`), and a host gets it only when the model asks for it: the catalogue of an environment holds the id, title, description and `uses` of each skill, and loads a body on demand (see `@scfloworg/environment`, `docs/environment.md`, Skills).
+
+## Topic
+
+*Feature.*
+
+A topic is a page of documentation a module gives to its readers: people, a help panel, a public site and AI assistants. It is Markdown with an id, a kind and an audience, merged with the topics of other sources by `@scfloworg/docs`, which is neutral and knows no module. A module declares its topics in `docs:`, beside its skills, with the same shape, and the body of a topic is a Markdown file of the module package. A skill is not a topic: a skill is a method for a model, a topic is documentation for readers, and each keeps its own declaration and catalogue.
+
+```yaml
+# module.yaml of scflow:core
+docs:
+  - id: scflow/undo
+    title: Undo and redo
+    summary: How to undo and redo the changes of a document.
+    kind: how-to
+    audience: user
+    uses: [scflow/undo_change]
+    file: docs/undo.md
+```
+
+```yaml
+name: topic
+description: a documentation page of a module, in Markdown
+properties:
+  - name: id
+    type: string
+    description: the namespace of the module, a slash and a name, for example scflow/undo
+  - name: title
+    type: string
+  - name: summary
+    type: string
+    description: one or two sentences, also the search text
+  - name: kind
+    type: string
+    enum: [tutorial, how-to, reference, explanation]
+  - name: audience
+    type: string
+    enum: [user, plugin-dev, model-dev]
+  - name: locale
+    type: string
+    default_value: en
+  - name: context
+    type: "[string]"
+    description: the help keys that open the topic from an interface
+  - name: uses
+    type: "[string]"
+    description: the ids of the actions the topic describes
+  - name: generated
+    type: boolean
+    default_value: false
+  - name: file
+    type: string
+    description: the path of the body, a Markdown file of the module package
+```
+
+- **Id.** The prefix of a topic id is the namespace of its module, then a slash and a name of letters, digits, `_`, `-` and `.`, possibly with more `/` parts. A topic id with a locale is unique in its module; the same id with another locale is the translation of the topic, one file per locale.
+- **Title and summary.** Both are given.
+- **`uses`** names the actions the topic describes, by id, checked as the `uses` of a skill: actions of the module or of its dependencies, declared or generated.
+- **`file`** is a relative path with the rules of the `file` of a skill. The file holds the body only, with no front matter: the manifest holds the metadata.
+- **Links.** A body links to another topic with `[[id]]`, never a path; the catalogue of `@scfloworg/docs` checks them across sources.
+- **Version.** The version of the module covers its topics.
+
+A manifest that declares no topic has no `docs` entry once validated, so the digest of a module without topics does not depend on this section. Only the modules installed in an environment give topics, never a module that comes only embedded in a dataset. The body travels with the code of its module, as the body of a skill does (see `@scfloworg/module`, `docs/module-packages.md`), and the catalogue of an environment reads it on demand (see `@scfloworg/environment`, `docs/environment.md`, Documentation).
 
 ## Names
 

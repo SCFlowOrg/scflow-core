@@ -1,0 +1,19 @@
+# A topic describes an action no module declares.
+name: acme:wrong
+namespace: wrong
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+docs:
+  - id: wrong/intro
+    title: Intro
+    summary: Describes a ghost.
+    kind: reference
+    audience: user
+    uses: [wrong/publish_tip]
+    file: docs/intro.md

@@ -181,6 +181,7 @@ const SCHEMAS: NormalizedSchema[] = [
       prop("scalar_types", "scalar_type", { ...array, owns: true }),
       prop("actions", "action", { ...array, owns: true }),
       prop("skills", "skill", { ...array, owns: true }),
+      prop("docs", "topic", { ...array, owns: true }),
       prop("migrations", "migration", array),
     ],
     { shared_by_name: true },
@@ -210,6 +211,18 @@ const SCHEMAS: NormalizedSchema[] = [
     prop("exposure", "string", { enum: ["visible", "hidden"] }, "visible"),
     prop("file", "string"),
   ]),
+  schema("topic", "a documentation page of a module, in Markdown", [
+    prop("id", "string"),
+    prop("title", "string"),
+    prop("summary", "string"),
+    prop("kind", "string", { enum: ["tutorial", "how-to", "reference", "explanation"] }),
+    prop("audience", "string", { enum: ["user", "plugin-dev", "model-dev"] }),
+    prop("locale", "string", {}, "en"),
+    prop("context", "string", array),
+    prop("uses", "string", array),
+    prop("generated", "boolean", {}, "false"),
+    prop("file", "string"),
+  ]),
 ];
 
 /** The shape of a module manifest, `module.yaml`, once validated against the `module` schema. */
@@ -236,6 +249,12 @@ export interface ModuleManifest {
    * depend on this section.
    */
   skills?: ModuleSkill[];
+  /**
+   * The documentation topics the module declares, checked as instances of
+   * `topic`; absent when it declares none, so the digest of a module without
+   * topics does not depend on them.
+   */
+  docs?: ModuleTopic[];
   /** The migrations of the module, as authored; `upgradeModule` runs those it needs, by their `to` (see `migrations.ts`). */
   migrations: TransientValue[];
 }
@@ -251,6 +270,27 @@ export interface ModuleSkill {
   uses: string[];
   exposure: "visible" | "hidden";
   /** The path of the body, a Markdown file of the module package. */
+  file: string;
+}
+
+/** A documentation topic of a module: Markdown for readers (see Topic in `docs/spec/meta-model.md`). */
+export interface ModuleTopic {
+  /** The namespace of the module, a slash and a name, such as `scflow/undo`. */
+  id: string;
+  title: string;
+  /** One or two sentences, also the search text. */
+  summary: string;
+  kind: "tutorial" | "how-to" | "reference" | "explanation";
+  audience: "user" | "plugin-dev" | "model-dev";
+  /** The language of the body, `en` by default. */
+  locale: string;
+  /** The help keys that open the topic from an interface. */
+  context: string[];
+  /** The ids of the actions the topic describes. */
+  uses: string[];
+  /** `true` for reference built from declarations. */
+  generated: boolean;
+  /** The path of the body, a Markdown file of the module package, with no front matter. */
   file: string;
 }
 

@@ -75,7 +75,7 @@ function modulePlugin(folder: string): Plugin {
  * other libraries of the package bundled in, and a default export.
  *
  * It validates `module.yaml` first, and checks that the file of each skill
- * exists in the package. A module with no `src/module.ts` has no
+ * and each documentation topic exists in the package. A module with no `src/module.ts` has no
  * bundle: it writes nothing, removes a `dist/module.js` left by an earlier
  * build and returns `bundle: null`. The bundle is checked with `checkBundle`
  * before it is written, then imported and checked against the manifest with
@@ -97,6 +97,16 @@ export async function buildModule(folder: string): Promise<BuildResult> {
         `skill "${skill.id}" of "${manifest.name}" names the file "${skill.file}", which the package does not hold`,
       );
     skillFiles.set(skill.id, readFileSync(file, "utf8"));
+  }
+  const docFiles = new Map<string, string>();
+  for (const topic of manifest.docs ?? []) {
+    const file = join(root, topic.file);
+    if (!existsSync(file))
+      throw modelError(
+        "constraint_violation",
+        `topic "${topic.id}" of "${manifest.name}" names the file "${topic.file}", which the package does not hold`,
+      );
+    docFiles.set(topic.file, readFileSync(file, "utf8"));
   }
   if (!existsSync(entry)) {
     rmSync(target, { force: true });
@@ -132,12 +142,19 @@ export async function buildModule(folder: string): Promise<BuildResult> {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, code);
   try {
-    const { skills } = checkModuleCode(manifest, await importBundle(manifest.name, target, code));
+    const { skills, docs } = checkModuleCode(manifest, await importBundle(manifest.name, target, code));
     for (const [id, body] of skills) {
       if (body !== skillFiles.get(id))
         throw modelError(
           "constraint_violation",
           `the bundle of "${manifest.name}" gives skill "${id}" a body that is not the text of its file`,
+        );
+    }
+    for (const [file, body] of docs) {
+      if (body !== docFiles.get(file))
+        throw modelError(
+          "constraint_violation",
+          `the bundle of "${manifest.name}" gives the topic file "${file}" a body that is not the text of the file`,
         );
     }
   } catch (error) {

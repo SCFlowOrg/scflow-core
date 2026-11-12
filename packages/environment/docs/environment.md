@@ -65,7 +65,8 @@ env.modules.list(): readonly InstalledModule[]
 - An `InstalledModule` gives the validated `manifest`, its `key` and
   `version`, the body of each action by id in `actions`, the body of
   each migration by version in `migrations`, and the loader of each skill body
-  by skill id in `skills`.
+  by skill id in `skills`, and the loader of each documentation topic body by
+  its file in `docs`.
 - Installing a module again with the same manifest, in canonical form, returns
   the module already installed. Another version, or the same version with
   another manifest, so another digest, fails
@@ -124,6 +125,34 @@ cites in a code span that its `uses` does not name. A module runs it in its own
 tests, so a name that drifts fails there. `citedActionIds(body)` gives the cited
 ids alone: a code span whose text is a namespace, a slash and a name, such as
 `` `scflow/create_flow` ``.
+
+## Documentation
+
+`env.docs` is a documentation source, a `DocsSource` of
+[`@scfloworg/docs`](../../docs/docs/docs.md), that gives the topics of the
+installed modules (see [Topic](../../core/docs/spec/meta-model.md#topic)). A
+skill is not a topic: skills keep `env.skills` and `use_skill`.
+
+```ts
+const catalogue = await createDocsCatalogue([env.docs, ...otherSources]); // createCatalogue of @scfloworg/docs
+const tool = createDocsTool(catalogue, { audience: "user" });             // read_docs, or null
+```
+
+- **Only installed modules give topics**, never a module that comes only with a
+  dataset, for the reason given for skills.
+- `list` gives one `Topic` per entry of `docs:` of each manifest, in the order
+  of the installed modules, then of their manifests; the `file` stays in the
+  manifest. `read(id, locale)` loads the body with the loader of its module and
+  fails with `not_found` for a topic no installed module gives.
+- The source reads the catalogue of modules at each call: after a module is
+  installed, `catalogue.refresh()` picks its topics up.
+- The audience is the caller's: `createDocsTool` takes the audiences the reader
+  may see, and the tool never reaches a topic outside them.
+- `uses` of a topic is checked in schema processing, as for a skill: each name
+  must be an action of the module or of a dependency.
+- The package `@scfloworg/docs` is re-exported here as `createDocsCatalogue`,
+  `createDocsTool` and `DOCS_TOOL`, so a host that already imports the
+  environment reaches them from it.
 
 ## Datasets
 

@@ -21,7 +21,7 @@ export type { ScriptSession } from "./script.js";
 export { BASE_SCALAR_TYPES, BUILTIN_SCALAR_TYPES, META_SCHEMAS, isBaseScalarType } from "./builtins.js";
 export { UUID_PATTERN, isUuid } from "./ids.js";
 export { MCL_CORE, MCL_CORE_KEY, MCL_CORE_VERSION, MCL_NAMESPACE } from "./mclCore.js";
-export type { CoreManifest, ModuleDependency, ModuleManifest, ModuleSkill } from "./mclCore.js";
+export type { CoreManifest, ModuleDependency, ModuleManifest, ModuleSkill, ModuleTopic } from "./mclCore.js";
 export { createModuleSet, isSkillFile, readModuleManifest, validateModuleManifest } from "./modules.js";
 export type { LoadedModule, ModuleSet, ResolvedName } from "./modules.js";
 export { uiAccessOf } from "./uiAccess.js";

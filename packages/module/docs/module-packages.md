@@ -26,7 +26,7 @@ bundle: `files` of its `package.json` lists `module.yaml` and `skills`.
 ## Declare the code
 
 The entry of the bundle, `src/module.ts`, has one default export: the result of
-`defineModule(manifest, { actions, migrations, skills })`.
+`defineModule(manifest, { actions, migrations, skills, docs })`.
 
 ```ts
 /// <reference types="@scfloworg/module/yaml" />
@@ -34,6 +34,7 @@ The entry of the bundle, `src/module.ts`, has one default export: the result of
 import { defineModule } from "@scfloworg/module";
 import manifest from "../module.yaml";
 import imageToModel from "../skills/image-to-model.md";
+import undo from "../docs/undo.md";
 import { defineProcess } from "./actions/define-process.js";
 import { splitActor } from "./migrations/split-actor.js";
 
@@ -41,6 +42,7 @@ export default defineModule(manifest, {
   actions: { define_process: defineProcess },
   migrations: { "2.0.0": splitActor },
   skills: { image_to_model: imageToModel },
+  docs: { "docs/undo.md": undo },
 });
 ```
 
@@ -52,6 +54,12 @@ export default defineModule(manifest, {
   body: the Markdown text of the `file` the manifest names, imported from it.
   The body travels in the bundle, like the manifest, so a host with no file
   system has it too.
+- `docs` maps the `file` of a documentation topic, as its entry in `docs:` of
+  the manifest names it, to the Markdown text of that file. It is keyed by file,
+  not by name, because a topic and its translations share an id. The file holds
+  the body only: the manifest holds the metadata (see
+  [Topic](../../core/docs/spec/meta-model.md#topic)). The body travels in the
+  bundle, as a skill body does.
 - A body is a function `(context, params) => result`, sync or async. The
   context is the context of actions, which the environment gives (see
   [`@scfloworg/environment`](../../environment/docs/environment.md), The
@@ -92,7 +100,8 @@ result.bundle; // the path of dist/module.js, or null for a module with no code
   `modules.load` does. A failure throws and leaves no bundle.
 - **Skills.** The build first checks that the file of each skill exists in the
   package, with or without code. The body of a skill in the bundle must be the
-  text of its file, so the two cannot drift apart.
+  text of its file, so the two cannot drift apart. The same holds for the file
+  of each topic of `docs`.
 
 `yaml.d.ts`, exported as `@scfloworg/module/yaml`, declares the import of a
 `.yaml` file for the type checker. The build reads it with a YAML parser.
@@ -154,13 +163,14 @@ scflow.actions.get("scflow/create_actor"); // its body
 2. When `dist/module.js` exists, it checks the bundle with `checkBundle`, then
    imports it. A module with no bundle loads with no code.
 3. It checks the code against the manifest.
-4. It gives each skill a loader of its body: from the bundle, or, for a module
+4. It gives each skill, and each topic file, a loader of its body: from the bundle, or, for a module
    with no code, from its file, which must exist and is read when the body is
    asked for.
 
 It returns a `ModulePackage`: the `path` of the folder, the `manifest`, the path
 of the `bundle` or `null`, the bodies by id in `actions` and by version in
-`migrations`, and the loader of each skill body by skill id in `skills`.
+`migrations`, the loader of each skill body by skill id in `skills`, and the loader of each
+topic body by its file in `docs`.
 
 A module is refused with `constraint_violation` of `@scfloworg/core` when:
 
@@ -176,7 +186,9 @@ A module is refused with `constraint_violation` of `@scfloworg/core` when:
   declares with `to`;
 - the code has no body for a declared skill, or a body for a skill the manifest
   does not declare;
-- a module with no code names a skill file the folder does not hold.
+- the code has no body for the file of a declared topic, or a body for a file no
+  topic names;
+- a module with no code names a skill or topic file the folder does not hold.
 
 `checkModuleCode(manifest, bundle)`, from `@scfloworg/module/code`, is this
 check alone, given the manifest and the default export of a bundle, or `null`

@@ -32,6 +32,9 @@ export type {
   OpenOptions,
 } from "./environment.js";
 export type { InstalledModule, ModuleCatalogue } from "./catalogue.js";
+export { MODULE_DOCS_SOURCE, createModuleDocsSource } from "./docs.js";
+export { DOCS_TOOL, createCatalogue as createDocsCatalogue, createDocsTool } from "@scfloworg/docs";
+export type { DocsCatalogue, DocsSource, DocsTool } from "@scfloworg/docs";
 export { SKILL_TOOL, checkSkillCitations, citedActionIds, createSkillTool } from "./skills.js";
 export type {
   SkillCatalogue,

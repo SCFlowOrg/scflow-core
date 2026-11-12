@@ -1,0 +1,18 @@
+# A module with no code and a topic: the host reads the file.
+name: acme:plain
+namespace: plain
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+docs:
+  - id: plain/intro
+    title: Intro
+    summary: What this module is.
+    kind: explanation
+    audience: model-dev
+    file: docs/intro.md
