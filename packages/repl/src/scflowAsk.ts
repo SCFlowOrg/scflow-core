@@ -4,7 +4,7 @@
  * (see `docs/scflow.md#asking-a-model`).
  */
 
-import { actionIdOfTool, toAiTools } from "@scfloworg/actions";
+import { actionIdOfTool, describeCall, toAiTools, type ActionDefinition } from "@scfloworg/actions";
 import { languagesOf } from "@scfloworg/core";
 import { AiError, createAiClient, runAgent, type AiFetch, type AiToolCall } from "@scfloworg/ai";
 import {
@@ -82,8 +82,36 @@ function systemPrompt(skillTool: SkillTool | null, languages: readonly string[])
   ].join("\n");
 }
 
-function describe(call: AiToolCall): string {
-  return `${actionIdOfTool(call.name) ?? call.name} ${call.arguments}`;
+/** The name of the instance of `schema` whose key is `id`: its `display_name`, in `language` when it has several. */
+async function nameOf(doc: Document, schema: string, id: string, language: string | undefined): Promise<string | undefined> {
+  const result = (await doc.dataset.query({ query: schema } as never)) as { after?: unknown };
+  for (const instance of (result.after ?? []) as Record<string, unknown>[]) {
+    if (!Object.values(instance).includes(id)) continue;
+    const name = instance.display_name;
+    if (typeof name === "string") return name;
+    if (name && typeof name === "object") {
+      const names = name as Record<string, unknown>;
+      const chosen = (language === undefined ? undefined : names[language]) ?? Object.values(names)[0];
+      return typeof chosen === "string" ? chosen : undefined;
+    }
+  }
+  return undefined;
+}
+
+/** A call as a short line: the title of the action and its parameters, the objects by name, never by uuid. */
+async function describe(
+  call: AiToolCall,
+  actions: readonly ActionDefinition[],
+  doc: Document,
+  language: string | undefined,
+): Promise<string> {
+  const id = actionIdOfTool(call.name) ?? call.name;
+  const definition = actions.find((action) => action.id === id);
+  if (!definition) return `${id} ${call.arguments}`;
+  return describeCall(definition, parsed(call.arguments), {
+    label: (schema, key) => nameOf(doc, schema, key, language),
+    ...(language === undefined ? {} : { language }),
+  });
 }
 
 /** Runs the prompt; saves the project if a call changed it. An error of the model is thrown with `code: ai_<kind>`. */
@@ -114,6 +142,8 @@ export async function ask(
   });
 
   const calls = new Map<string, AskedCall>();
+  // Described before the call runs: a deleted object no longer has its name.
+  const lines = new Map<string, string>();
   let changed = false;
   let text = "";
   let outcome;
@@ -131,12 +161,14 @@ export async function ask(
         const writes = turn.filter(
           (call) => call.name !== SKILL_TOOL && !readOnly.has(actionIdOfTool(call.name) ?? ""),
         );
+        for (const call of turn)
+          lines.set(call.id, await describe(call, actions, doc, languages[0]));
         let approved = options.yes || writes.length === 0;
         if (!approved) {
           options.err(
             `The model asks for ${writes.length} change${writes.length === 1 ? "" : "s"}:`,
           );
-          for (const call of writes) options.err(`  ${describe(call)}`);
+          for (const call of writes) options.err(`  ${lines.get(call.id)}`);
           options.err("Approve them? [y/N]");
           approved = /^y(es)?$/i.test(((await options.readLine()) ?? "").trim());
         }
@@ -170,7 +202,7 @@ export async function ask(
         if (event.error === undefined) entry.result = event.result;
         else entry.error = event.error;
         if (entry.approved)
-          options.err(`${event.error === undefined ? "ran" : "failed"}: ${describe(event.call)}`);
+          options.err(`${event.error === undefined ? "ran" : "failed"}: ${lines.get(event.call.id) ?? event.call.name}`);
       },
     });
   } catch (error) {
