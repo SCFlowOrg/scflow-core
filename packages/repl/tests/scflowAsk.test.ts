@@ -280,6 +280,7 @@ describe("scflow ask with skills", { timeout: 30000 }, () => {
     const useSkill = tools.find((tool) => tool.function.name === "use_skill");
     expect(useSkill?.function.parameters.properties.skillId.enum).toEqual([
       "scflow/image_to_model",
+      "scflow/physical_to_information_flows",
     ]);
 
     // Loading a skill asks no approval, even without --yes, and changes nothing.

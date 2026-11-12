@@ -25,21 +25,26 @@ function environment() {
   env.modules.install(
     defineModule(load(text("module.yaml")) as Record<string, unknown>, {
       actions: ACTION_BODIES as Record<string, ModuleBody>,
-      skills: { image_to_model: text("skills/image-to-model.md") },
+      skills: {
+        image_to_model: text("skills/image-to-model.md"),
+        physical_to_information_flows: text("skills/physical-to-information-flows.md"),
+      },
     }),
   );
   return env;
 }
 
 describe("the skills of scflow:core", () => {
-  it("declares scflow/image_to_model, whose uses are actions of the module", () => {
-    expect(manifest.skills?.map((skill) => skill.id)).toEqual(["scflow/image_to_model"]);
+  const ids = ["scflow/image_to_model", "scflow/physical_to_information_flows"];
+
+  it("declares its skills, whose uses are actions of the module", () => {
+    expect(manifest.skills?.map((skill) => skill.id)).toEqual(ids);
     expect(() => createModuleSet([manifest])).not.toThrow();
   });
 
   it("cites in each body only the actions of its uses", async () => {
     const env = environment();
-    expect(env.skills.list().map((skill) => skill.id)).toEqual(["scflow/image_to_model"]);
+    expect(env.skills.list().map((skill) => skill.id)).toEqual(ids);
     expect(await checkSkillCitations(env.skills)).toEqual([]);
   });
 
@@ -49,6 +54,11 @@ describe("the skills of scflow:core", () => {
       skillId: "scflow/image_to_model",
       title: "Image to model",
       instructions: text("skills/image-to-model.md"),
+    });
+    expect(await env.skills.load("scflow/physical_to_information_flows")).toEqual({
+      skillId: "scflow/physical_to_information_flows",
+      title: "Physical to information flows",
+      instructions: text("skills/physical-to-information-flows.md"),
     });
   });
 

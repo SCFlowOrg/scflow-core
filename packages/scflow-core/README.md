@@ -23,7 +23,10 @@ since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
 
 The module declares its skills in `module.yaml`, each with its body in `skills/`:
 `scflow/image_to_model` is the method to create or refine a model from a diagram, a sketch or a
-photograph. `tests/skills.test.ts` checks that every action id a body cites is in the `uses` of
+photograph; `scflow/physical_to_information_flows` derives, from the physical network, the
+MTS or MTO situation of each product family and the actors and information flows of its
+forecast-to-stock, order-to-cash and S&OP processes, one scope per process.
+`tests/skills.test.ts` checks that every action id a body cites is in the `uses` of
 its skill, and that the skill is offered by `use_skill` only with those actions.
 
 ## Exports

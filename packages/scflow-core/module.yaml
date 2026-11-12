@@ -1095,3 +1095,20 @@ skills:
       - scflow/define_process
       - scflow/add_note
     file: skills/image-to-model.md
+  - id: scflow/physical_to_information_flows
+    title: Physical to information flows
+    description: Use when deriving, from the physical network of a SCFLOW model, the actors and information flows of its forecast-to-stock, order-to-cash and S&OP processes, with the MTS or MTO situation of each product family.
+    uses:
+      - scflow/create_scope
+      - scflow/create_actor_type
+      - scflow/create_actor
+      - scflow/create_item_type
+      - scflow/create_item
+      - scflow/hold_item
+      - scflow/create_flow
+      - scflow/create_conversion
+      - scflow/create_transformation_type
+      - scflow/define_process
+      - scflow/add_tags
+      - scflow/add_note
+    file: skills/physical-to-information-flows.md
