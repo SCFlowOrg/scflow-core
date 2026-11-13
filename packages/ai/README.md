@@ -37,6 +37,7 @@ const outcome = await runAgent({
 | `ModelProfile`, `DEFAULT_PROFILES`, `profileOf` | What a model accepts: `temperature`, the name of the length limit, images, tools |
 | `AiError` | The normalized error; callers branch on `.kind`, the message keeps the provider's |
 | `AiUsage` | The report of one chat: model, connection kind, tokens, duration, outcome |
+| `CreditPolicy`, `creditsOf` | The cost of a usage in credits, the host's unit: provider prices per million input and output tokens, their worth in credits, and a margin |
 | `runAgent` | The agent loop: tool calls approved once per turn, a turn limit, an abort signal, and an optional escalation from the `fast` tier to `strong` when the fast model fails |
 
 The tests run against recorded streams and error bodies in `tests/fixtures`,
