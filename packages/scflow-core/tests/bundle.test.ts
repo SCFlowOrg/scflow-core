@@ -38,8 +38,11 @@ describe("the bundle of scflow:core", () => {
   });
 
   it("carries the body of every skill, the text of its file", async () => {
-    expect([...module.skills.keys()]).toEqual(["scflow/image_to_model"]);
+    expect([...module.skills.keys()]).toEqual(["scflow/image_to_model", "scflow/physical_to_information_flows"]);
     expect(await module.skills.get("scflow/image_to_model")!()).toBe(readFileSync(join(root, "skills", "image-to-model.md"), "utf8"));
+    expect(await module.skills.get("scflow/physical_to_information_flows")!()).toBe(
+      readFileSync(join(root, "skills", "physical-to-information-flows.md"), "utf8"),
+    );
   });
 
   it("runs a body on the one engine the host gives", async () => {

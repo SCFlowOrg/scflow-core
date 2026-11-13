@@ -22,6 +22,8 @@ export interface CheckedCode {
   migrations: Map<string, ModuleBody>;
   /** The Markdown body of each skill the code gives, by skill id; empty for a module with no code. */
   skills: Map<string, string>;
+  /** The Markdown body of each documentation topic the code gives, by the `file` of its entry in `docs`; empty for a module with no code. */
+  docs: Map<string, string>;
 }
 
 /**
@@ -34,7 +36,8 @@ export interface CheckedCode {
  * migration of the code reaches a version no migration of the manifest
  * declares. With code, every declared skill has its body, a string, and the
  * code has no body for a skill the manifest does not declare; a module with no
- * code gives its skill bodies as files, which the host reads.
+ * code gives its skill bodies as files, which the host reads. Topics follow the
+ * same rule, each keyed by its file.
  */
 export function checkModuleCode(
   manifest: ModuleManifest,
@@ -44,6 +47,7 @@ export function checkModuleCode(
   const actions = new Map<string, ModuleBody>();
   const migrations = new Map<string, ModuleBody>();
   const skills = new Map<string, string>();
+  const docs = new Map<string, string>();
 
   if (bundle !== null) {
     const code = bundle.default;
@@ -52,7 +56,8 @@ export function checkModuleCode(
       !isRecord(code.manifest) ||
       !isBodies(code.actions) ||
       !isBodies(code.migrations) ||
-      (code.skills !== undefined && !isTexts(code.skills))
+      (code.skills !== undefined && !isTexts(code.skills)) ||
+      (code.docs !== undefined && !isTexts(code.docs))
     ) {
       throw modelError(
         "constraint_violation",
@@ -107,6 +112,22 @@ export function checkModuleCode(
           `skill "${id}" of "${key}" has no body in the code: give its file under skills in defineModule`,
         );
     }
+    const declaredDocs = new Set((manifest.docs ?? []).map((topic) => topic.file));
+    for (const [file, body] of Object.entries(definition.docs ?? {})) {
+      if (!declaredDocs.has(file))
+        throw modelError(
+          "constraint_violation",
+          `the bundle of "${key}" has a body for the file "${file}", which no topic of its docs names`,
+        );
+      docs.set(file, body);
+    }
+    for (const file of declaredDocs) {
+      if (!docs.has(file))
+        throw modelError(
+          "constraint_violation",
+          `the topic file "${file}" of "${key}" has no body in the code: give it under docs in defineModule`,
+        );
+    }
   }
 
   for (const action of manifest.actions) {
@@ -118,5 +139,5 @@ export function checkModuleCode(
         `action "${id}" of "${key}" has no procedure and no code`,
       );
   }
-  return { actions, migrations, skills };
+  return { actions, migrations, skills, docs };
 }

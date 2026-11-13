@@ -19,6 +19,9 @@ export type ModuleBody = (...args: any[]) => unknown;
 /** Reads the Markdown body of a skill when a host needs it. */
 export type SkillLoader = () => Promise<string>;
 
+/** Reads the Markdown body of a documentation topic when a host needs it. */
+export type DocLoader = () => Promise<string>;
+
 /** The manifest of a module as `src/module.ts` imports it from `module.yaml`. */
 export type ModuleManifestSource = Readonly<Record<string, unknown>>;
 
@@ -35,6 +38,13 @@ export interface ModuleCode {
    * the file.
    */
   readonly skills?: Readonly<Record<string, string>>;
+  /**
+   * The body of each documentation topic, by the `file` its entry in `docs`
+   * names (a topic and its translations have different files). A body is the
+   * Markdown text of that file, which `src/module.ts` imports; `buildModule`
+   * inlines it and checks it against the file.
+   */
+  readonly docs?: Readonly<Record<string, string>>;
 }
 
 /** What `defineModule` returns: the default export of a bundle. */
@@ -43,6 +53,7 @@ export interface ModuleDefinition {
   readonly actions: Readonly<Record<string, ModuleBody>>;
   readonly migrations: Readonly<Record<string, ModuleBody>>;
   readonly skills: Readonly<Record<string, string>>;
+  readonly docs: Readonly<Record<string, string>>;
 }
 
 /**
@@ -56,5 +67,6 @@ export function defineModule(manifest: ModuleManifestSource, code: ModuleCode = 
     actions: Object.freeze({ ...(code.actions ?? {}) }),
     migrations: Object.freeze({ ...(code.migrations ?? {}) }),
     skills: Object.freeze({ ...(code.skills ?? {}) }),
+    docs: Object.freeze({ ...(code.docs ?? {}) }),
   });
 }

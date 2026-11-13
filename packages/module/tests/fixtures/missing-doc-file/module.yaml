@@ -1,0 +1,18 @@
+# A topic names a file the package does not hold.
+name: acme:missing
+namespace: missing
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+docs:
+  - id: missing/intro
+    title: Intro
+    summary: Gone.
+    kind: explanation
+    audience: user
+    file: docs/intro.md

@@ -301,6 +301,11 @@ describe("prompts", { timeout: 30000 }, () => {
         title: "Image to model",
         description: expect.stringContaining("supply-chain diagram"),
       },
+      {
+        name: "scflow/physical_to_information_flows",
+        title: "Physical to information flows",
+        description: expect.stringContaining("information flows"),
+      },
     ]);
     const prompt = await client.getPrompt({ name: "scflow/image_to_model" });
     const body = readFileSync(join(scflowCore, "skills", "image-to-model.md"), "utf8");

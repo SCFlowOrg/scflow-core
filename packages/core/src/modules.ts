@@ -4,7 +4,7 @@ import { coerceScalar, validateScalarValue } from "./command.js";
 import { modelError } from "./errors.js";
 import { parseMapType, LOCALIZED_MAP_TYPES } from "./mapTypes.js";
 import { MCL_CORE, MCL_CORE_KEY, MCL_NAMESPACE } from "./mclCore.js";
-import type { ModuleDependency, ModuleManifest, ModuleSkill } from "./mclCore.js";
+import type { ModuleDependency, ModuleManifest, ModuleSkill, ModuleTopic } from "./mclCore.js";
 import { generatedActionIds } from "./moduleActions.js";
 import {
   processScalarTypeDescription,
@@ -186,6 +186,11 @@ function listOfMappings(
  *   actions of `uses` exist is checked in a module set (`createModuleSet`), and
  *   whether the file exists where the package is read. A manifest with no skill
  *   has no `skills` entry.
+ * - Each topic of `docs` is a `topic`: its `id` is the namespace of the module,
+ *   a slash and a name, and an id with its locale is unique in the module
+ *   (`duplicate_name`); `title` and `summary` are given; `kind`, `audience` and
+ *   `locale` are checked; each name of `uses` is an action id; `file` is a
+ *   relative `.md` path. A manifest with no topic has no `docs` entry.
  * - `migrations` are kept as given.
  *
  * The schemas and scalar types themselves are processed when the module joins
@@ -193,7 +198,7 @@ function listOfMappings(
  * Every other breach throws `constraint_violation`.
  */
 export function validateModuleManifest(raw: unknown): ModuleManifest {
-  const owned = new Set(["schemas", "scalar_types", "actions", "skills", "migrations"]);
+  const owned = new Set(["schemas", "scalar_types", "actions", "skills", "docs", "migrations"]);
   const module = validateCoreInstance("module", raw, "the module", owned);
   const key = module.name as string;
   const namespace = module.namespace as string;
@@ -289,6 +294,42 @@ export function validateModuleManifest(raw: unknown): ModuleManifest {
     };
   });
 
+  const topicKeys = new Set<string>();
+  const topicName = /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/;
+  const language = /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/;
+  const docs = listOfMappings(module.docs, `the docs of "${key}"`).map((entry, i): ModuleTopic => {
+    const topic = validateCoreInstance("topic", entry, `the topic ${i} of "${key}"`);
+    const id = topic.id as string;
+    const fail = (message: string): never => {
+      throw modelError("constraint_violation", `topic "${id}" of module "${key}" ${message}`);
+    };
+    if (!id.startsWith(`${namespace}/`) || !topicName.test(id.slice(namespace.length + 1)))
+      fail(`must be named "${namespace}/" and a name of letters, digits, "_", "-" and "."`);
+    const locale = topic.locale as string;
+    if (!language.test(locale)) fail(`has the locale ${JSON.stringify(locale)}, which is not a language tag such as "en"`);
+    const topicKey = `${id}|${locale}`;
+    if (topicKeys.has(topicKey)) throw modelError("duplicate_name", `module "${key}" declares topic "${id}" in "${locale}" twice`);
+    topicKeys.add(topicKey);
+    if ((topic.title as string).trim() === "") fail("has no title");
+    if ((topic.summary as string).trim() === "") fail("has no summary");
+    const uses = topic.uses as string[];
+    for (const name of uses) if (!anyActionId.test(name)) fail(`uses ${JSON.stringify(name)}, which is not an action id`);
+    const file = topic.file as string;
+    if (!isSkillFile(file)) fail(`names the file ${JSON.stringify(file)}, which is not a relative path to a .md file of the package`);
+    return {
+      id,
+      title: topic.title as string,
+      summary: topic.summary as string,
+      kind: topic.kind as ModuleTopic["kind"],
+      audience: topic.audience as ModuleTopic["audience"],
+      locale,
+      context: [...(topic.context as string[])],
+      uses: [...uses],
+      generated: topic.generated === true || topic.generated === "true",
+      file,
+    };
+  });
+
   const migrations = module.migrations;
   if (!Array.isArray(migrations))
     throw modelError("constraint_violation", `the migrations of "${key}" must be a list`);
@@ -304,6 +345,7 @@ export function validateModuleManifest(raw: unknown): ModuleManifest {
     scalar_types: scalarTypes,
     actions,
     ...(skills.length > 0 ? { skills } : {}),
+    ...(docs.length > 0 ? { docs } : {}),
     migrations,
   };
 }
@@ -649,6 +691,7 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
   }
   for (const entry of byKey.values()) checkActionDeclarations(entry);
   for (const entry of byKey.values()) checkSkillUses(entry);
+  for (const entry of byKey.values()) checkTopicUses(entry);
 
   /**
    * The check of Schema Processing, *Skills*, that needs the module set: each
@@ -656,7 +699,15 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
    * dependency of it in the set. A breach is a `constraint_violation`.
    */
   function checkSkillUses(entry: Entry): void {
-    const skills = (entry.manifest as ModuleManifest).skills ?? [];
+    checkUses(entry, "skill", (entry.manifest as ModuleManifest).skills ?? []);
+  }
+
+  /** The same check for the `uses` of the documentation topics of a module (Schema Processing, *Topics*). */
+  function checkTopicUses(entry: Entry): void {
+    checkUses(entry, "topic", (entry.manifest as ModuleManifest).docs ?? []);
+  }
+
+  function checkUses(entry: Entry, what: string, skills: ReadonlyArray<{ id: string; uses: string[] }>): void {
     if (skills.length === 0) return;
     const reachable = new Map<string, Entry>([[entry.namespace, entry]]);
     for (const key of entry.dependencyKeys) {
@@ -678,7 +729,7 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
         if (!owner || !actionsOf(owner).has(name)) {
           throw modelError(
             "constraint_violation",
-            `module "${entry.key}": skill "${skill.id}" uses "${name}", not an action of the module or of a dependency`,
+            `module "${entry.key}": ${what} "${skill.id}" uses "${name}", not an action of the module or of a dependency`,
           );
         }
       }

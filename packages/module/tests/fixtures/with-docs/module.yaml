@@ -1,0 +1,30 @@
+# A module with code and documentation topics: the bundle carries the bodies.
+name: acme:guide
+namespace: guide
+version: 1.0.0
+mcl: ^1.0
+schemas:
+  - name: tip
+    shared_by_name:
+    properties:
+      - name: name
+        type: identifier
+actions:
+  - id: guide/publish_tip
+    title: Publish a tip
+docs:
+  - id: guide/tips
+    title: Tips
+    summary: How to publish a tip.
+    kind: how-to
+    audience: user
+    context: [guide.tips]
+    uses: [guide/publish_tip]
+    file: docs/tips.md
+  - id: guide/tips
+    locale: fr
+    title: Astuces
+    summary: Comment publier une astuce.
+    kind: how-to
+    audience: user
+    file: docs/tips.fr.md

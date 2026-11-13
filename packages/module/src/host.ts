@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 import { modelError, readModuleManifest, type ModuleManifest } from "@scfloworg/core";
 import { checkModuleCode } from "./code.js";
 import { checkBundle, formatFindings } from "./check.js";
-import type { ModuleBody, SkillLoader } from "./index.js";
+import type { DocLoader, ModuleBody, SkillLoader } from "./index.js";
 
 export { checkModuleCode };
 
@@ -32,6 +32,8 @@ export interface ModulePackage {
   readonly migrations: ReadonlyMap<string, ModuleBody>;
   /** The loader of the Markdown body of each skill, by skill id. */
   readonly skills: ReadonlyMap<string, SkillLoader>;
+  /** The loader of the Markdown body of each documentation topic, by the `file` of its entry in `docs`. */
+  readonly docs: ReadonlyMap<string, DocLoader>;
 }
 
 /**
@@ -63,6 +65,34 @@ export function skillLoaders(
 }
 
 /**
+ * The loaders of the topic bodies of a module, by the `file` each topic names:
+ * those of the code when it has code, else the files of its folder. A file that
+ * does not exist throws `constraint_violation`.
+ */
+export function docLoaders(
+  manifest: ModuleManifest,
+  folder: string | null,
+  fromCode: ReadonlyMap<string, string>,
+): Map<string, DocLoader> {
+  const loaders = new Map<string, DocLoader>();
+  for (const topic of manifest.docs ?? []) {
+    const body = fromCode.get(topic.file);
+    if (body !== undefined) {
+      loaders.set(topic.file, async () => body);
+      continue;
+    }
+    const path = folder === null ? null : join(folder, topic.file);
+    if (path === null || !existsSync(path))
+      throw modelError(
+        "constraint_violation",
+        `topic "${topic.id}" of "${manifest.name}" names the file "${topic.file}", which the package does not hold`,
+      );
+    loaders.set(topic.file, () => readFile(path, "utf8"));
+  }
+  return loaders;
+}
+
+/**
  * Loads the module of a folder: reads `module.yaml` and validates it as an
  * instance of `module` (`readModuleManifest` of `@scfloworg/core`); when
  * `dist/module.js` exists, checks it with `checkBundle` before it imports it;
@@ -82,8 +112,16 @@ async function load(path: string): Promise<ModulePackage> {
     bundle = bundlePath;
     exported = await importBundle(manifest.name, bundlePath, await readFile(bundlePath, "utf8"));
   }
-  const { actions, migrations, skills } = checkModuleCode(manifest, exported);
-  return { path: folder, manifest, bundle, actions, migrations, skills: skillLoaders(manifest, folder, skills) };
+  const { actions, migrations, skills, docs } = checkModuleCode(manifest, exported);
+  return {
+    path: folder,
+    manifest,
+    bundle,
+    actions,
+    migrations,
+    skills: skillLoaders(manifest, folder, skills),
+    docs: docLoaders(manifest, folder, docs),
+  };
 }
 
 /**

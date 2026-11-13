@@ -9,7 +9,7 @@ import {
   validateModuleManifest,
   type ModuleManifest,
 } from "@scfloworg/core";
-import type { ModuleBody, ModuleDefinition, SkillLoader } from "@scfloworg/module";
+import type { DocLoader, ModuleBody, ModuleDefinition, SkillLoader } from "@scfloworg/module";
 import { checkModuleCode } from "@scfloworg/module/code";
 
 /** A module of the catalogue: its validated manifest and its code. */
@@ -25,6 +25,8 @@ export interface InstalledModule {
   readonly migrations: ReadonlyMap<string, ModuleBody>;
   /** The loader of the Markdown body of each skill, by skill id (see `docs/environment.md`, Skills). */
   readonly skills: ReadonlyMap<string, SkillLoader>;
+  /** The loader of the Markdown body of each documentation topic, by the `file` of its entry in `docs` (see `docs/environment.md`, Documentation). */
+  readonly docs: ReadonlyMap<string, DocLoader>;
 }
 
 /** `env.modules`: the catalogue of an environment. */
@@ -59,6 +61,7 @@ export interface CheckedModule {
   readonly actions: ReadonlyMap<string, ModuleBody>;
   readonly migrations: ReadonlyMap<string, ModuleBody>;
   readonly skills: ReadonlyMap<string, SkillLoader>;
+  readonly docs: ReadonlyMap<string, DocLoader>;
 }
 
 /** What `modules.load` gets from a folder: the code of a module, checked. */
@@ -104,6 +107,7 @@ export function createCatalogue(load: ModuleLoader): ModuleCatalogue {
       actions: module.actions,
       migrations: module.migrations,
       skills: module.skills,
+      docs: module.docs,
     });
     installed.set(key, entry);
     return entry;
@@ -112,9 +116,10 @@ export function createCatalogue(load: ModuleLoader): ModuleCatalogue {
   return {
     install(module: ModuleDefinition): InstalledModule {
       const manifest = validateModuleManifest(module.manifest);
-      const { actions, migrations, skills } = checkModuleCode(manifest, { default: module });
+      const { actions, migrations, skills, docs } = checkModuleCode(manifest, { default: module });
       const loaders = new Map([...skills].map(([id, body]) => [id, async () => body] as const));
-      return add({ manifest, actions, migrations, skills: loaders });
+      const docLoaders = new Map([...docs].map(([file, body]) => [file, async () => body] as const));
+      return add({ manifest, actions, migrations, skills: loaders, docs: docLoaders });
     },
     load: async (path) => add(await load(path)),
     get: (key) => installed.get(key),

@@ -9,6 +9,7 @@
     { "path": "packages/ai" },
     { "path": "packages/conformance" },
     { "path": "packages/core" },
+    { "path": "packages/docs" },
     { "path": "packages/environment" },
     { "path": "packages/format-file" },
     { "path": "packages/format-js" },

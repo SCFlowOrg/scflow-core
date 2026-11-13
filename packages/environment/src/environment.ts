@@ -44,6 +44,8 @@ import {
   type RunTrace,
 } from "@scfloworg/actions";
 import { createCatalogue, type InstalledModule, type ModuleCatalogue, type ModuleLoader } from "./catalogue.js";
+import type { DocsSource } from "@scfloworg/docs";
+import { createModuleDocsSource } from "./docs.js";
 import { createSkillCatalogue, type SkillCatalogue } from "./skills.js";
 
 /** What `createEnvironment` takes. */
@@ -60,6 +62,8 @@ export interface Environment {
   readonly modules: ModuleCatalogue;
   /** The skills of the installed modules, never those of a module that comes only with a dataset. */
   readonly skills: SkillCatalogue;
+  /** The documentation topics of the installed modules, a source for `createCatalogue` of `@scfloworg/docs`; never those of a module that comes only with a dataset. */
+  readonly docs: DocsSource;
   /** The datasets the environment creates, opens and restores. */
   readonly datasets: DatasetRegistry;
 }
@@ -639,7 +643,7 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
     return dataset;
   }
 
-  return Object.freeze({ formats: engine.formats, modules, skills: createSkillCatalogue(modules), datasets });
+  return Object.freeze({ formats: engine.formats, modules, skills: createSkillCatalogue(modules), docs: createModuleDocsSource(modules), datasets });
 }
 
 /** The `body` of a declaration when it is a procedure: a mapping with a list of commands. */

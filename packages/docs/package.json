@@ -1,0 +1,31 @@
+{
+  "name": "@scfloworg/docs",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "description": "The neutral documentation package: topics with front matter, the source contract, the catalogue merged from sources with locale fallback, audience filter, id and help-key resolution, a keyword search, the manifest and the contract of the read tool. No SCFlow dependency. See README.md.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  }
+}

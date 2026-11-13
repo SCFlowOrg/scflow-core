@@ -6,6 +6,7 @@
 import { defineModule, type ModuleBody } from "@scfloworg/module";
 import manifest from "../module.yaml";
 import imageToModel from "../skills/image-to-model.md";
+import physicalToInformationFlows from "../skills/physical-to-information-flows.md";
 import { ACTION_BODIES } from "./actions/index.js";
 
 // A body takes the context of the action and its parameters, as an environment
@@ -13,5 +14,5 @@ import { ACTION_BODIES } from "./actions/index.js";
 // The body of a skill is the text of its file, by the name of the skill.
 export default defineModule(manifest, {
   actions: ACTION_BODIES as Record<string, ModuleBody>,
-  skills: { image_to_model: imageToModel },
+  skills: { image_to_model: imageToModel, physical_to_information_flows: physicalToInformationFlows },
 });
