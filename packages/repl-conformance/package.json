@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A REPL-level, format-agnostic vitest suite: fixtures (seed + a script of raw command-block text + expectations on named results) run through the real REPL command-block parser (@scfloworg/repl's runCommandBlock), not direct runCommand calls — so a fixture also exercises the parsing/validation path a human typing at the prompt goes through (resolveCommandForm's unknown-key rejection included). See README.md.",
+  "description": "A REPL-level, format-agnostic vitest suite: fixtures (seed + a script of raw command-block text + expectations on named results) run through the real REPL command-block parser (@scfloworg/cli's runCommandBlock), not direct runCommand calls — so a fixture also exercises the parsing/validation path a human typing at the prompt goes through (resolveCommandForm's unknown-key rejection included). See README.md.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@scfloworg/core": "^0.1.0",
-    "@scfloworg/repl": "^0.1.0",
+    "@scfloworg/cli": "^0.1.0",
     "js-yaml": "^4.1.0",
     "vitest": "^4.1.10"
   },

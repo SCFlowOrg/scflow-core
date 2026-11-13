@@ -6,7 +6,7 @@
 scflow-mcp <project> [--modules <folder>]
 ```
 
-It speaks MCP on the standard input and output. `<project>` is a folder or a `.json` file that exists, and `--modules` is as for the [`scflow` command](../../repl/docs/scflow.md). In code, `createMcpServer({ host, path })` gives a server to connect to any transport.
+It speaks MCP on the standard input and output. `<project>` is a folder or a `.json` file that exists, and `--modules` is as for the [`scflow` command](../../cli/docs/scflow.md). In code, `createMcpServer({ host, path })` gives a server to connect to any transport.
 
 ## Tools
 

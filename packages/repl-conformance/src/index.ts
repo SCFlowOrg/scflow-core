@@ -5,8 +5,8 @@ import * as YAML from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { TESTING_ENGINE, createUpgradeLocator, initDataset, registerPersistentFormat, runCommand, upgradeDataset } from "@scfloworg/core/testing";
 import type { PersistenceInterface, TransientValue } from "@scfloworg/core";
-import { createReplState, currentContext, registerOpenContext, runCommandBlock } from "@scfloworg/repl";
-import type { Output } from "@scfloworg/repl";
+import { createReplState, currentContext, registerOpenContext, runCommandBlock } from "@scfloworg/cli";
+import type { Output } from "@scfloworg/cli";
 
 /**
  * A REPL-level conformance suite.
@@ -207,7 +207,7 @@ function registerFixtureTest(fixture: ReplFixture, formatName: string): void {
  * bare `"js"` if something else in the same suite already registers that).
  * Two registrations of the same name in one process silently repoint the
  * second one's dataset state onto the first's — see
- * `packages/repl/tests/repl.test.ts`'s own `"repltest"` for the same
+ * `packages/cli/tests/repl.test.ts`'s own `"repltest"` for the same
  * reasoning.
  */
 export function runReplConformanceSuite(impl: PersistenceInterface, formatName: string): void {

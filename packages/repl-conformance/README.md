@@ -1,6 +1,6 @@
 # @scfloworg/repl-conformance
 
-A REPL-level, format-agnostic vitest suite. `@scfloworg/conformance` proves an implementation supports the command language by calling `runCommand` directly against structured `Command` objects; this package instead runs each fixture's commands as raw YAML *text* through `@scfloworg/repl`'s `runCommandBlock` — the same command-block parsing and validation path (`resolveCommandForm`'s unknown-key rejection included) a human typing at the REPL prompt goes through.
+A REPL-level, format-agnostic vitest suite. `@scfloworg/conformance` proves an implementation supports the command language by calling `runCommand` directly against structured `Command` objects; this package instead runs each fixture's commands as raw YAML *text* through `@scfloworg/cli`'s `runCommandBlock` — the same command-block parsing and validation path (`resolveCommandForm`'s unknown-key rejection included) a human typing at the REPL prompt goes through.
 
 ## Usage
 
@@ -11,7 +11,7 @@ import { createJsPersistenceInterface } from "@scfloworg/format-js";
 runReplConformanceSuite(createJsPersistenceInterface("js-repl-conformance"), "js-repl-conformance");
 ```
 
-Call it from a `*.test.ts` file in the format package being tested (see `packages/format-js/tests/repl-conformance.test.ts`). The second argument doubles as the locator prefix `initDataset`/`registerPersistentFormat` use — give it a value unique to this test file/process, not necessarily the format's own name. Two registrations of the same name in one process silently repoint the second one's dataset state onto the first's; `packages/repl/tests/repl.test.ts` registers its own private `"repltest"` js instance for the same reason.
+Call it from a `*.test.ts` file in the format package being tested (see `packages/format-js/tests/repl-conformance.test.ts`). The second argument doubles as the locator prefix `initDataset`/`registerPersistentFormat` use — give it a value unique to this test file/process, not necessarily the format's own name. Two registrations of the same name in one process silently repoint the second one's dataset state onto the first's; `packages/cli/tests/repl.test.ts` registers its own private `"repltest"` js instance for the same reason.
 
 ## Fixtures
 

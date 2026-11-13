@@ -16,7 +16,7 @@
     { "path": "packages/mcp" },
     { "path": "packages/module" },
     { "path": "packages/project-file" },
-    { "path": "packages/repl" },
+    { "path": "packages/cli" },
     { "path": "packages/repl-conformance" },
     { "path": "packages/workspace" }
   ]

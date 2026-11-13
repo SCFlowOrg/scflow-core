@@ -1,5 +1,5 @@
 {
-  "name": "@scfloworg/repl",
+  "name": "@scfloworg/cli",
   "version": "0.1.0",
   "type": "module",
   "description": "Interactive REPL for the Model Command Language: named dataset contexts, incremental scripting with result and snippet variables. See README.md.",
@@ -46,7 +46,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SCFlowOrg/scflow-core.git",
-    "directory": "packages/repl"
+    "directory": "packages/cli"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",

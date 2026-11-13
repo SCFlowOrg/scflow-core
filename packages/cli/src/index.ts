@@ -1,5 +1,5 @@
 /**
- * The public surface of `@scfloworg/repl`: the REPL state and dataset
+ * The public surface of `@scfloworg/cli`: the REPL state and dataset
  * contexts, the input loop, the meta-command and command-block handlers, and
  * the command-line parsing. `docs/commands.md` describes what a user types.
  */

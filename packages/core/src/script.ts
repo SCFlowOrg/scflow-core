@@ -12,9 +12,9 @@ import type { Command, CommandResult, Filter, PersistenceInterface, Script, Scri
  * packages/core/docs/spec/model-command-language.md#script's "Chaining" section) is factored out
  * into `createScriptSession` below, so it can outlive a single `runScript`
  * call. `runScript` is a thin loop over one session, for a complete `Script`
- * run start-to-finish in one call. `@scfloworg/repl` uses the same session
+ * run start-to-finish in one call. `@scfloworg/cli` uses the same session
  * directly instead, keeping it alive across many separately-typed commands —
- * see packages/repl/docs/commands.md.
+ * see packages/cli/docs/commands.md.
  *
  * `createScriptSession`/`run` take a `getResolvers: ResolversLookup` rather
  * than a resolved `Resolvers` value — a deferred, re-callable way to get the
@@ -31,7 +31,7 @@ import type { Command, CommandResult, Filter, PersistenceInterface, Script, Scri
 /**
  * Runs commands one at a time on one dataset, keeping the named results of
  * earlier commands in `variables` for the placeholders of later ones.
- * `runScript` is a loop over one session; `@scfloworg/repl` keeps one open
+ * `runScript` is a loop over one session; `@scfloworg/cli` keeps one open
  * across separately typed commands.
  */
 export interface ScriptSession {
