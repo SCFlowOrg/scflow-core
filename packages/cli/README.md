@@ -1,4 +1,4 @@
-# @scfloworg/repl
+# @scfloworg/cli
 
 An interactive REPL for the Model Command Language of `@scfloworg/core`. A session is an incrementally typed script: each block of YAML entered runs at once against the current dataset, and named results carry forward as in a script.
 

@@ -4,7 +4,8 @@
   "type": "module",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "description": "An MCP server on the SCFlow workspace: an MCP client works on a project on disk through its actions. See README.md.",
   "main": "dist/index.js",
@@ -35,9 +36,14 @@
     "@scfloworg/workspace": "^0.1.0"
   },
   "devDependencies": {
-    "@scfloworg/repl": "^0.1.0",
+    "@scfloworg/cli": "^0.1.0",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.3",
     "vitest": "^4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SCFlowOrg/scflow-core.git",
+    "directory": "packages/mcp"
   }
 }

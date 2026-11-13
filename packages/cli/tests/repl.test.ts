@@ -106,7 +106,7 @@ function capturingOutput(): Output & { lines: string[]; errors: string[] } {
   };
 }
 
-describe("@scfloworg/repl", () => {
+describe("@scfloworg/cli", () => {
   it("opens an existing dataset with open and runs commands against it", async () => {
     const locator = newLocator();
     await seedTaskDemo(locator);

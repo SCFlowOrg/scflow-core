@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { runScflow } from "@scfloworg/repl/scflow";
+import { runScflow } from "@scfloworg/cli/scflow";
 import { createProjectHost } from "@scfloworg/workspace/host";
 import { createMcpServer } from "../src/index.js";
 

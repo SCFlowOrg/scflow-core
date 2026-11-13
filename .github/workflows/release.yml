@@ -1,0 +1,103 @@
+# Publishes the packages of this repository on npmjs.org (ADR-0013).
+#
+# A release is a tag `v*` on a commit of `main`. The workflow builds and tests
+# everything, then publishes, in dependency order, each public package whose
+# version is not on the registry yet: a rerun after a failure resumes where it
+# stopped, and a package whose version did not change is left alone.
+#
+# A pre-release version (`0.2.0-next.1`) goes out under the `next` dist-tag.
+#
+# Run by hand (Actions > Release > Run workflow) it is a dry run unless the
+# box is unticked; it publishes only from `main`.
+#
+# Authentication: the secret `NPM_TOKEN` of the environment `npm-publish`. Once
+# each package has a trusted publisher on npmjs.org (package settings, the
+# repository `SCFlowOrg/scflow-core` and this workflow file), delete the line
+# `NODE_AUTH_TOKEN` below and the secret: the job already has `id-token: write`.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: pack every package, publish nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bun run build:packages
+      - run: bun run test:packages
+
+  publish:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # provenance, and trusted publishing later
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that the release comes from main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main: nothing is published."
+            exit 1
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # its npm is recent enough for provenance and trusted publishing
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run build:packages
+
+      - name: Publish in dependency order
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          flags="--access public"
+          if [ "$DRY_RUN" = "true" ]; then
+            flags="$flags --dry-run"
+          else
+            flags="$flags --provenance"
+          fi
+          while read -r dir name version tag; do
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip    $name@$version (already published)"
+              continue
+            fi
+            echo "publish $name@$version (tag $tag)"
+            (cd "$dir" && npm publish $flags --tag "$tag")
+          done < <(node scripts/publish-order.mjs | node -e '
+            for (const p of JSON.parse(require("fs").readFileSync(0, "utf8")))
+              console.log(p.dir, p.name, p.version, p.tag);
+          ')

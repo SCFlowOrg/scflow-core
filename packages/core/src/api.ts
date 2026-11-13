@@ -1329,7 +1329,7 @@ async function runScriptIn(scope: EngineScope, locator: string, script: Authored
 
 /**
  * Opens a `ScriptSession` against `locator` — the incremental counterpart to
- * `runScript` above, for a caller (today: `@scfloworg/repl`) that wants to
+ * `runScript` above, for a caller (today: `@scfloworg/cli`) that wants to
  * run one `ScriptCommand` at a time, over an open-ended period, rather than a
  * complete `Script` in one call. See script.ts's `createScriptSession`.
  *

@@ -4,7 +4,7 @@ import { createReplState, currentContext, expandSnippets } from "../src/index.js
 
 // A minimal sanity check on the package's public surface; the behavioral
 // coverage is in tests/repl.test.ts.
-describe("@scfloworg/repl exports", () => {
+describe("@scfloworg/cli exports", () => {
   it("createReplState starts with no current dataset and no snippets", () => {
     const state = createReplState({ engine: createEngine({ formats: [] }) });
     expect(currentContext(state)).toBeNull();

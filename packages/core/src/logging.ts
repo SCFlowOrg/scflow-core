@@ -1,6 +1,6 @@
 /**
  * The `Logger` interface consumed across the modelling language and its
- * hosts (`@scfloworg/repl`, `@scfloworg/mcp`) — deliberately I/O-free.
+ * hosts (`@scfloworg/cli`, `@scfloworg/mcp`) — deliberately I/O-free.
  * `@scfloworg/core` also runs in the browser (the `app_framework` project's
  * web target), so no sink lives here: a host supplies a `write` function to
  * `createLogger` and gets back a `Logger` whose level gate is shared, and

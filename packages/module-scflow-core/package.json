@@ -2,7 +2,6 @@
   "name": "@scfloworg/module-scflow-core",
   "description": "Business package of the supply chain flow model: MCL schemas and pure domain logic.",
   "version": "1.2.0",
-  "private": true,
   "type": "module",
   "files": [
     "dist",
@@ -34,5 +33,15 @@
     "js-yaml": "^5.4.2",
     "typescript": "^5.7.0",
     "vitest": "^4.1.10"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SCFlowOrg/scflow-core.git",
+    "directory": "packages/module-scflow-core"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }
