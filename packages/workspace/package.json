@@ -37,7 +37,7 @@
     "@scfloworg/core": "^0.1.0",
     "@scfloworg/environment": "^0.1.0",
     "@scfloworg/format-file": "^0.1.0",
-    "@scfloworg/project-file": "^0.1.0-next.0"
+    "@scfloworg/project-file": "^0.1.0"
   },
   "devDependencies": {
     "@scfloworg/format-js": "^0.1.0",
