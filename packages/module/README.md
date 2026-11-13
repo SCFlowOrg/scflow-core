@@ -26,11 +26,15 @@ export default defineModule(manifest, { actions: { create_actor: createActor } }
 ```ts
 // scripts of the package, at build
 import { buildModule } from "@scfloworg/module/build";
-await buildModule(packageFolder); // dist/module.js, or nothing for a module with no code
+await buildModule(packageFolder); // dist/module.js and dist/module.d.ts, or nothing for a module with no code
 
-// a host
+// a host that reads modules from disk
 import { modules } from "@scfloworg/module/host";
 const module = await modules.load(packageFolder);
+
+// a host that bundles its modules (a browser): the package exports "./module"
+import carbon from "@scfloworg/module-carbon/module";
+environment.modules.install(carbon);
 ```
 
 The bundle holds no copy of the engine: the code of a module imports only types

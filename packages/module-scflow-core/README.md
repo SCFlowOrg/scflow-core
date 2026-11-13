@@ -15,7 +15,7 @@ Its code is one bundle, `dist/module.js`, built from `src/module.ts` by `buildMo
 `defineModule(manifest, { actions, skills })` gives each action of `ACTIONS` as a body that calls its `run(params, context)`,
 and the text of each skill file.
 The package imports only types from `@scfloworg/core`, so the bundle holds no copy of the
-engine. A host loads the module with `modules.load(folder)` of `@scfloworg/module/host`;
+engine. The package exports the bundle and its declaration as `@scfloworg/module-scflow-core/module`, for a host that bundles its modules, such as a browser. A host that reads modules from disk loads the module with `modules.load(folder)` of `@scfloworg/module/host`;
 `tests/bundle.test.ts` builds, checks and loads the bundle. `tsc -b` leaves `src/module.ts` out,
 since it imports `module.yaml`; `tsconfig.module.json` type-checks it.
 

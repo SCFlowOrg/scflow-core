@@ -18,10 +18,21 @@ export type { BundleFinding, BundleRule } from "./check.js";
 /** The entry of the bundle in the folder of a module package. */
 export const ENTRY_FILE = join("src", "module.ts");
 
+/** The declaration of the bundle, in the folder of a module package. */
+export const DECLARATION_FILE = join("dist", "module.d.ts");
+
+/** The declaration written to `dist/module.d.ts`: the default export is a `ModuleDefinition`. */
+const DECLARATION =
+  'import type { ModuleDefinition } from "@scfloworg/module";\n' +
+  "declare const definition: ModuleDefinition;\n" +
+  "export default definition;\n";
+
 /** What `buildModule` built. */
 export interface BuildResult {
   /** The path of `dist/module.js`, or `null` for a module with no code. */
   readonly bundle: string | null;
+  /** The path of `dist/module.d.ts`, which types the default export of the bundle, or `null` for a module with no code. */
+  readonly declaration: string | null;
 }
 
 const BUILTINS = new Set(builtinModules);
@@ -76,17 +87,19 @@ function modulePlugin(folder: string): Plugin {
  *
  * It validates `module.yaml` first, and checks that the file of each skill
  * and each documentation topic exists in the package. A module with no `src/module.ts` has no
- * bundle: it writes nothing, removes a `dist/module.js` left by an earlier
- * build and returns `bundle: null`. The bundle is checked with `checkBundle`
- * before it is written, then imported and checked against the manifest with
- * `checkModuleCode`, and the body of each skill it holds must be the text of
- * the skill's file; a failure throws `constraint_violation` and leaves no
- * bundle.
+ * bundle: it writes nothing, removes a `dist/module.js` and a `dist/module.d.ts`
+ * left by an earlier build and returns `bundle: null` and `declaration: null`.
+ * The bundle is checked with `checkBundle` before it is written, then imported
+ * and checked against the manifest with `checkModuleCode`, and the body of each
+ * skill it holds must be the text of the skill's file; a failure throws
+ * `constraint_violation` and leaves no bundle and no declaration. The
+ * declaration is written last, once every check has passed.
  */
 export async function buildModule(folder: string): Promise<BuildResult> {
   const root = resolve(folder);
   const manifest = readModuleManifest(readFileSync(join(root, MANIFEST_FILE), "utf8"));
   const target = join(root, BUNDLE_FILE);
+  const declaration = join(root, DECLARATION_FILE);
   const entry = join(root, ENTRY_FILE);
   const skillFiles = new Map<string, string>();
   for (const skill of manifest.skills ?? []) {
@@ -110,7 +123,8 @@ export async function buildModule(folder: string): Promise<BuildResult> {
   }
   if (!existsSync(entry)) {
     rmSync(target, { force: true });
-    return { bundle: null };
+    rmSync(declaration, { force: true });
+    return { bundle: null, declaration: null };
   }
 
   const build = await rolldown({
@@ -132,6 +146,7 @@ export async function buildModule(folder: string): Promise<BuildResult> {
   const findings: BundleFinding[] = checkBundle(code);
   if (chunks.length > 1) findings.push({ rule: "dynamic_import", message: "the bundle splits into several chunks" });
   rmSync(target, { force: true });
+  rmSync(declaration, { force: true });
   if (findings.length > 0) {
     throw modelError(
       "constraint_violation",
@@ -161,5 +176,6 @@ export async function buildModule(folder: string): Promise<BuildResult> {
     rmSync(target, { force: true });
     throw error;
   }
-  return { bundle: target };
+  writeFileSync(declaration, DECLARATION);
+  return { bundle: target, declaration };
 }
