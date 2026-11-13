@@ -26,6 +26,10 @@ on:
         description: "Dry run: pack every package, publish nothing"
         type: boolean
         default: true
+      packages:
+        description: "Only these packages, comma-separated (for example @scfloworg/ai,@scfloworg/project-file); empty means all"
+        type: string
+        default: ""
 
 concurrency:
   group: release
@@ -58,6 +62,7 @@ jobs:
       id-token: write # provenance, and trusted publishing later
     env:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.packages || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,6 +95,8 @@ jobs:
           else
             flags="$flags --provenance"
           fi
+          only=()
+          if [ -n "$ONLY" ]; then only=(--only "$ONLY"); fi
           while read -r dir name version tag; do
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "skip    $name@$version (already published)"
@@ -97,7 +104,7 @@ jobs:
             fi
             echo "publish $name@$version (tag $tag)"
             (cd "$dir" && npm publish $flags --tag "$tag")
-          done < <(node scripts/publish-order.mjs | node -e '
+          done < <(node scripts/publish-order.mjs "${only[@]}" | node -e '
             for (const p of JSON.parse(require("fs").readFileSync(0, "utf8")))
               console.log(p.dir, p.name, p.version, p.tag);
           ')
