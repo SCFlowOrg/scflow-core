@@ -185,30 +185,40 @@ The host shows the usage; the package keeps no count. An exception thrown by
 
 ### Credits
 
-A host may count usage in credits, a unit of its own, rather than in tokens.
-It gives a `CreditPolicy`:
+With a `byok` connection the user pays the provider; a host shows what a
+usage cost as an estimate in credits, so every host gives the same figure for
+the same usage. One credit is worth 0.01 USD of what the provider asks.
 
-| Field | Is |
-| --- | --- |
-| `prices` | Rules `{ match, input, output }`: the price the provider asks per million input and per million output tokens, in one currency for the whole table |
-| `creditsPerUnit` | The credits one unit of that currency is worth |
-| `margin` | Optional. The share added to the price of the provider: `0.2` adds 20 %; `0` by default |
+`CREDIT_ESTIMATES` is the shared table: `asOf`, the date its figures were
+taken, and `rates`, rules `{ match, input, output }` giving the credits of a
+million input and of a million output tokens of a model. `match` is a model id
+with `*` for any text, compared as for [profiles](#model-profiles): without
+case, and without a `provider/` prefix; the first rule that matches wins. It
+covers the models `PROVIDERS` suggests whose price could be found, at least
+the fast model of each paid provider.
 
-`match` is a model id with `*` for any text, compared as for
-[profiles](#model-profiles): without case, and without a `provider/` prefix.
-The first rule that matches gives the price.
-
-`creditsOf(usage, policy)` gives the credits of one `AiUsage`:
+`estimateCredits(usage, rates)` gives the credits of one `AiUsage`:
 
 ```
-(inputTokens × input + outputTokens × output) / 1 000 000 × creditsPerUnit × (1 + margin)
+(inputTokens × input + outputTokens × output) / 1 000 000
 ```
 
-It is `undefined` when no rule matches the model, or the provider gave no
-`inputTokens` or no `outputTokens`: a cost not known is never counted as
-nothing. It is not rounded; the host rounds what it shows. The package holds
-no price, since prices change and their worth in credits is the host's
-choice; the host sums the credits of a session as it sums its tokens.
+with the rate of the model found in `rates`, then in `CREDIT_ESTIMATES`; a
+host gives `rates` for models the table does not cover. It is `undefined`
+when no rule matches the model, or the provider gave no `inputTokens` or no
+`outputTokens`: a cost not known is never counted as nothing. It is not
+rounded; the host rounds what it shows, and sums the credits of a session as
+it sums its tokens.
+
+The table is updated from time to time, as a change of the package: each
+rate is the list price of the provider in USD per million tokens, times 100,
+for standard requests (no batch, cache or priority price) and, when the price
+depends on the length of the prompt, for the shorter prompts; `asOf` gives
+the date of the update. A free local server has no rate: its usage is not
+estimated.
+
+The credits a future SCFlow service charges, with their own rates and
+margin, are not these estimates and are not specified here.
 
 ## The agent loop
 
