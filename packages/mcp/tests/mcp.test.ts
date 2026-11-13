@@ -151,7 +151,7 @@ describe("tools", () => {
     const { client } = await connect(await project());
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
-      "batch", "describe_action", "get_languages", "list_actions", "query", "redo", "run_action", "set_languages", "undo",
+      "batch", "describe_action", "get_languages", "list_actions", "query", "read_docs", "redo", "run_action", "search_docs", "set_languages", "undo",
     ]);
     expect(tools.find((tool) => tool.name === "query")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((tool) => tool.name === "run_action")?.annotations?.readOnlyHint).toBe(false);
@@ -318,5 +318,73 @@ describe("prompts", { timeout: 30000 }, () => {
     const client = await connectBoth(tasks, modules);
     expect((await client.listPrompts()).prompts).toEqual([]);
     await expect(client.getPrompt({ name: "scflow/image_to_model" })).rejects.toThrow(/No prompt/);
+  });
+});
+
+describe("documentation", () => {
+  const topic = (id: string, audience: string, file: string) =>
+    `  - id: ${id}\n    title: ${id}\n    summary: About ${id}.\n    kind: how-to\n    audience: ${audience}\n    file: ${file}\n`;
+
+  async function documented() {
+    const dirs = await project();
+    const module = join(dirs.modules, "tasks");
+    mkdirSync(join(module, "docs"), { recursive: true });
+    writeFileSync(
+      join(module, "module.yaml"),
+      moduleYaml + "docs:\n" + topic("tasks/plan", "user", "docs/plan.md") + topic("tasks/internals", "model-dev", "docs/internals.md"),
+    );
+    writeFileSync(join(module, "docs", "plan.md"), "Plan the zebra tasks.\n");
+    writeFileSync(join(module, "docs", "internals.md"), "Internal zebra notes.\n");
+    return connect(dirs);
+  }
+
+  it("lists the tools, and searches for the user audience by default", async () => {
+    const { client, call } = await documented();
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(names).toContain("search_docs");
+    expect(names).toContain("read_docs");
+    const found = await call("search_docs", { query: "zebra" });
+    expect(found.value.results.map((r: { id: string }) => r.id)).toEqual(["tasks/plan"]);
+    expect(found.value.results[0].content).toBeUndefined();
+  });
+
+  it("takes the audience from the caller", async () => {
+    const { call } = await documented();
+    const found = await call("search_docs", { query: "zebra", audience: ["user", "model-dev"] });
+    expect(found.value.results.map((r: { id: string }) => r.id).sort()).toEqual(["tasks/internals", "tasks/plan"]);
+    expect((await call("read_docs", { topicId: "tasks/internals", audience: "model-dev" })).value.content).toBe("Internal zebra notes.\n");
+  });
+
+  it("reads a topic, and refuses one outside the audience or unknown", async () => {
+    const { call } = await documented();
+    expect((await call("read_docs", { topicId: "tasks/plan" })).value.content).toBe("Plan the zebra tasks.\n");
+    const hidden = await call("read_docs", { topicId: "tasks/internals" });
+    expect(hidden.isError).toBe(true);
+    expect(hidden.value.error.code).toBe("not_found");
+    expect((await call("read_docs", { topicId: "none" })).isError).toBe(true);
+    const bad = await call("search_docs", { query: "x", audience: "nobody" });
+    expect(bad.value.error.code).toBe("invalid_parameters");
+  });
+
+  it("gives an empty search when no module offers a topic", async () => {
+    const { call } = await connect(await project());
+    expect((await call("search_docs", { query: "zebra" })).value).toEqual({ results: [] });
+    expect((await call("read_docs", { topicId: "x" })).isError).toBe(true);
+  });
+
+  it("exports the topics for the user as resources", async () => {
+    const { client } = await documented();
+    const { resources } = await client.listResources();
+    expect(resources.map((r) => r.uri)).toEqual(["docs://tasks/plan"]);
+    expect(resources[0]).toMatchObject({ mimeType: "text/markdown", title: "tasks/plan" });
+    const read = await client.readResource({ uri: "docs://tasks/plan" });
+    expect(read.contents[0]).toMatchObject({ text: "Plan the zebra tasks.\n" });
+    await expect(client.readResource({ uri: "docs://tasks/internals" })).rejects.toThrow();
+  });
+
+  it("keeps skills as prompts, apart from topics", async () => {
+    const { client } = await documented();
+    const prompts = (await client.listPrompts()).prompts.map((p) => p.name);
+    expect(prompts).not.toContain("tasks/plan");
   });
 });

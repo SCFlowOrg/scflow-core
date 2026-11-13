@@ -8,6 +8,7 @@ import type { Document } from "@scfloworg/workspace";
 import { createProjectHost, type ProjectHost } from "@scfloworg/workspace/host";
 import type { AiFetch } from "@scfloworg/ai";
 import { ask, askSettings } from "./scflowAsk.js";
+import { DOCS_COMMANDS, DocsUsageError, runDocs } from "./scflowDocs.js";
 
 /** Where the command reads and writes. */
 export interface ScflowIo {
@@ -30,7 +31,11 @@ const USAGE = `usage:
   scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
   scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
   scflow <project> shell [--modules <folder>]
-  scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]`;
+  scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]
+  scflow docs list [--audience <audience>]... [--locale <code>] [--modules <folder>]
+  scflow docs check [--modules <folder>]
+  scflow docs build <directory> [--audience <audience>]... [--modules <folder>]
+  scflow docs show <id> [--audience <audience>]... [--locale <code>] [--modules <folder>]`;
 
 /** Options that take no value. */
 const FLAGS = new Set(["yes"]);
@@ -172,8 +177,31 @@ async function shell(doc: Document, io: ScflowIo): Promise<void> {
   if (unsaved) io.err("The changes are not saved.");
 }
 
-async function dispatch(args: string[], io: ScflowIo): Promise<void> {
+/** `scflow docs <command>`: no project, only the installed modules. Gives the exit code. */
+async function docs(parsed: ParsedArgs, io: ScflowIo): Promise<number> {
+  const [, command, argument] = parsed.positional;
+  const { environment } = await createProjectHost({ modules: parsed.options.get("modules")?.at(-1) });
+  try {
+    const outcome = await runDocs(environment.docs, {
+      command: command as (typeof DOCS_COMMANDS)[number],
+      argument,
+      audiences: parsed.options.get("audience") ?? [],
+      locale: parsed.options.get("locale")?.at(-1),
+    });
+    for (const value of outcome.out) io.out(JSON.stringify(value));
+    for (const line of outcome.err) io.err(line);
+    return outcome.code;
+  } catch (error) {
+    if (error instanceof DocsUsageError) throw new UsageError(error.message);
+    throw error;
+  }
+}
+
+async function dispatch(args: string[], io: ScflowIo): Promise<number> {
   const parsed = parseArgs(args);
+  if (parsed.positional[0] === "docs" && DOCS_COMMANDS.includes(parsed.positional[1] as (typeof DOCS_COMMANDS)[number])) {
+    return docs(parsed, io);
+  }
   const [project, command, first, second] = parsed.positional;
   if (project === undefined || command === undefined) throw new UsageError("a project and a command are needed");
 
@@ -193,32 +221,32 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
         ...(parsed.options.has("language") ? { languages: parsed.options.get("language") as string[] } : {}),
       });
       print({ written: (await doc.save()).written });
-      return;
+      return 0;
     }
     case "actions": {
       const doc = await (await host()).workspace.open(project, { readOnly: true });
       print(describeActions(doc));
-      return;
+      return 0;
     }
     case "languages": {
       if (first === undefined) {
         const doc = await (await host()).workspace.open(project, { readOnly: true });
         print({ languages: await readLanguages(doc) });
-        return;
+        return 0;
       }
       const languages = parseLanguages(parseJson(first));
       const doc = await (await host()).workspace.open(project);
       const { changed } = await doc.setLanguages(languages);
       const written = changed ? (await doc.save()).written : [];
       print({ languages: await readLanguages(doc), changed, written });
-      return;
+      return 0;
     }
     case "query": {
       if (first === undefined) throw new UsageError("query needs a schema");
       const filters = parseJson(second);
       const doc = await (await host()).workspace.open(project, { readOnly: true });
       print(await runQuery(doc, first, filters));
-      return;
+      return 0;
     }
     case "run": {
       if (first === undefined) throw new UsageError("run needs an action");
@@ -227,11 +255,11 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
       const outcome = await doc.run(first, params);
       const written = outcome.changed ? (await doc.save()).written : [];
       print({ result: outcome.result, changed: outcome.changed, written });
-      return;
+      return 0;
     }
     case "shell":
       await shell(await (await host()).workspace.open(project), io);
-      return;
+      return 0;
     case "ask": {
       if (first === undefined) throw new UsageError("ask needs a prompt");
       const settings = askSettings(io.env ?? {});
@@ -254,7 +282,7 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
           return next.done ? undefined : next.value;
         },
       });
-      return;
+      return 0;
     }
     default:
       throw new UsageError(`unknown command: ${command}`);
@@ -264,8 +292,7 @@ async function dispatch(args: string[], io: ScflowIo): Promise<void> {
 /** Runs the command, and gives its exit code. */
 export async function runScflow(args: string[], io: ScflowIo): Promise<number> {
   try {
-    await dispatch(args, io);
-    return 0;
+    return await dispatch(args, io);
   } catch (error) {
     if (error instanceof UsageError) {
       io.err(`${error.message}\n${USAGE}`);

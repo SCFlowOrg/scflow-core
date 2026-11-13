@@ -40,4 +40,4 @@ The REPL logs to its own stderr, never to stdout, which carries the prompt and t
 
 ## The `scflow` command
 
-`scflow` works on a project on disk through actions, by hand or through a language model with `ask`, which offers the skills of the installed modules, while `model-repl` stays for the command language. See [docs/scflow.md](docs/scflow.md).
+`scflow` works on a project on disk through actions, by hand or through a language model with `ask`, which offers the skills of the installed modules, while `model-repl` stays for the command language. `scflow docs` lists, checks, builds and shows the documentation topics of the installed modules. See [docs/scflow.md](docs/scflow.md).

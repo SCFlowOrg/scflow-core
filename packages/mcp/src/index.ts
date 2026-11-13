@@ -1,7 +1,8 @@
 /**
  * An MCP server on one project of a workspace (see `docs/mcp.md`). It offers
- * the actions of the project as tools and the skills of its environment as
- * prompts, and speaks through any MCP transport; `cli.ts` connects it to the
+ * the actions of the project as tools, the skills of its environment as
+ * prompts and the documentation of its installed modules as tools and
+ * resources, and speaks through any MCP transport; `cli.ts` connects it to the
  * standard streams.
  */
 
@@ -11,12 +12,21 @@ import {
   ErrorCode,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { parametersWithLanguages, runBatch, type ActionRegistry, type Batch } from "@scfloworg/actions";
 import { languagesOf, type AuthoredCommand } from "@scfloworg/core";
-import { createSkillTool } from "@scfloworg/environment";
+import {
+  DOCS_AUDIENCES,
+  createDocsCatalogue,
+  createDocsTool,
+  createSkillTool,
+  type DocsAudience,
+  type DocsCatalogue,
+} from "@scfloworg/environment";
 import type { Document } from "@scfloworg/workspace";
 import type { ProjectHost } from "@scfloworg/workspace/host";
 
@@ -107,7 +117,52 @@ const TOOLS = [
     inputSchema: NO_ARGUMENTS,
     annotations: { readOnlyHint: false },
   },
+  {
+    name: "search_docs",
+    description:
+      "Search the documentation topics of the installed modules by keyword. Gives their id, title, summary, kind and audience, never the body: call read_docs for that. `audience` is one audience or a list, `user` by default.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        audience: { oneOf: [{ type: "string", enum: DOCS_AUDIENCES }, { type: "array", items: { type: "string", enum: DOCS_AUDIENCES } }] },
+        locale: { type: "string" },
+        limit: { type: "integer", minimum: 1 },
+      },
+      required: ["query"],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "read_docs",
+    description:
+      "Read one documentation topic of the installed modules by its id, as Markdown. Topics link to each other as [[id]]. `audience` is as for search_docs, `user` by default.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topicId: { type: "string" },
+        audience: { oneOf: [{ type: "string", enum: DOCS_AUDIENCES }, { type: "array", items: { type: "string", enum: DOCS_AUDIENCES } }] },
+        locale: { type: "string" },
+      },
+      required: ["topicId"],
+    },
+    annotations: { readOnlyHint: true },
+  },
 ];
+
+/** The audience a docs tool call asks for: one or several, `user` when left out. */
+function audienceArgument(args: Args): DocsAudience[] {
+  const value = args.audience ?? "user";
+  const list = Array.isArray(value) ? value : [value];
+  for (const item of list) {
+    if (typeof item !== "string" || !(DOCS_AUDIENCES as readonly string[]).includes(item))
+      throw refusal("invalid_parameters", `"audience" must be ${DOCS_AUDIENCES.join(", ")}, or a list of them`);
+  }
+  return list as DocsAudience[];
+}
+
+/** The prefix of the URI of a topic resource: `docs://<id>`. */
+const RESOURCE_PREFIX = "docs://";
 
 function refusal(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
@@ -168,6 +223,24 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
     return createSkillTool(host.environment.skills, { actions })?.skills ?? [];
   }
 
+  // The topics of the installed modules, listed once; a project does not install modules.
+  let docsCatalogue: Promise<DocsCatalogue> | undefined;
+  const topics = () => (docsCatalogue ??= createDocsCatalogue([host.environment.docs]));
+
+  /** The docs tool for the audience and locale of the call, or `null` when it offers no topic. */
+  async function docsTool(args: Args) {
+    const locale = args.locale;
+    if (locale !== undefined && typeof locale !== "string") throw refusal("invalid_parameters", `"locale" must be a string`);
+    const limit = args.limit;
+    if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1))
+      throw refusal("invalid_parameters", `"limit" must be a positive integer`);
+    return createDocsTool(await topics(), {
+      audience: audienceArgument(args),
+      ...(locale === undefined ? {} : { locale }),
+      ...(limit === undefined ? {} : { limit }),
+    });
+  }
+
   const handlers: Record<string, (args: Args) => Promise<unknown>> = {
     list_actions: async () =>
       doc.dataset
@@ -221,6 +294,18 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
       return { languages: await languages(), changed };
     },
 
+    search_docs: async (args) => {
+      const query = stringArgument(args, "query");
+      return (await (await docsTool(args))?.call({ query })) ?? { results: [] };
+    },
+
+    read_docs: async (args) => {
+      const topicId = stringArgument(args, "topicId");
+      const tool = await docsTool(args);
+      if (!tool) throw refusal("not_found", `no documentation topic "${topicId}" here`);
+      return tool.call({ topicId });
+    },
+
     undo: async () => ({ undone: await move("undo") }),
     redo: async () => ({ redone: await move("redo") }),
   };
@@ -233,7 +318,7 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
     return run;
   };
 
-  const server = new Server({ name: "scflow", version: "0.1.0" }, { capabilities: { tools: {}, prompts: {} } });
+  const server = new Server({ name: "scflow", version: "0.1.0" }, { capabilities: { tools: {}, prompts: {}, resources: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const handler = handlers[request.params.name];
@@ -258,6 +343,20 @@ export async function createMcpServer(options: McpServerOptions): Promise<Server
       description: skill.description,
       messages: [{ role: "user" as const, content: { type: "text" as const, text: instructions } }],
     };
+  });
+  // The topics for the user, in the default locale, as Markdown resources: a client asks for another audience through the tools.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: (await topics())
+      .topics({ audience: "user" })
+      .map(({ id, title, summary }) => ({ uri: `${RESOURCE_PREFIX}${id}`, name: id, title, description: summary, mimeType: "text/markdown" })),
+  }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
+    const catalogue = await topics();
+    const id = uri.startsWith(RESOURCE_PREFIX) ? uri.slice(RESOURCE_PREFIX.length) : undefined;
+    const topic = id === undefined ? undefined : catalogue.topics({ audience: "user" }).find((candidate) => candidate.id === id);
+    if (!topic) throw new McpError(ErrorCode.InvalidParams, `No resource "${uri}"`);
+    return { contents: [{ uri, mimeType: "text/markdown", text: await catalogue.read(topic.id) }] };
   });
   return server;
 }
