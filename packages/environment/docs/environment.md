@@ -52,9 +52,11 @@ env.modules.list(): readonly InstalledModule[]
 - `load` reads the module of a folder with `modules.load` of
   `@scfloworg/module/host`, bundle check included, then installs it. It is for
   a host that reads modules from disk, such as the CLI or the MCP server.
-  The entry `@scfloworg/environment/browser` gives the same `createEnvironment`
-  for a host with no file system: nothing from Node is reached from it, and
-  `load` fails with `constraint_violation`.
+  The entry `@scfloworg/environment/browser` is for a host with no file
+  system: nothing from Node is reached from it, and `load` fails with
+  `constraint_violation`. It has every export of the main entry, with the same
+  names (the skills and documentation tools included), so a host changes its
+  import and nothing else; only `createEnvironment` differs, as `load` does.
 - `dataset.addModule(key)` adds an installed module and its missing
   dependencies to an open dataset, and gives the keys added. It is a model
   upgrade that writes no instance and records no delta (see

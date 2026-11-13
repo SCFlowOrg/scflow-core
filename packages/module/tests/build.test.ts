@@ -8,6 +8,7 @@ import { modules } from "../src/host.js";
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const fixture = (name: string) => join(fixtures, name);
 const bundleOf = (name: string) => join(fixture(name), "dist", "module.js");
+const declarationOf = (name: string) => join(fixture(name), "dist", "module.d.ts");
 
 afterAll(() => {
   for (const name of ["with-code", "no-code", "uses-clock", "imports-module", "imports-engine", "undeclared-action"])
@@ -29,20 +30,36 @@ describe("buildModule", () => {
     expect(Object.keys(module.actions)).toEqual(["say_hello"]);
   });
 
-  it("writes no bundle for a module with no code, and removes a stale one", async () => {
-    mkdirSync(join(fixture("no-code"), "dist"), { recursive: true });
-    writeFileSync(bundleOf("no-code"), "export default 1;\n");
-    const result = await buildModule(fixture("no-code"));
-    expect(result.bundle).toBeNull();
-    expect(existsSync(bundleOf("no-code"))).toBe(false);
+  it("writes the declaration of the bundle: its default export is a ModuleDefinition", async () => {
+    const result = await buildModule(fixture("with-code"));
+    expect(result.declaration).toBe(declarationOf("with-code"));
+    expect(readFileSync(declarationOf("with-code"), "utf8")).toBe(
+      'import type { ModuleDefinition } from "@scfloworg/module";\n' +
+        "declare const definition: ModuleDefinition;\n" +
+        "export default definition;\n",
+    );
   });
 
-  it("refuses a bundle that uses a global of the host, and writes nothing", async () => {
+  it("writes no bundle and no declaration for a module with no code, and removes stale ones", async () => {
+    mkdirSync(join(fixture("no-code"), "dist"), { recursive: true });
+    writeFileSync(bundleOf("no-code"), "export default 1;\n");
+    writeFileSync(declarationOf("no-code"), "export default 1;\n");
+    const result = await buildModule(fixture("no-code"));
+    expect(result.bundle).toBeNull();
+    expect(result.declaration).toBeNull();
+    expect(existsSync(bundleOf("no-code"))).toBe(false);
+    expect(existsSync(declarationOf("no-code"))).toBe(false);
+  });
+
+  it("refuses a bundle that uses a global of the host, and writes neither bundle nor declaration", async () => {
+    mkdirSync(join(fixture("uses-clock"), "dist"), { recursive: true });
+    writeFileSync(declarationOf("uses-clock"), "stale\n");
     await expect(buildModule(fixture("uses-clock"))).rejects.toMatchObject({
       code: "constraint_violation",
       message: expect.stringContaining("Date"),
     });
     expect(existsSync(bundleOf("uses-clock"))).toBe(false);
+    expect(existsSync(declarationOf("uses-clock"))).toBe(false);
   });
 
   it("keeps the engine out of the bundle: a value import of @scfloworg/core is refused", async () => {

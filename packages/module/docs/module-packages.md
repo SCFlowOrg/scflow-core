@@ -98,6 +98,7 @@ import { buildModule } from "@scfloworg/module/build";
 
 const result = await buildModule("packages/module-scflow-core");
 result.bundle; // the path of dist/module.js, or null for a module with no code
+result.declaration; // the path of dist/module.d.ts, or null for a module with no code
 ```
 
 - **One ES module.** The bundle is one file with no chunk: the manifest is
@@ -108,12 +109,26 @@ result.bundle; // the path of dist/module.js, or null for a module with no code
   erased as a type, an import of a Node built-in, and an import of a file of
   another module package, a folder with its own `module.yaml`, stay imports, so
   the check refuses them. Modules call each other by action id.
+- **One declaration, one export.** Next to the bundle, `buildModule` writes
+  `dist/module.d.ts`, which types the default export as the `ModuleDefinition`
+  of `@scfloworg/module`. A module package that publishes its code lists the
+  pair in the `exports` of its `package.json`, under the name `./module`:
+
+  ```json
+  "./module": { "types": "./dist/module.d.ts", "default": "./dist/module.js" }
+  ```
+
+  A host that bundles its modules instead of reading them from disk, such as a
+  browser, imports the module from that entry and gives it to `modules.install`
+  of the environment.
 - **A module with no code has no bundle.** When `src/module.ts` does not exist,
-  `buildModule` writes nothing, removes a `dist/module.js` left by an earlier
-  build, and returns `bundle: null`.
+  `buildModule` writes nothing, removes a `dist/module.js` and a
+  `dist/module.d.ts` left by an earlier build, and returns `bundle: null` and
+  `declaration: null`.
 - **Checked before it is written.** The bundle goes through the bundle check
   below, then the build imports it and checks its code against the manifest, as
-  `modules.load` does. A failure throws and leaves no bundle.
+  `modules.load` does. A failure throws and leaves no bundle and no
+  declaration.
 - **Skills.** The build first checks that the file of each skill exists in the
   package, with or without code. The body of a skill in the bundle must be the
   text of its file, so the two cannot drift apart. The same holds for the file
