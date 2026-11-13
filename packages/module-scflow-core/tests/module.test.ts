@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createModuleSet, readModuleManifest } from "@scfloworg/core";
@@ -8,6 +8,7 @@ import { ACTIONS, SCHEMAS } from "../src/index.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = readModuleManifest(readFileSync(join(root, "module.yaml"), "utf8"));
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+  name: string;
   version: string;
 };
 
@@ -20,6 +21,12 @@ describe("the module scflow:core", () => {
       title: "Supply chain flow",
       dependencies: [],
     });
+  });
+
+  it("names its package after its key, as module-<publisher>-<name>", () => {
+    const [publisher, name] = manifest.name.split(":");
+    expect(packageJson.name).toBe(`@scfloworg/module-${publisher}-${name}`);
+    expect(basename(root)).toBe(`module-${publisher}-${name}`);
   });
 
   it("has the version of the package", () => {

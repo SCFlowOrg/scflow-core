@@ -13,7 +13,7 @@ import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import carbonModule from "./carbon/src/module.js"; // its default export: a defineModule result
 
 const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
-await env.modules.load("packages/scflow-core");     // the CLI or MCP, from a folder
+await env.modules.load("packages/module-scflow-core");     // the CLI or MCP, from a folder
 env.modules.install(carbonModule);                 // a plugin, from a static import
 
 const dataset = await env.datasets.create({ modules: ["acme:carbon"] });

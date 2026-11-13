@@ -234,7 +234,7 @@ describe("scflow ask", () => {
 });
 
 /** The folder of the module scflow:core, loaded with its built bundle and its skill. */
-const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scflow-core");
+const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "module-scflow-core");
 
 // Each test loads and checks the bundle of scflow:core, twice.
 describe("scflow ask with skills", { timeout: 30000 }, () => {

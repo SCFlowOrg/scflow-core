@@ -4,7 +4,7 @@
 
 *Implementation.*
 
-The `@scfloworg/scflow-core` package of the `core` repository is the module `scflow:core`. Its manifest, `module.yaml` at the root of the package, is a [module manifest](../../../core/docs/spec/meta-model.md#module) and holds the whole module in one file:
+The `@scfloworg/module-scflow-core` package of the `core` repository is the module `scflow:core`. Its manifest, `module.yaml` at the root of the package, is a [module manifest](../../../core/docs/spec/meta-model.md#module) and holds the whole module in one file:
 
 - `name: scflow:core`, `namespace: scflow`, and `mcl: ^1.0`, the range of `mcl:core` it works with. It has no other dependency.
 - `version`, the version of the module, always equal to the `version` of the `package.json` of the package. A test checks it.
@@ -66,7 +66,7 @@ An [upgrade](../../../core/docs/spec/meta-model.md#model-upgrade) of a dataset t
 
 *Feature.*
 
-`@scfloworg/scflow-core` exports three functions, each taking `(mcl, locator, input)`.
+`@scfloworg/module-scflow-core` exports three functions, each taking `(mcl, locator, input)`.
 
 `getCommonFlowDomains` reads without writing and takes `{source, destination}`. It returns the [flow domains](flow-model.md#flow-domain) common to the two actors, the intersection of the `domains` of their types. An interface uses it to refuse a drag and drop when the list is empty.
 
@@ -80,7 +80,7 @@ The functions throw when an actor, a flow or an item does not exist. The engine 
 
 *Feature.*
 
-`@scfloworg/scflow-core` exports `createActor(mcl, locator, {display_name, type, scope?, location?, description?})`, which creates one [actor](flow-model.md#actor) and returns it.
+`@scfloworg/module-scflow-core` exports `createActor(mcl, locator, {display_name, type, scope?, location?, description?})`, which creates one [actor](flow-model.md#actor) and returns it.
 
 The actor takes the `scope` of the input when the input gives one. Otherwise it takes the `default_scope` of its type, through the `default_value` of its `scope` property, and no scope when the type has none. An explicit scope always overrides the default. The function throws when the type or the given scope does not exist.
 

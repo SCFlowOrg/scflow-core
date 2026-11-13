@@ -10,7 +10,7 @@ import { createProjectHost } from "@scfloworg/workspace/host";
 import { createMcpServer } from "../src/index.js";
 
 /** The folder of the module scflow:core, loaded with its built bundle and its skills. */
-const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scflow-core");
+const scflowCore = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "module-scflow-core");
 
 const moduleYaml = `
 name: acme:tasks
