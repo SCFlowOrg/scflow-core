@@ -151,8 +151,10 @@ const tool = createDocsTool(catalogue, { audience: "user" });             // rea
 - `uses` of a topic is checked in schema processing, as for a skill: each name
   must be an action of the module or of a dependency.
 - The package `@scfloworg/docs` is re-exported here as `createDocsCatalogue`,
-  `createDocsTool` and `DOCS_TOOL`, so a host that already imports the
-  environment reaches them from it.
+  `createDocsTool` and `DOCS_TOOL`, with `DOCS_AUDIENCES`,
+  `DOCS_MANIFEST_FILE`, `buildDocsManifest` and `serializeDocsManifest`, so a
+  host that already imports the environment reaches them from it (the CLI
+  `scflow docs` and the MCP server do).
 
 ## Datasets
 

@@ -21,6 +21,8 @@ An action is not a tool of its own, because a model has well over 80 actions, an
 | `query` | Instances of `schema`, with optional `filters` | Yes |
 | `get_languages` | The ordered languages of the project, the first being the source language; `[]` when not stated | Yes |
 | `set_languages` | Replaces the `languages`, as one step `undo` can reverse. A duplicate or a bad code is refused with `constraint_violation`. Texts in other languages are kept | No |
+| `search_docs` | The documentation topics of the installed modules that match `query`: `id`, `title`, `summary`, `kind`, `audience`, `snippet`; never the body. Takes an optional `audience` (one or a list, `user` by default), `locale` and `limit` | Yes |
+| `read_docs` | The topic `topicId` as `{ topic, content }`, `content` being Markdown. Takes `audience` and `locale` as `search_docs` does. A topic outside the audience is `not_found` | Yes |
 | `undo`, `redo` | Moves through the history of this server | No |
 
 `describe_action` names the languages of the project, and its source language, in the description of each localized text parameter (see `toAiTools` in `@scfloworg/actions`).
@@ -37,6 +39,12 @@ The server declares the `prompts` capability and exports each skill of its envir
 | `prompts/get` | The `description` of the skill and one `user` message whose text is the Markdown body of the skill. A name that is not an offered skill is an `InvalidParams` error |
 
 A prompt takes no arguments: the body is a method the client follows with the tools above.
+
+## Documentation
+
+The topics of the installed modules (see [`@scfloworg/docs`](../../docs/docs/docs.md), and Documentation in the [environment](../../environment/docs/environment.md#documentation)) are reached through `search_docs` and `read_docs`, built with `createDocsTool` over a catalogue of `env.docs`. The caller gives the audience, so an AI that helps a user is never shown a topic for model developers; the default is `user`. A module that comes only with the project gives no topic, as for skills. Skills stay prompts: a skill is not a topic.
+
+The server also declares the `resources` capability and lists each topic for the `user` audience, in the default locale, as a `text/markdown` resource with the URI `docs://<id>`, such as `docs://scflow/undo`. A client that wants another audience or locale uses the tools. Reading a URI of an unknown topic or of another audience is an `InvalidParams` error.
 
 ## Saving
 

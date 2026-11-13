@@ -61,3 +61,21 @@ The skills of the modules installed by `--modules` reach the model as the [envir
 Each answer of the model may ask for several calls. The calls of read actions run at once. The calls of the other actions of one answer are listed on the standard error, and one question approves or refuses them together: `y` or `yes` on the standard input approves them, anything else, or the end of the input, refuses them, and the model is told so. `--yes` approves every call without asking; it is off by default. `--max-turns` bounds the number of answers, `10` by default.
 
 The text of the model and each call are shown on the standard error as they come. At the end `ask` saves the project if a call changed it, and prints `{ text, stopped, turns, calls, changed, written }`: `text` is the last answer, `stopped` is `done` or `turn-limit`, and `calls` lists each call with its `action`, `params`, `approved`, and its `result` or `error`. An error of the model (`auth`, `rate-limit`, `model-not-found`, …) is a refusal: it prints `{ "error": { "code": "ai_<kind>", "message" } }`, exits with `1`, and saves nothing.
+
+## Documentation
+
+`scflow docs` reads the documentation topics of the modules installed by `--modules`, with no project (see [`@scfloworg/docs`](../../docs/docs/docs.md) and Documentation in the [environment](../../environment/docs/environment.md#documentation)). Skills are not topics and keep `ask`.
+
+```text
+scflow docs list [--audience <audience>]... [--locale <code>] [--modules <folder>]
+scflow docs check [--modules <folder>]
+scflow docs build <directory> [--audience <audience>]... [--modules <folder>]
+scflow docs show <id> [--audience <audience>]... [--locale <code>] [--modules <folder>]
+```
+
+`--audience` is `user`, `plugin-dev` or `model-dev`, repeated for several, and every audience when left out. `docs` followed by one of these four words is always this command; a project folder named `docs` is reached with a path such as `./docs`.
+
+- `list` prints a JSON array of `{ id, title, summary, kind, audience, locale }`, one topic per id in the locale asked, else the default one.
+- `show` prints `{ topic, content }`, the body being Markdown. An unknown topic, or one outside the audiences, fails with `not_found`.
+- `check` runs `check()` of the catalogue and prints `{ ok, topics, problems }`. It exits with `1` when `ok` is false, and writes one line `<topic id>: <message>` to the standard error for each problem, so the owner of a defect is named: a duplicate id, an unresolved `[[id]]` link, an unreadable body.
+- `build` writes `docs-manifest.json` (see `DOCS_MANIFEST_FILE`) and the body of every topic and locale, at `<directory>/<locale>/<id>.md`, and prints `{ topics, manifest, written }`. The site and the framework bundle read this directory. `--audience` keeps only those audiences in both.

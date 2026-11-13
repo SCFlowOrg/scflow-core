@@ -33,8 +33,16 @@ export type {
 } from "./environment.js";
 export type { InstalledModule, ModuleCatalogue } from "./catalogue.js";
 export { MODULE_DOCS_SOURCE, createModuleDocsSource } from "./docs.js";
-export { DOCS_TOOL, createCatalogue as createDocsCatalogue, createDocsTool } from "@scfloworg/docs";
-export type { DocsCatalogue, DocsSource, DocsTool } from "@scfloworg/docs";
+export {
+  AUDIENCES as DOCS_AUDIENCES,
+  DOCS_MANIFEST_FILE,
+  DOCS_TOOL,
+  buildManifest as buildDocsManifest,
+  createCatalogue as createDocsCatalogue,
+  createDocsTool,
+  serializeManifest as serializeDocsManifest,
+} from "@scfloworg/docs";
+export type { Audience as DocsAudience, DocsCatalogue, DocsProblem, DocsSource, DocsTool } from "@scfloworg/docs";
 export { SKILL_TOOL, checkSkillCitations, citedActionIds, createSkillTool } from "./skills.js";
 export type {
   SkillCatalogue,
