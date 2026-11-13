@@ -9,7 +9,7 @@ implementation: how the code is declared, built to one bundle, checked and
 loaded.
 
 ```text
-packages/scflow-core/
+packages/module-scflow-core/
   module.yaml
   skills/
     image-to-model.md # the body of a skill
@@ -22,6 +22,22 @@ packages/scflow-core/
 
 A module package publishes its manifest and the files of its skills with its
 bundle: `files` of its `package.json` lists `module.yaml` and `skills`.
+
+## Name the package
+
+A module package is named `module-<publisher>-<name>`, from the key
+`publisher:name` of its module, and its folder has the same name: the module
+`scflow:core` is the package `@scfloworg/module-scflow-core`, in
+`packages/module-scflow-core`. A key read in a project file then gives the
+package of its module.
+
+- The prefix `module-` says that the package is a module; no other package
+  takes it.
+- The scope is that of the organization that publishes the package, which may
+  differ from the publisher of the key: `@acme/module-acme-pharma` for
+  `acme:pharma`.
+- The key of a module stays when its package is renamed: project files hold
+  it.
 
 ## Declare the code
 
@@ -80,7 +96,7 @@ the folder to `dist/module.js`.
 ```ts
 import { buildModule } from "@scfloworg/module/build";
 
-const result = await buildModule("packages/scflow-core");
+const result = await buildModule("packages/module-scflow-core");
 result.bundle; // the path of dist/module.js, or null for a module with no code
 ```
 
@@ -178,7 +194,7 @@ server.
 ```ts
 import { modules } from "@scfloworg/module/host";
 
-const scflow = await modules.load("packages/scflow-core");
+const scflow = await modules.load("packages/module-scflow-core");
 scflow.manifest.name;                    // "scflow:core"
 scflow.actions.get("scflow/create_actor"); // its body
 ```

@@ -62,7 +62,7 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 
 ## [Implementation](implementation.md)
 
-- [Schemas Package](implementation.md#schemas-package): `@scfloworg/scflow-core` is the module `scflow:core`, declared in its manifest `module.yaml`; the schemas are compiled to TypeScript at build time and exported as `SCHEMAS`
+- [Schemas Package](implementation.md#schemas-package): `@scfloworg/module-scflow-core` is the module `scflow:core`, declared in its manifest `module.yaml`; the schemas are compiled to TypeScript at build time and exported as `SCHEMAS`
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin installs the module `scflow:core` in its environment.
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
 - [Network Rules](implementation.md#network-rules): The ten rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`

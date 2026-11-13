@@ -1,6 +1,6 @@
 // Builds the packages under packages/ in dependency order, through the project
 // references of each package. One package is built after it by its own
-// script, see build:packages in package.json: scflow-core, which generates
+// script, see build:packages in package.json: module-scflow-core, which generates
 // sources first and bundles its module afterwards.
 {
   "files": [],

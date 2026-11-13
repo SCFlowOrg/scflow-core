@@ -12,7 +12,7 @@ import { TRANSFORMATION_ACTIONS } from "./transformations.js";
 export type ScflowAction = ScflowActionDefinition<any, any>;
 
 /**
- * The model actions of `scflow-core`, in catalog order (topic `scflow/actions`).
+ * The model actions of `module-scflow-core`, in catalog order (topic `scflow/actions`).
  *
  * The package exports them as data. Their bodies reach an environment through
  * the bundle of the module (`src/module.ts`), and their declarations through
