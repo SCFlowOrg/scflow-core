@@ -108,6 +108,31 @@ result.bundle; // the path of dist/module.js, or null for a module with no code
 `markdown.d.ts`, exported as `@scfloworg/module/markdown`, declares the import
 of a `.md` file, which the build inlines as its text.
 
+## Reference topics
+
+The reference of a module is generated from its declarations, never written by
+hand (ADR-0014). `generateReference(manifest)`, exported as
+`@scfloworg/module/reference`, reads no file and returns two topics, each with
+its entry for `docs` and its Markdown body:
+
+- `<namespace>/concepts`, audience `user`: the schemas that are not abstract,
+  with their description, their parent, and their properties compactly (type or
+  enum values, `→` for a relation, `many`, `required`, `owner`, the inverse
+  name). The concepts are what a person sees in the model.
+- `<namespace>/actions`, audience `model-dev`: each action with its flags
+  (read-only, destructive, writes), its parameters and two example calls, one
+  with the required parameters and one with all of them. The examples are
+  derived from the parameter schema (`<schema>` for a reference, the first
+  value of an enum), so a declaration needs nothing more.
+
+Both are `kind: reference`, `generated: true`, locale `en`, with stable ids.
+A package writes them with a build script (`scripts/build-docs.mjs` of
+`scflow:core`) into `docs/reference/`, declares them under `docs:` exactly as
+generated, and commits the files. A test compares the files and the entries with
+`generateReference`, so a schema or an action that changes without the build
+fails it. The Markdown of the generated topics is the only rendering of the
+declarations as text; the MCP server gives the same declarations as JSON.
+
 ## Check the bundle
 
 `checkBundle(code)`, from `@scfloworg/module/build`, parses the code of a bundle

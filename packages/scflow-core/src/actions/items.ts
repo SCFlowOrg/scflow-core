@@ -77,7 +77,7 @@ export interface HeldItemSummary {
   item: string;
 }
 
-/** Creates an item type; see `scflow/create_item_type` in `docs/actions.md`. */
+/** Creates an item type; see `scflow/create_item_type` in the topic `scflow/actions`. */
 export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, ItemTypeSummary> = {
   id: "scflow/create_item_type",
   writes: ["item_type"],
@@ -116,7 +116,7 @@ export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, 
   },
 };
 
-/** Creates an item; see `scflow/create_item` in `docs/actions.md`. */
+/** Creates an item; see `scflow/create_item` in the topic `scflow/actions`. */
 export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSummary> = {
   id: "scflow/create_item",
   writes: ["item"],
@@ -149,7 +149,7 @@ export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSumm
   },
 };
 
-/** Updates an item; see `scflow/update_item` in `docs/actions.md`. */
+/** Updates an item; see `scflow/update_item` in the topic `scflow/actions`. */
 export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSummary> = {
   id: "scflow/update_item",
   writes: ["item"],
@@ -202,7 +202,7 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
   },
 };
 
-/** Makes an actor hold an item; see `scflow/hold_item` in `docs/actions.md`. */
+/** Makes an actor hold an item; see `scflow/hold_item` in the topic `scflow/actions`. */
 export const holdItemAction: ScflowActionDefinition<HoldItemParams, HeldItemSummary> = {
   id: "scflow/hold_item",
   writes: ["item_at_actor"],
@@ -225,7 +225,7 @@ export const holdItemAction: ScflowActionDefinition<HoldItemParams, HeldItemSumm
   },
 };
 
-/** Removes an item from an actor; see `scflow/release_held_item` in `docs/actions.md`. */
+/** Removes an item from an actor; see `scflow/release_held_item` in the topic `scflow/actions`. */
 export const releaseHeldItemAction: ScflowActionDefinition<ReleaseHeldItemParams, { id: string }> = {
   id: "scflow/release_held_item",
   writes: ["item_at_actor", "transformation_line"],
@@ -249,7 +249,7 @@ export const releaseHeldItemAction: ScflowActionDefinition<ReleaseHeldItemParams
   },
 };
 
-/** Deletes an item; see `scflow/delete_item` in `docs/actions.md`. */
+/** Deletes an item; see `scflow/delete_item` in the topic `scflow/actions`. */
 export const deleteItemAction: ScflowActionDefinition<DeleteItemParams, { id: string }> = {
   id: "scflow/delete_item",
   writes: ["item", "flow", "item_at_actor", "transformation_line", "conversion"],
@@ -274,7 +274,7 @@ export const deleteItemAction: ScflowActionDefinition<DeleteItemParams, { id: st
   },
 };
 
-/** Deletes an item type; see `scflow/delete_item_type` in `docs/actions.md`. */
+/** Deletes an item type; see `scflow/delete_item_type` in the topic `scflow/actions`. */
 export const deleteItemTypeAction: ScflowActionDefinition<DeleteItemTypeParams, { id: string }> = {
   id: "scflow/delete_item_type",
   writes: ["item", "item_type", "flow", "item_at_actor", "transformation_line", "conversion"],

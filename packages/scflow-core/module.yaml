@@ -1112,3 +1112,61 @@ skills:
       - scflow/add_tags
       - scflow/add_note
     file: skills/physical-to-information-flows.md
+
+docs:
+  - id: scflow/concepts
+    title: 'Supply chain flow: concepts'
+    summary: The concepts of Supply chain flow and their relations, generated from the schemas of scflow:core.
+    kind: reference
+    audience: user
+    generated: true
+    file: docs/reference/concepts.md
+  - id: scflow/actions
+    title: 'Supply chain flow: actions'
+    summary: The actions of Supply chain flow with their parameters and example calls, generated from the declarations of scflow:core.
+    kind: reference
+    audience: model-dev
+    generated: true
+    uses:
+      - scflow/create_actor
+      - scflow/update_actor
+      - scflow/delete_actor
+      - scflow/delete_actor_type
+      - scflow/delete_scope
+      - scflow/create_actor_type
+      - scflow/create_scope
+      - scflow/create_flow
+      - scflow/update_flow
+      - scflow/set_flow_item
+      - scflow/delete_flow
+      - scflow/create_item_type
+      - scflow/create_item
+      - scflow/update_item
+      - scflow/hold_item
+      - scflow/release_held_item
+      - scflow/delete_item
+      - scflow/delete_item_type
+      - scflow/create_transformation_type
+      - scflow/create_transformation
+      - scflow/connect_transformation_line
+      - scflow/define_process
+      - scflow/delete_transformation
+      - scflow/delete_transformation_type
+      - scflow/create_conversion
+      - scflow/update_conversion
+      - scflow/delete_conversion
+      - scflow/add_note
+      - scflow/update_note
+      - scflow/remove_note
+      - scflow/find_notes
+      - scflow/add_tags
+      - scflow/remove_tags
+      - scflow/inspect_delete_impact
+    file: docs/reference/actions.md
+  - id: scflow/action-conventions
+    title: Conventions of the actions
+    summary: References by id or name, localized texts, atomic undoable calls, the write limit, rules and the cascade of deletes, shared by every action of scflow:core.
+    kind: explanation
+    audience: model-dev
+    uses: [scflow/delete_actor, scflow/delete_flow, scflow/remove_note, scflow/release_held_item]
+    file: docs/action-conventions.md

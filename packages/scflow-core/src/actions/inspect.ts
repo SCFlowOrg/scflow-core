@@ -69,7 +69,7 @@ export interface DeleteImpactResult {
   hasSideEffects: boolean;
 }
 
-/** Reports what a cascading delete would remove; see `scflow/inspect_delete_impact` in `docs/actions.md`. */
+/** Reports what a cascading delete would remove; see `scflow/inspect_delete_impact` in the topic `scflow/actions`. */
 export const inspectDeleteImpactAction: ScflowActionDefinition<InspectDeleteImpactParams, DeleteImpactResult> = {
   id: "scflow/inspect_delete_impact",
   writes: [],

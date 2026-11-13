@@ -18,6 +18,10 @@
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
     },
+    "./reference": {
+      "types": "./dist/reference.d.ts",
+      "default": "./dist/reference.js"
+    },
     "./code": {
       "types": "./dist/code.d.ts",
       "default": "./dist/code.js"
