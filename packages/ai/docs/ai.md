@@ -30,7 +30,7 @@ for await (const chunk of client.chat({ messages: [{ role: "user", content: "Hel
 | `AiMessage` | One message: `role` (`system`, `user`, `assistant`, `tool`), `content`, and `images` (data URLs, user messages), `toolCalls` (assistant messages) or `toolCallId` (tool messages) |
 | `AiToolCall` | A call the model asks for: `id`, `name`, and `arguments`, the raw JSON text the model wrote |
 | `AiToolSpec` | A tool the model may call, in the shape of an MCP tool: `name`, `description`, `inputSchema` (a JSON Schema object), and optional `title` and `annotations` |
-| `AiChatRequest` | `messages`, and optional `tools`, `model` (replaces the model of the connection), `temperature` and `maxTokens` |
+| `AiChatRequest` | `messages`, and optional `tools`, `model` (replaces the model of the connection), `tier` (`fast` or `strong`, see [Model tiers](#model-tiers)), `temperature` and `maxTokens` |
 | `AiChunk` | One piece of a streamed answer: `text`, `tool-call` (a whole call), or `done` with the `finishReason`, the `usage` and the `retried` parameter when there is one |
 
 The names are those of the `AiService` types of the framework, so the
@@ -48,7 +48,7 @@ know which kind is in use.
 
 | Kind | Settings | Goes to |
 | --- | --- | --- |
-| `byok` | `baseUrl`, `apiKey`, `model`, optional `headers` | The provider, with the user's own key |
+| `byok` | `baseUrl`, `apiKey`, `model`, optional `models` and `headers` | The provider, with the user's own key |
 
 `byok` is the only kind today. A connection to a service run by SCFlow will be
 a second kind of the same union, whose credential is an account token the host
@@ -90,6 +90,32 @@ as `{ data: [{ id }] }`. It gives the ids sorted, each once. It takes the
 `fetch` and the `signal` a chat takes, and fails with the same `AiError`
 kinds: `auth` with no key or a refused key, `network` with no answer,
 `provider` for an answer it cannot read.
+
+## Model tiers
+
+A connection may name a model for each of two tiers, so a caller asks for the
+kind of model a task needs rather than for a model id:
+
+| Tier | For |
+| --- | --- |
+| `fast` | A cheap and quick model |
+| `strong` | A model that plans and calls tools better, at a higher cost |
+
+`models: { fast?, strong? }` of a connection gives them; a tier it leaves out
+is its `model`. A request names the tier it wants with `tier`. The model of a
+request is its `model` when it has one, else the model of its `tier`, else the
+`model` of the connection. A connection with no `models` thus behaves as
+before, whatever tier is asked.
+
+The package does not read a request to choose its tier: the caller knows what
+it asks. As a guide:
+
+| The task | Tier |
+| --- | --- |
+| Answer a short question, rephrase, name, summarize, with no tool | `fast` |
+| Change a project through several tool calls, plan, follow a long instruction | `strong` |
+| A long conversation or images | `strong`, if the fast model is short of context or reads no image |
+| Not known | `fast` with `escalate` in the agent loop |
 
 ## Model profiles
 
@@ -174,7 +200,7 @@ const outcome = await runAgent({
   signal,
   onEvent: (event) => show(event),
 });
-// outcome: { messages, text, turns, stopped: "done" | "turn-limit" }
+// outcome: { messages, text, turns, stopped: "done" | "turn-limit", escalated }
 ```
 
 | Option | Is |
@@ -187,12 +213,33 @@ const outcome = await runAgent({
 | `maxTurns` | The number of answers asked of the model, `10` by default |
 | `signal` | Aborts the chat and stops before the next call |
 | `onEvent` | `text` as it streams, `tool-calls` when a turn asks for calls, `tool-result` for each call, `done` for each answer |
-| `model`, `temperature`, `maxTokens` | Passed with each request |
+| `model`, `tier`, `temperature`, `maxTokens` | Passed with each request |
+| `escalate` | Optional. With `true`, the loop moves from the `fast` tier to `strong` when the fast model fails, as below |
 
 A call that is refused, has arguments that are not JSON, names no tool, or
 whose `execute` throws, is answered to the model with `{ "error": message }`,
 and the loop goes on: the model can correct itself. The calls of a turn run
 one after the other, in the order the model gave them.
+
+### Escalation
+
+With `escalate: true`, the loop starts with the tier `fast`, unless `tier`
+says `strong`, and moves to `strong` for the rest of the run when the fast
+model:
+
+- makes a call whose arguments are not JSON or that names no tool, or whose
+  `execute` throws: the next turn is asked of the strong model, which reads
+  the error as any model would;
+- is refused a request with `unsupported-parameter`, for instance tools or
+  images its profile does not take: the same turn is asked again of the
+  strong model.
+
+A call the user refused does not escalate: the model did not fail. The move
+happens once; `onEvent` gets `{ type: "escalated", reason }`, where `reason`
+is `call-failed` or `unsupported-parameter`, and `escalated` of the outcome is
+`true`. A `model` given to the loop names the model of every request, so
+there is nothing to escalate. When the connection names no model for the
+tiers, both are its `model`, and an escalation asks the same model again.
 
 `stopped` is `done` when the last answer asked for no call, and `turn-limit`
 when the limit came first; then the last calls have run and their results are
