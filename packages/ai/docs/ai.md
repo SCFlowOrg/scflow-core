@@ -172,7 +172,7 @@ refusal is thrown.
 
 | Field | Holds |
 | --- | --- |
-| `model` | The model the request named |
+| `model` | The model the request named, after its tier is resolved |
 | `connection` | The kind of the connection |
 | `inputTokens`, `outputTokens` | When the provider gives them |
 | `durationMs` | From the request to the end of the stream |
@@ -182,6 +182,33 @@ refusal is thrown.
 
 The host shows the usage; the package keeps no count. An exception thrown by
 `onUsage` is ignored.
+
+### Credits
+
+A host may count usage in credits, a unit of its own, rather than in tokens.
+It gives a `CreditPolicy`:
+
+| Field | Is |
+| --- | --- |
+| `prices` | Rules `{ match, input, output }`: the price the provider asks per million input and per million output tokens, in one currency for the whole table |
+| `creditsPerUnit` | The credits one unit of that currency is worth |
+| `margin` | Optional. The share added to the price of the provider: `0.2` adds 20 %; `0` by default |
+
+`match` is a model id with `*` for any text, compared as for
+[profiles](#model-profiles): without case, and without a `provider/` prefix.
+The first rule that matches gives the price.
+
+`creditsOf(usage, policy)` gives the credits of one `AiUsage`:
+
+```
+(inputTokens × input + outputTokens × output) / 1 000 000 × creditsPerUnit × (1 + margin)
+```
+
+It is `undefined` when no rule matches the model, or the provider gave no
+`inputTokens` or no `outputTokens`: a cost not known is never counted as
+nothing. It is not rounded; the host rounds what it shows. The package holds
+no price, since prices change and their worth in credits is the host's
+choice; the host sums the credits of a session as it sums its tokens.
 
 ## The agent loop
 

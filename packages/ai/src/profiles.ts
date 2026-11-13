@@ -44,10 +44,19 @@ export function profileOf(
   model: string,
   rules: readonly ProfileRule[] = [],
 ): ModelProfile | undefined {
+  const rule = ruleOf(model, [...rules, ...DEFAULT_PROFILES]);
+  return rule ? { ...rule.profile } : undefined;
+}
+
+/**
+ * The first of `rules` whose `match` fits a model id, compared without case
+ * and without a `provider/` prefix. Profiles and prices are found this way.
+ */
+export function ruleOf<Rule extends { match: string }>(
+  model: string,
+  rules: readonly Rule[],
+): Rule | undefined {
   const id = model.toLowerCase();
   const bare = id.slice(id.lastIndexOf("/") + 1);
-  const rule = [...rules, ...DEFAULT_PROFILES].find(
-    (candidate) => matches(candidate.match, bare) || matches(candidate.match, id),
-  );
-  return rule ? { ...rule.profile } : undefined;
+  return rules.find((candidate) => matches(candidate.match, bare) || matches(candidate.match, id));
 }
