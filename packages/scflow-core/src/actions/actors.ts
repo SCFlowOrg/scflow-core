@@ -88,7 +88,7 @@ export interface ActorTypeSummary {
   default_scope?: string;
 }
 
-/** Creates a scope; see `scflow/create_scope` in `docs/actions.md`. */
+/** Creates a scope; see `scflow/create_scope` in the topic `scflow/actions`. */
 export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeSummary> = {
   id: "scflow/create_scope",
   writes: ["scope"],
@@ -120,7 +120,7 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
   },
 };
 
-/** Creates an actor type; see `scflow/create_actor_type` in `docs/actions.md`. */
+/** Creates an actor type; see `scflow/create_actor_type` in the topic `scflow/actions`. */
 export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams, ActorTypeSummary> = {
   id: "scflow/create_actor_type",
   writes: ["actor_type"],
@@ -170,7 +170,7 @@ export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams
   },
 };
 
-/** Creates an actor; see `scflow/create_actor` in `docs/actions.md`. */
+/** Creates an actor; see `scflow/create_actor` in the topic `scflow/actions`. */
 export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorSummary> = {
   id: "scflow/create_actor",
   writes: ["actor"],
@@ -215,7 +215,7 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
   },
 };
 
-/** Updates an actor; see `scflow/update_actor` in `docs/actions.md`. */
+/** Updates an actor; see `scflow/update_actor` in the topic `scflow/actions`. */
 export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorSummary> = {
   id: "scflow/update_actor",
   writes: ["actor"],
@@ -276,7 +276,7 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
   },
 };
 
-/** Deletes an actor; see `scflow/delete_actor` in `docs/actions.md`. */
+/** Deletes an actor; see `scflow/delete_actor` in the topic `scflow/actions`. */
 export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: string }> = {
   id: "scflow/delete_actor",
   writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion"],
@@ -301,7 +301,7 @@ export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: 
   },
 };
 
-/** Deletes an actor type; see `scflow/delete_actor_type` in `docs/actions.md`. */
+/** Deletes an actor type; see `scflow/delete_actor_type` in the topic `scflow/actions`. */
 export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams, { id: string }> = {
   id: "scflow/delete_actor_type",
   writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "actor_type"],
@@ -325,7 +325,7 @@ export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams
   },
 };
 
-/** Deletes a scope; see `scflow/delete_scope` in `docs/actions.md`. */
+/** Deletes a scope; see `scflow/delete_scope` in the topic `scflow/actions`. */
 export const deleteScopeAction: ScflowActionDefinition<DeleteScopeParams, { id: string }> = {
   id: "scflow/delete_scope",
   writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "scope", "actor_type"],

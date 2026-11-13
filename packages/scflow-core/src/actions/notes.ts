@@ -37,7 +37,7 @@ function summarizeNote(note: Instance): NoteSummary {
   return { id: note.id, entity: note.annotated as string, content: note.content as Record<string, string> };
 }
 
-/** Adds a note to an entity; see `scflow/add_note` in `docs/actions.md`. */
+/** Adds a note to an entity; see `scflow/add_note` in the topic `scflow/actions`. */
 export const addNoteAction: ScflowActionDefinition<AddNoteParams, NoteSummary> = {
   id: "scflow/add_note",
   writes: ["note"],
@@ -66,7 +66,7 @@ export const addNoteAction: ScflowActionDefinition<AddNoteParams, NoteSummary> =
   },
 };
 
-/** Changes the content of a note; see `scflow/update_note` in `docs/actions.md`. */
+/** Changes the content of a note; see `scflow/update_note` in the topic `scflow/actions`. */
 export const updateNoteAction: ScflowActionDefinition<UpdateNoteParams, NoteSummary> = {
   id: "scflow/update_note",
   writes: ["note"],
@@ -96,7 +96,7 @@ export const updateNoteAction: ScflowActionDefinition<UpdateNoteParams, NoteSumm
   },
 };
 
-/** Deletes a note; see `scflow/remove_note` in `docs/actions.md`. */
+/** Deletes a note; see `scflow/remove_note` in the topic `scflow/actions`. */
 export const removeNoteAction: ScflowActionDefinition<RemoveNoteParams, { id: string }> = {
   id: "scflow/remove_note",
   writes: ["note"],
@@ -118,7 +118,7 @@ export const removeNoteAction: ScflowActionDefinition<RemoveNoteParams, { id: st
   },
 };
 
-/** Lists the notes of an entity; see `scflow/find_notes` in `docs/actions.md`. */
+/** Lists the notes of an entity; see `scflow/find_notes` in the topic `scflow/actions`. */
 export const findNotesAction: ScflowActionDefinition<FindNotesParams, NoteSummary[]> = {
   id: "scflow/find_notes",
   writes: [],

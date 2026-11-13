@@ -8,6 +8,7 @@ import { checkSkillCitations, createEnvironment, createSkillTool, SKILL_TOOL } f
 import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import { defineModule, type ModuleBody } from "@scfloworg/module";
 import { ACTION_BODIES } from "../src/actions/index.js";
+import { docTexts, SKILL_TEXTS } from "./moduleTexts.js";
 
 /**
  * The skills of scflow:core (Skill in packages/core/docs/spec/meta-model.md):
@@ -25,10 +26,8 @@ function environment() {
   env.modules.install(
     defineModule(load(text("module.yaml")) as Record<string, unknown>, {
       actions: ACTION_BODIES as Record<string, ModuleBody>,
-      skills: {
-        image_to_model: text("skills/image-to-model.md"),
-        physical_to_information_flows: text("skills/physical-to-information-flows.md"),
-      },
+      skills: SKILL_TEXTS,
+  docs: docTexts(),
     }),
   );
   return env;

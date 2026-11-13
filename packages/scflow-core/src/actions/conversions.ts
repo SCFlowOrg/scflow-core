@@ -40,7 +40,7 @@ export interface ConversionSummary {
   to_item: string;
 }
 
-/** Creates a conversion; see `scflow/create_conversion` in `docs/actions.md`. */
+/** Creates a conversion; see `scflow/create_conversion` in the topic `scflow/actions`. */
 export const createConversionAction: ScflowActionDefinition<CreateConversionParams, ConversionSummary> = {
   id: "scflow/create_conversion",
   writes: ["conversion"],
@@ -78,7 +78,7 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
   },
 };
 
-/** Updates the name, the description and the tags of a conversion; see `scflow/update_conversion` in `docs/actions.md`. */
+/** Updates the name, the description and the tags of a conversion; see `scflow/update_conversion` in the topic `scflow/actions`. */
 export const updateConversionAction: ScflowActionDefinition<UpdateConversionParams, ConversionSummary> = {
   id: "scflow/update_conversion",
   writes: ["conversion"],
@@ -127,7 +127,7 @@ export const updateConversionAction: ScflowActionDefinition<UpdateConversionPara
   },
 };
 
-/** Deletes a conversion; see `scflow/delete_conversion` in `docs/actions.md`. */
+/** Deletes a conversion; see `scflow/delete_conversion` in the topic `scflow/actions`. */
 export const deleteConversionAction: ScflowActionDefinition<DeleteConversionParams, { id: string }> = {
   id: "scflow/delete_conversion",
   writes: ["conversion"],

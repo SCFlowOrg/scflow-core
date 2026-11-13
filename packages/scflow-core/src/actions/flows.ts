@@ -45,7 +45,7 @@ export interface FlowSummary {
   bidirectional: boolean;
 }
 
-/** Creates a flow between two actors; see `scflow/create_flow` in `docs/actions.md`. */
+/** Creates a flow between two actors; see `scflow/create_flow` in the topic `scflow/actions`. */
 export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSummary> = {
   id: "scflow/create_flow",
   writes: ["flow", "item_at_actor"],
@@ -95,7 +95,7 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
   },
 };
 
-/** Sets the item of a flow; see `scflow/set_flow_item` in `docs/actions.md`. */
+/** Sets the item of a flow; see `scflow/set_flow_item` in the topic `scflow/actions`. */
 export const setFlowItemAction: ScflowActionDefinition<SetFlowItemParams, FlowSummary> = {
   id: "scflow/set_flow_item",
   writes: ["flow", "item_at_actor"],
@@ -119,7 +119,7 @@ export const setFlowItemAction: ScflowActionDefinition<SetFlowItemParams, FlowSu
   },
 };
 
-/** Updates a flow; see `scflow/update_flow` in `docs/actions.md`. */
+/** Updates a flow; see `scflow/update_flow` in the topic `scflow/actions`. */
 export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSummary> = {
   id: "scflow/update_flow",
   writes: ["flow"],
@@ -174,7 +174,7 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
   },
 };
 
-/** Deletes a flow; see `scflow/delete_flow` in `docs/actions.md`. */
+/** Deletes a flow; see `scflow/delete_flow` in the topic `scflow/actions`. */
 export const deleteFlowAction: ScflowActionDefinition<DeleteFlowParams, { id: string }> = {
   id: "scflow/delete_flow",
   writes: ["flow"],

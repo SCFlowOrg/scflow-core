@@ -9,6 +9,7 @@ import { createJsPersistenceInterface } from "@scfloworg/format-js";
 import { defineModule } from "@scfloworg/module";
 import { buildModule } from "@scfloworg/module/build";
 import { ACTION_BODIES } from "../src/actions/index.js";
+import { docTexts, SKILL_TEXTS } from "./moduleTexts.js";
 
 /**
  * The acceptance of phase C of `SCFlowOrg/scflow-core#3`, with no application:
@@ -28,10 +29,8 @@ function environmentWith(manifest: Manifest) {
   env.modules.install(
     defineModule(manifest as never, {
       actions: ACTION_BODIES,
-      skills: {
-        image_to_model: readFileSync(join(root, "skills", "image-to-model.md"), "utf8"),
-        physical_to_information_flows: readFileSync(join(root, "skills", "physical-to-information-flows.md"), "utf8"),
-      },
+      skills: SKILL_TEXTS,
+  docs: docTexts(),
     }),
   );
   return env;

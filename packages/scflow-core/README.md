@@ -56,8 +56,9 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
   `create_transformation`, `connect_transformation_line`, `define_process`, `create_conversion`, `update_conversion`, `add_tags`, `remove_tags`, `add_note`, `update_note`, `remove_note`,
   `find_notes` and `inspect_delete_impact` (these two are `kind: "read"` actions), and the cascading deletes `delete_actor_type`,
   `delete_scope`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
-  catalog, the parameters and the conventions (ID or name references, localized text) are in
-  [`docs/actions.md`](docs/actions.md).
+  catalogue and the parameters are generated topics, `scflow/actions` and `scflow/concepts`
+  (`docs/reference/`, written by `scripts/build-docs.mjs` from `module.yaml` and committed), and the conventions
+  (ID or name references, localized text) are in [`docs/action-conventions.md`](docs/action-conventions.md).
 
 ## Locations
 

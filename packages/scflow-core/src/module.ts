@@ -5,6 +5,9 @@
 // Package). It is not compiled by tsc -b: tsconfig.module.json type-checks it.
 import { defineModule, type ModuleBody } from "@scfloworg/module";
 import manifest from "../module.yaml";
+import actionConventions from "../docs/action-conventions.md";
+import actionsReference from "../docs/reference/actions.md";
+import conceptsReference from "../docs/reference/concepts.md";
 import imageToModel from "../skills/image-to-model.md";
 import physicalToInformationFlows from "../skills/physical-to-information-flows.md";
 import { ACTION_BODIES } from "./actions/index.js";
@@ -15,4 +18,9 @@ import { ACTION_BODIES } from "./actions/index.js";
 export default defineModule(manifest, {
   actions: ACTION_BODIES as Record<string, ModuleBody>,
   skills: { image_to_model: imageToModel, physical_to_information_flows: physicalToInformationFlows },
+  docs: {
+    "docs/reference/concepts.md": conceptsReference,
+    "docs/reference/actions.md": actionsReference,
+    "docs/action-conventions.md": actionConventions,
+  },
 });

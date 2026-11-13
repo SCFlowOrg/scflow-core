@@ -79,7 +79,7 @@ export interface DefinedProcess {
   lines: TransformationLineSummary[];
 }
 
-/** Creates a transformation type; see `scflow/create_transformation_type` in `docs/actions.md`. */
+/** Creates a transformation type; see `scflow/create_transformation_type` in the topic `scflow/actions`. */
 export const createTransformationTypeAction: ScflowActionDefinition<
   CreateTransformationTypeParams,
   TransformationTypeSummary
@@ -114,7 +114,7 @@ export const createTransformationTypeAction: ScflowActionDefinition<
   },
 };
 
-/** Creates a transformation; see `scflow/create_transformation` in `docs/actions.md`. */
+/** Creates a transformation; see `scflow/create_transformation` in the topic `scflow/actions`. */
 export const createTransformationAction: ScflowActionDefinition<CreateTransformationParams, TransformationSummary> = {
   id: "scflow/create_transformation",
   writes: ["transformation"],
@@ -143,7 +143,7 @@ export const createTransformationAction: ScflowActionDefinition<CreateTransforma
   },
 };
 
-/** Connects a held item to a transformation; see `scflow/connect_transformation_line` in `docs/actions.md`. */
+/** Connects a held item to a transformation; see `scflow/connect_transformation_line` in the topic `scflow/actions`. */
 export const connectTransformationLineAction: ScflowActionDefinition<
   ConnectTransformationLineParams,
   TransformationLineSummary
@@ -170,7 +170,7 @@ export const connectTransformationLineAction: ScflowActionDefinition<
   },
 };
 
-/** Defines a whole process in one step; see `scflow/define_process` in `docs/actions.md`. */
+/** Defines a whole process in one step; see `scflow/define_process` in the topic `scflow/actions`. */
 export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, DefinedProcess> = {
   id: "scflow/define_process",
   writes: ["transformation", "item_at_actor", "transformation_line"],
@@ -216,7 +216,7 @@ export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, De
   },
 };
 
-/** Deletes a transformation; see `scflow/delete_transformation` in `docs/actions.md`. */
+/** Deletes a transformation; see `scflow/delete_transformation` in the topic `scflow/actions`. */
 export const deleteTransformationAction: ScflowActionDefinition<DeleteTransformationParams, { id: string }> = {
   id: "scflow/delete_transformation",
   writes: ["transformation", "transformation_line"],
@@ -240,7 +240,7 @@ export const deleteTransformationAction: ScflowActionDefinition<DeleteTransforma
   },
 };
 
-/** Deletes a transformation type; see `scflow/delete_transformation_type` in `docs/actions.md`. */
+/** Deletes a transformation type; see `scflow/delete_transformation_type` in the topic `scflow/actions`. */
 export const deleteTransformationTypeAction: ScflowActionDefinition<DeleteTransformationTypeParams, { id: string }> = {
   id: "scflow/delete_transformation_type",
   writes: ["transformation", "transformation_line", "transformation_type"],

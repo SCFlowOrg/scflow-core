@@ -37,7 +37,7 @@ async function writeTags(context: ActionAccess, entity: Instance, tags: string[]
   return { id: entity.id, tags };
 }
 
-/** Appends tags to an entity; see `scflow/add_tags` in `docs/actions.md`. */
+/** Appends tags to an entity; see `scflow/add_tags` in the topic `scflow/actions`. */
 export const addTagsAction: ScflowActionDefinition<AddTagsParams, TaggedSummary> = {
   id: "scflow/add_tags",
   writes: ["annotable"],
@@ -63,7 +63,7 @@ export const addTagsAction: ScflowActionDefinition<AddTagsParams, TaggedSummary>
   },
 };
 
-/** Removes tags from an entity; see `scflow/remove_tags` in `docs/actions.md`. */
+/** Removes tags from an entity; see `scflow/remove_tags` in the topic `scflow/actions`. */
 export const removeTagsAction: ScflowActionDefinition<RemoveTagsParams, TaggedSummary> = {
   id: "scflow/remove_tags",
   writes: ["annotable"],
