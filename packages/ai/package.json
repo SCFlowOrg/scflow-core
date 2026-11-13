@@ -4,7 +4,8 @@
   "type": "module",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "description": "The neutral AI package: the types of a conversation with a language model, connections, an OpenAI-compatible transport over fetch, model profiles, normalized errors, usage reports and the agent loop. No dependency. See README.md.",
   "main": "dist/index.js",
@@ -28,5 +29,10 @@
     "@scfloworg/actions": "^0.1.0",
     "typescript": "^5.6.3",
     "vitest": "^4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SCFlowOrg/scflow-core.git",
+    "directory": "packages/ai"
   }
 }

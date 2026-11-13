@@ -4,7 +4,8 @@
   "type": "module",
   "license": "MIT",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "description": "The environment of SCFlow: the catalogue of modules with their code, formats given at creation, open datasets, the context of actions and the transaction of one action. See README.md.",
   "main": "dist/index.js",
@@ -42,5 +43,10 @@
     "js-yaml": "^4.1.0",
     "typescript": "^5.6.3",
     "vitest": "^4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SCFlowOrg/scflow-core.git",
+    "directory": "packages/environment"
   }
 }
