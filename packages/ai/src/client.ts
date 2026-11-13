@@ -4,7 +4,12 @@
  * streamed as server-sent events, read with the global `fetch` or the host's.
  */
 
-import { resolveConnection, type AiConnection, type AiConnectionKind } from "./connection.js";
+import {
+  requestHeaders,
+  resolveConnection,
+  type AiConnection,
+  type AiConnectionKind,
+} from "./connection.js";
 import { AiError, errorOfAnswer, readProviderError, type AiErrorKind } from "./errors.js";
 import { profileOf, type ModelProfile, type ProfileRule } from "./profiles.js";
 import type {
@@ -227,13 +232,8 @@ export function createAiClient(options: AiClientOptions): AiClient {
       const url = `${resolved.baseUrl}/chat/completions`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${credential}`,
-        ...resolved.headers,
+        ...requestHeaders(resolved, credential, url),
       };
-      // Anthropic accepts a call from a browser only with this header.
-      if (/(^|\.)anthropic\.com$/i.test(new URL(url).hostname)) {
-        headers["anthropic-dangerous-direct-browser-access"] = "true";
-      }
       const base: Record<string, unknown> = {
         model,
         stream: true,

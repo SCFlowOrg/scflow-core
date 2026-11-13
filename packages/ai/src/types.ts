@@ -105,7 +105,7 @@ export interface AiSignal {
 export type AiFetch = (
   url: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  init: { method: string; headers: Record<string, string>; body: string; signal?: any },
+  init: { method: string; headers: Record<string, string>; body?: string; signal?: any },
 ) => Promise<AiResponse>;
 
 export interface AiChatOptions {

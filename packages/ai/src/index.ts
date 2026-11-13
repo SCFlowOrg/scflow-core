@@ -24,6 +24,8 @@ export type {
   AiTransportKind,
   ByokConnection,
 } from "./connection.js";
+export { listModels, PROVIDERS, providerOf } from "./providers.js";
+export type { ListModelsOptions, ProviderPreset } from "./providers.js";
 export { AiError } from "./errors.js";
 export type { AiErrorKind } from "./errors.js";
 export { DEFAULT_PROFILES, profileOf } from "./profiles.js";

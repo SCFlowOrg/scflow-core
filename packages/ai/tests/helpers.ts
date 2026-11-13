@@ -25,6 +25,7 @@ export function failure(status: number, body: string): Response {
 
 export interface Recorded {
   url: string;
+  method: string;
   headers: Record<string, string>;
   body: Record<string, unknown>;
 }
@@ -36,11 +37,15 @@ export function fakeFetch(
   requests: Recorded[];
 } {
   const requests: Recorded[] = [];
-  const fetch = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
+  const fetch = (async (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string },
+  ) => {
     requests.push({
       url,
+      method: init.method,
       headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
+      body: (init.body === undefined ? {} : JSON.parse(init.body)) as Record<string, unknown>,
     });
     const answer = answers.shift();
     if (!answer) throw new Error("no more answers");

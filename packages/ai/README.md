@@ -31,6 +31,7 @@ const outcome = await runAgent({
 | --- | --- |
 | `AiMessage`, `AiToolCall`, `AiToolSpec`, `AiChatRequest`, `AiChunk` | The types of a conversation, with images, tools in the shape of MCP, and streamed chunks |
 | `AiConnection` | The settings of a connection: `byok` (own key) today |
+| `PROVIDERS`, `providerOf`, `listModels` | A catalogue of OpenAI-compatible providers (URL, suggested models, key page), and the models a connection serves |
 | `createAiClient` | The client of a connection: `chat` streams one answer, through the OpenAI-compatible transport |
 | `ModelProfile`, `DEFAULT_PROFILES`, `profileOf` | What a model accepts: `temperature`, the name of the length limit, images, tools |
 | `AiError` | The normalized error; callers branch on `.kind`, the message keeps the provider's |

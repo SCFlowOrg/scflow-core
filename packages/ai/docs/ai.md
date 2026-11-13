@@ -63,6 +63,34 @@ guessed from the host name. The one quirk of a host is a header: a call to
 `anthropic.com` carries the header Anthropic asks for before it accepts a
 call from a browser.
 
+## Providers
+
+`PROVIDERS` is a catalogue of the providers known to accept the
+`openai-compatible` transport, so a host offers a choice instead of asking for
+a URL. Each entry, a `ProviderPreset`, gives:
+
+| Field | Is |
+| --- | --- |
+| `id` | A short stable name: `openai`, `anthropic`, `mistral`, `gemini`, `groq`, `openrouter`, `ollama`, `lmstudio` |
+| `label` | The name shown to a user |
+| `baseUrl` | The `baseUrl` of a `byok` connection to it |
+| `models` | Model ids suggested for it, the first the default; empty when only the provider can tell |
+| `keyUrl` | The page where a user gets a key, when there is one |
+| `needsKey` | `false` for a local server, which reads no key: any non-empty text does |
+
+The URLs change seldom; the model ids change often, so `models` are
+suggestions a host shows and lets the user replace, never a list of what is
+allowed. `providerOf(baseUrl)` gives the entry whose `baseUrl` is the given
+one, compared without a trailing `/`, so a host shows the provider of a
+connection it stored. The catalogue holds no key.
+
+`listModels(connection, options)` asks a connection which models it serves:
+`GET {baseUrl}/models` with the same credential and headers as a chat, read
+as `{ data: [{ id }] }`. It gives the ids sorted, each once. It takes the
+`fetch` and the `signal` a chat takes, and fails with the same `AiError`
+kinds: `auth` with no key or a refused key, `network` with no answer,
+`provider` for an answer it cannot read.
+
 ## Model profiles
 
 A request says what the caller wants; the transport sends what the model

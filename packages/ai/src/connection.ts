@@ -34,6 +34,26 @@ export interface ResolvedConnection {
   transport: AiTransportKind;
 }
 
+/**
+ * The headers of a call to `url`: the bearer credential, then the headers of
+ * the connection. A call to `anthropic.com` also carries the header Anthropic
+ * asks for before it accepts a call from a browser.
+ */
+export function requestHeaders(
+  resolved: ResolvedConnection,
+  credential: string,
+  url: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${credential}`,
+    ...resolved.headers,
+  };
+  if (/(^|\.)anthropic\.com$/i.test(new URL(url).hostname)) {
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  return headers;
+}
+
 export function resolveConnection(connection: AiConnection): ResolvedConnection {
   return {
     baseUrl: connection.baseUrl.replace(/\/+$/, ""),
