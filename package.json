@@ -1,0 +1,22 @@
+{
+  "name": "scflow-core",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "clean:packages": "node scripts/clean-packages.mjs",
+    "build:packages": "node scripts/clean-packages.mjs && tsc -b tsconfig.packages.json && bun run --filter @scfloworg/module-scflow-core build",
+    "test:packages": "bun run --filter '@scfloworg/*' test"
+  },
+  "overrides": {
+    "rolldown": "1.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
+  }
+}
