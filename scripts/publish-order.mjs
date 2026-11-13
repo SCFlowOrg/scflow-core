@@ -6,7 +6,10 @@
 // `tag` is the npm dist-tag: `next` for a pre-release version (`0.2.0-next.1`),
 // `latest` otherwise.
 //
-// Usage: node scripts/publish-order.mjs
+// Usage: node scripts/publish-order.mjs [--only @scfloworg/ai,@scfloworg/core]
+//
+// `--only` keeps the named packages, still in dependency order; an unknown or
+// private name is an error, so a typo cannot publish nothing in silence.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -50,4 +53,13 @@ function visit(name) {
 
 for (const name of [...packages.keys()].sort()) visit(name);
 
-console.log(JSON.stringify(ordered, null, 2));
+const onlyIndex = process.argv.indexOf("--only");
+let selected = ordered;
+if (onlyIndex !== -1) {
+  const names = (process.argv[onlyIndex + 1] ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  const unknown = names.filter((name) => !packages.has(name));
+  if (unknown.length > 0) throw new Error(`Not a public package of this repository: ${unknown.join(", ")}`);
+  selected = ordered.filter((pkg) => names.includes(pkg.name));
+}
+
+console.log(JSON.stringify(selected, null, 2));
