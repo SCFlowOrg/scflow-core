@@ -11,6 +11,7 @@ export type {
   AiChunk,
   AiFetch,
   AiMessage,
+  AiModelTier,
   AiResponse,
   AiRetry,
   AiSignal,

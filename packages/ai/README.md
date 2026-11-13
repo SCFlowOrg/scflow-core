@@ -32,11 +32,12 @@ const outcome = await runAgent({
 | `AiMessage`, `AiToolCall`, `AiToolSpec`, `AiChatRequest`, `AiChunk` | The types of a conversation, with images, tools in the shape of MCP, and streamed chunks |
 | `AiConnection` | The settings of a connection: `byok` (own key) today |
 | `PROVIDERS`, `providerOf`, `listModels` | A catalogue of OpenAI-compatible providers (URL, suggested models, key page), and the models a connection serves |
+| `AiModelTier` | `fast` or `strong`: a connection names a model for each in `models`, a request asks for one with `tier` |
 | `createAiClient` | The client of a connection: `chat` streams one answer, through the OpenAI-compatible transport |
 | `ModelProfile`, `DEFAULT_PROFILES`, `profileOf` | What a model accepts: `temperature`, the name of the length limit, images, tools |
 | `AiError` | The normalized error; callers branch on `.kind`, the message keeps the provider's |
 | `AiUsage` | The report of one chat: model, connection kind, tokens, duration, outcome |
-| `runAgent` | The agent loop: tool calls approved once per turn, a turn limit, an abort signal |
+| `runAgent` | The agent loop: tool calls approved once per turn, a turn limit, an abort signal, and an optional escalation from the `fast` tier to `strong` when the fast model fails |
 
 The tests run against recorded streams and error bodies in `tests/fixtures`,
 with no network.

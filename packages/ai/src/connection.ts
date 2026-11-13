@@ -4,6 +4,8 @@
  * of `AiConnection`, so hosts write their code against the union.
  */
 
+import type { AiChatRequest, AiModelTier } from "./types.js";
+
 /** How to talk to a connection. */
 export type AiTransportKind = "openai-compatible";
 
@@ -13,8 +15,10 @@ export interface ByokConnection {
   /** Base URL of the API, e.g. `https://api.openai.com/v1`. */
   baseUrl: string;
   apiKey: string;
-  /** The model used when a request names none. */
+  /** The model used when a request names none, and for a tier `models` leaves out. */
   model: string;
+  /** The model of each tier (see `docs/ai.md#model-tiers`). */
+  models?: Readonly<Partial<Record<AiModelTier, string>>> | undefined;
   /** `openai-compatible` by default. */
   transport?: AiTransportKind | undefined;
   /** Headers added to every request, e.g. those an aggregator asks for. */
@@ -24,6 +28,18 @@ export interface ByokConnection {
 export type AiConnection = ByokConnection;
 
 export type AiConnectionKind = AiConnection["kind"];
+
+/** The model of a request: its `model`, else the model of its `tier`, else the model of the connection. */
+export function modelOf(
+  connection: AiConnection,
+  request: Pick<AiChatRequest, "model" | "tier">,
+): string {
+  return (
+    request.model ??
+    (request.tier !== undefined ? connection.models?.[request.tier] : undefined) ??
+    connection.model
+  );
+}
 
 /** What a transport needs of a connection, whatever its kind. */
 export interface ResolvedConnection {

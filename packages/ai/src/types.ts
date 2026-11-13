@@ -42,9 +42,14 @@ export interface AiToolSpec {
     | undefined;
 }
 
+/** The kind of model a request asks for (see `docs/ai.md#model-tiers`). */
+export type AiModelTier = "fast" | "strong";
+
 export interface AiChatRequest {
-  /** Overrides the model of the connection. */
+  /** Overrides the model of the connection, and of the tier. */
   model?: string | undefined;
+  /** The tier whose model the connection names; its `model` when it names none. */
+  tier?: AiModelTier | undefined;
   messages: AiMessage[];
   tools?: readonly AiToolSpec[] | undefined;
   temperature?: number | undefined;

@@ -5,6 +5,7 @@
  */
 
 import {
+  modelOf,
   requestHeaders,
   resolveConnection,
   type AiConnection,
@@ -214,7 +215,7 @@ export function createAiClient(options: AiClientOptions): AiClient {
     chatOptions: AiChatOptions = {},
   ): AsyncGenerator<AiChunk> {
     const { signal } = chatOptions;
-    const model = request.model ?? connection.model;
+    const model = modelOf(connection, request);
     const started = now();
     const usage: AiUsage = {
       model,
