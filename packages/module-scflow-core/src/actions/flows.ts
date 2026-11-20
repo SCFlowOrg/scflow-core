@@ -2,6 +2,7 @@ import { type Instance } from "./refs.js";
 import { cascadeParam, type ScflowActionDefinition, localizedTextParam, nullableLocalizedTextParam, refParam, tagsParam, unique } from "./params.js";
 import { createFlow, setFlowItem } from "../flows.js";
 import { localizedText } from "./text.js";
+import { checkModeServesFlows } from "./modes.js";
 
 /** Parameters of `scflow/create_flow`. */
 export interface CreateFlowParams {
@@ -9,6 +10,7 @@ export interface CreateFlowParams {
   destination: string;
   item?: string;
   bidirectional?: boolean;
+  mode?: string;
   display_name?: string | Record<string, string>;
   description?: string | Record<string, string>;
   tags?: string[];
@@ -35,7 +37,10 @@ export interface DeleteFlowParams {
   cascade?: boolean;
 }
 
-/** A flow as `scflow/create_flow` returns it; `display_name` is absent when the flow has no name, and `item` when it carries none. */
+/**
+ * A flow as `scflow/create_flow` returns it; `display_name` is absent when the flow has no name, `item` when it carries none
+ * and `mode` when it travels on none.
+ */
 export interface FlowSummary {
   id: string;
   display_name?: Record<string, string>;
@@ -43,6 +48,7 @@ export interface FlowSummary {
   destination: string;
   item?: string;
   bidirectional: boolean;
+  mode?: string;
 }
 
 /** Creates a flow between two actors; see `scflow/create_flow` in the topic `scflow/actions`. */
@@ -56,7 +62,8 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
     "Give display_name to name the flow; it has no name otherwise. " +
     "A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, " +
     "must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, " +
-    "and the actors that do not hold the item yet hold it afterwards.",
+    "and the actors that do not hold the item yet hold it afterwards. " +
+    "Give mode to make the flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a mode.",
   parameters: {
     type: "object",
     properties: {
@@ -67,6 +74,7 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
         type: "boolean",
         description: "Whether the flow carries items in both directions; false when omitted.",
       },
+      mode: refParam("mode", "Id or name of the mode the flow travels on; none when omitted."),
       display_name: localizedTextParam(
         "Display name of the flow, a string or a map of language to string; the flow has no name when omitted.",
       ),
@@ -87,10 +95,12 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
       destination: params.destination,
       ...(params.item === undefined ? {} : { item: params.item }),
       ...(bidirectional === undefined ? {} : { bidirectional }),
+      ...(params.mode === undefined ? {} : { mode: params.mode }),
       ...(display_name === undefined ? {} : { display_name }),
       ...(description === undefined ? {} : { description }),
       ...(tags === undefined ? {} : { tags }),
     });
+    if (params.mode !== undefined) await checkModeServesFlows(context, params.mode, [flow.id as string]);
     return summarizeFlow(flow as unknown as Instance);
   },
 };
@@ -127,7 +137,8 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
   description:
     "Changes the name, the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change; " +
     "null removes the name. " +
-    "The source and the destination of a flow never change: delete the flow and create it again.",
+    "The source and the destination of a flow never change: delete the flow and create it again. " +
+    "Making a flow bidirectional is refused when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.",
   parameters: {
     type: "object",
     properties: {
@@ -170,7 +181,9 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
       filters: { id: params.id },
       input: patch,
     });
-    return summarizeFlow(after[0] as unknown as Instance);
+    const flow = after[0] as unknown as Instance;
+    if (bidirectional === true && flow.mode) await checkModeServesFlows(context, flow.mode as string, [flow.id]);
+    return summarizeFlow(flow);
   },
 };
 
@@ -199,7 +212,8 @@ export const deleteFlowAction: ScflowActionDefinition<DeleteFlowParams, { id: st
 /** The actions of the lot flows and connectivity, in catalog order. */
 export const FLOW_ACTIONS = [createFlowAction, updateFlowAction, setFlowItemAction, deleteFlowAction] as const;
 
-function summarizeFlow(flow: Instance): FlowSummary {
+/** The summary of a flow that the flow actions return. */
+export function summarizeFlow(flow: Instance): FlowSummary {
   const summary: FlowSummary = {
     id: flow.id,
     source: flow.source as string,
@@ -208,6 +222,9 @@ function summarizeFlow(flow: Instance): FlowSummary {
   };
   if (flow.item) {
     summary.item = flow.item as string;
+  }
+  if (flow.mode) {
+    summary.mode = flow.mode as string;
   }
   const name = flow.display_name as Record<string, string> | undefined | null;
   if (name && Object.keys(name).length > 0) {

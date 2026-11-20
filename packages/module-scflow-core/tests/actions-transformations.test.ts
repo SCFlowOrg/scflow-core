@@ -27,7 +27,7 @@ async function world() {
 }
 
 describe("transformation actions", () => {
-  it("are declared with scoped unique ids, and the catalog has all 34 actions", () => {
+  it("are declared with scoped unique ids, and the catalog has all 45 actions", () => {
     const ids = ACTIONS.map((action) => action.id);
 
     for (const id of [
@@ -41,7 +41,7 @@ describe("transformation actions", () => {
       expect(ids).toContain(id);
     }
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toHaveLength(34);
+    expect(ids).toHaveLength(45);
   });
 });
 

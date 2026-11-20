@@ -279,13 +279,13 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
 /** Deletes an actor; see `scflow/delete_actor` in the topic `scflow/actions`. */
 export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: string }> = {
   id: "scflow/delete_actor",
-  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion"],
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "mode_stop"],
   destructive: true,
   title: "Delete an actor",
   description:
-    "Deletes an actor. It is refused while child actors, flows, held items, transformations or conversions reference the actor, unless cascade is true, " +
+    "Deletes an actor. It is refused while child actors, flows, held items, transformations, conversions or stops of modes reference the actor, unless cascade is true, " +
     "which deletes the child actors recursively, the flows incident to the actor and its descendants, the items they hold, " +
-    "their transformations and conversions and the notes of every deleted entity.",
+    "their transformations and conversions, the stops of modes at them, and the notes of every deleted entity.",
   parameters: {
     type: "object",
     properties: {
@@ -304,7 +304,7 @@ export const deleteActorAction: ScflowActionDefinition<DeleteActorParams, { id: 
 /** Deletes an actor type; see `scflow/delete_actor_type` in the topic `scflow/actions`. */
 export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams, { id: string }> = {
   id: "scflow/delete_actor_type",
-  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "actor_type"],
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "mode_stop", "actor_type"],
   destructive: true,
   title: "Delete an actor type",
   description:
@@ -328,7 +328,7 @@ export const deleteActorTypeAction: ScflowActionDefinition<DeleteActorTypeParams
 /** Deletes a scope; see `scflow/delete_scope` in the topic `scflow/actions`. */
 export const deleteScopeAction: ScflowActionDefinition<DeleteScopeParams, { id: string }> = {
   id: "scflow/delete_scope",
-  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "scope", "actor_type"],
+  writes: ["actor", "flow", "item_at_actor", "transformation", "transformation_line", "conversion", "mode_stop", "scope", "actor_type"],
   destructive: true,
   title: "Delete a scope",
   description:
