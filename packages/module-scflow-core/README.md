@@ -40,22 +40,27 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
 - `getCommonFlowDomains(mcl, locator, { source, destination })`: read-only; returns the flow
   domains common to the two actors. An interface uses it to accept or refuse a drag and
   drop: an empty list refuses it. It throws when an actor does not exist.
-- `createFlow(mcl, locator, { source, destination, item?, bidirectional?, display_name?, description?, tags? })`:
+- `createFlow(mcl, locator, { source, destination, item?, bidirectional?, mode?, display_name?, description?, tags? })`:
   creates one flow from `source` to `destination` and returns it. A flow has no domain, so
   it does not check the domains of the actors. With an `item`, the call creates the `item_at_actor`
   that the source and the destination lack. It throws when an actor or the item does not exist, or
   when a rule of the network is broken.
 - `setFlowItem(mcl, locator, { flow, item })`: sets the item of a flow, with the same holdings as
   `createFlow`. The item of a flow is `set_once`: another item is refused, and the same item changes nothing.
+- `leadTimeOnMode(stops, from, to, bidirectional)`: pure; the path of a mode from a stop of the
+  actor `from` to a stop of the actor `to`, with the sum of the lead times of its legs, or
+  `undefined` when the mode has none (`docs/spec/implementation.md`, Lead Time Of A Flow).
+  `addDurations(durations)` sums ISO 8601 durations component by component.
 - `ACTIONS`: the model actions of the package, each with its declaration and its body
   `run(params, context)`, for UIs, AI assistants and macros. An environment runs them through
   the module. The package exports
   `create_actor`, `update_actor`, `delete_actor`, `create_actor_type`, `create_scope`,
-  `create_flow`, `update_flow`, `set_flow_item`, `delete_flow`, `create_item_type`, `create_item`, `update_item`, `hold_item`,
+  `create_flow`, `update_flow`, `set_flow_item`, `delete_flow`, `create_mode_type`, `create_mode`, `update_mode`,
+  `add_mode_stop`, `update_mode_stop`, `remove_mode_stop`, `set_flow_mode`, `create_mode_from_flows`, `create_item_type`, `create_item`, `update_item`, `hold_item`,
   `release_held_item`, `create_transformation_type`,
   `create_transformation`, `connect_transformation_line`, `define_process`, `create_conversion`, `update_conversion`, `add_tags`, `remove_tags`, `add_note`, `update_note`, `remove_note`,
-  `find_notes` and `inspect_delete_impact` (these two are `kind: "read"` actions), and the cascading deletes `delete_actor_type`,
-  `delete_scope`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
+  `find_notes`, `inspect_mode` and `inspect_delete_impact` (these three are `kind: "read"` actions), and the cascading deletes `delete_actor_type`,
+  `delete_scope`, `delete_mode`, `delete_mode_type`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
   catalogue and the parameters are generated topics, `scflow/actions` and `scflow/concepts`
   (`docs/reference/`, written by `scripts/build-docs.mjs` from `module.yaml` and committed), and the conventions
   (ID or name references, localized text) are in [`docs/action-conventions.md`](docs/action-conventions.md).
@@ -70,6 +75,21 @@ coordinates, and an empty `country_code` or `un_locode` is unset. `latitude` and
 are bounded to -90..90 and -180..180, `country_code` is two uppercase letters and `un_locode`
 five characters, such as `FRLEH`. The actions `create_actor` and `update_actor` take a `location`,
 given by id or display name; the package ships no action that creates or changes a location.
+
+## Modes
+
+A `mode` says how flows travel: a shuttle, a weekly round trip, an EDI link, a payment term.
+`mode` is the instance and `mode_type` its category, such as road, sea, EDI or payment, with
+one flow domain, the domain of the items its flows carry. A mode owns ordered `mode_stop`s at
+actors, each with the `lead_time` from the previous stop, an ISO 8601 duration or empty when
+unknown; an actor may have several stops, as a round trip A, B, C, A does. A flow travels on at
+most one mode, through its optional `mode`, and creating a flow never creates one. The rules
+`mode_stops_hold_flow_ends` and `mode_item_domain` are declared on `flow`; `mode_serves_flow`,
+a stop of the source before a stop of the destination unless the mode is bidirectional, compares
+positions, which a declared rule cannot, so the actions that can break it check it. A stop that
+ends no flow, such as a transit hub or a truck depot where a round trip starts and ends, is a
+normal case, listed in the `stops_without_flow` of `scflow/inspect_mode`, which also derives the
+lead time of each flow.
 
 ## Actions
 

@@ -4,6 +4,7 @@ import { CONVERSION_ACTIONS } from "./conversions.js";
 import { FLOW_ACTIONS } from "./flows.js";
 import { INSPECT_ACTIONS } from "./inspect.js";
 import { ITEM_ACTIONS } from "./items.js";
+import { MODE_ACTIONS } from "./modes.js";
 import { NOTE_ACTIONS } from "./notes.js";
 import { TAG_ACTIONS } from "./tags.js";
 import { TRANSFORMATION_ACTIONS } from "./transformations.js";
@@ -21,6 +22,7 @@ export type ScflowAction = ScflowActionDefinition<any, any>;
 export const ACTIONS: readonly ScflowAction[] = [
   ...ACTOR_ACTIONS,
   ...FLOW_ACTIONS,
+  ...MODE_ACTIONS,
   ...ITEM_ACTIONS,
   ...TRANSFORMATION_ACTIONS,
   ...CONVERSION_ACTIONS,
@@ -72,6 +74,24 @@ export type {
   ReleaseHeldItemParams,
   UpdateItemParams,
 } from "./items.js";
+export type {
+  AddModeStopParams,
+  CreateModeFromFlowsParams,
+  CreateModeParams,
+  CreateModeTypeParams,
+  DeleteModeParams,
+  DeleteModeTypeParams,
+  InspectModeParams,
+  InspectModeResult,
+  ModeFlowLeadTime,
+  ModeStopSummary,
+  ModeSummary,
+  ModeTypeSummary,
+  RemoveModeStopParams,
+  SetFlowModeParams,
+  UpdateModeParams,
+  UpdateModeStopParams,
+} from "./modes.js";
 export type {
   AddNoteParams,
   FindNotesParams,

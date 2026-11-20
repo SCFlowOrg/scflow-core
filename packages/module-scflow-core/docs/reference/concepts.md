@@ -55,6 +55,7 @@ Extends `annotable`.
 - `destination`: → actor (required, inverse `incoming_flows`)
 - `item`: → item (inverse `carried_on`)
 - `bidirectional`: boolean
+- `mode`: → mode (inverse `flows`)
 
 ### item
 
@@ -116,6 +117,40 @@ Extends `annotable`.
 - `actor`: → actor (owner, inverse `conversions`)
 - `from_item`: → item (required)
 - `to_item`: → item (required)
+
+### mode_type
+
+A category of mode, such as road, sea, air, EDI or payment, with the one flow domain it belongs to.
+
+Extends `annotable`.
+
+- `display_name`: localized_string
+- `description`: localized_markdown
+- `domain`: physical | information | financial | service
+
+### mode
+
+How flows travel, the instance of a mode type, such as a shuttle or a round trip, with its ordered stops.
+
+Extends `annotable`.
+
+- `display_name`: localized_string
+- `description`: localized_markdown
+- `type`: → mode_type (required, inverse `modes`)
+- `schedule`: localized_string
+- `bidirectional`: boolean
+
+### mode_stop
+
+One ordered stop of a mode at an actor, with the lead time from the previous stop.
+
+Extends `annotable`.
+
+- `mode`: → mode (owner, inverse `stops`)
+- `actor`: → actor (required, inverse `mode_stops`)
+- `sequence`: integer
+- `lead_time`: lead_time
+- `reverse_lead_time`: lead_time
 
 ### scope
 

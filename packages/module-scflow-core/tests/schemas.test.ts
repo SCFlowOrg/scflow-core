@@ -16,6 +16,7 @@ describe("SCFLOW schemas", () => {
       "longitude",
       "country_code",
       "un_locode",
+      "lead_time",
     ]);
     expect(SCHEMAS.schemas.map((s) => s.name)).toEqual([
       "annotable",
@@ -30,6 +31,9 @@ describe("SCFLOW schemas", () => {
       "transformation",
       "transformation_line",
       "conversion",
+      "mode_type",
+      "mode",
+      "mode_stop",
       "scope",
       "location",
     ]);

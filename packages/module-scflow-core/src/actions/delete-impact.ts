@@ -15,6 +15,8 @@ export interface Snapshot {
   /** The `transformation_line` instances. */
   lines: Instance[];
   conversions: Instance[];
+  /** The `mode_stop` instances. */
+  stops: Instance[];
   notes: Instance[];
 }
 
@@ -27,6 +29,8 @@ export interface DeletionSet {
   transformations: Set<string>;
   lines: Set<string>;
   conversions: Set<string>;
+  /** The stops of modes at a deleted actor. */
+  stops: Set<string>;
 }
 
 /** Reads the instances that a deletion can reach. */
@@ -43,6 +47,7 @@ export async function loadSnapshot(context: ActionAccess): Promise<Snapshot> {
     transformations: await all("scflow.transformation"),
     lines: await all("scflow.transformation_line"),
     conversions: await all("scflow.conversion"),
+    stops: await all("scflow.mode_stop"),
     notes: await all("scflow.note"),
   };
 }
@@ -57,6 +62,7 @@ export function newDeletionSet(): DeletionSet {
     transformations: new Set(),
     lines: new Set(),
     conversions: new Set(),
+    stops: new Set(),
   };
 }
 
@@ -83,7 +89,8 @@ export function addActorTrees(snapshot: Snapshot, set: DeletionSet, actorIds: It
 /**
  * Adds to the set everything that depends on what it already holds: the flows of its actors and
  * the flows that carry its items, what its actors and items are held as, the transformations of its
- * actors, the lines of its transformations and held items, and the conversions of its actors and items.
+ * actors, the lines of its transformations and held items, the conversions of its actors and items,
+ * and the stops of modes at its actors.
  *
  * One pass is enough: each kind depends only on the kinds computed before it.
  */
@@ -121,6 +128,11 @@ export function closeDeletionSet(snapshot: Snapshot, set: DeletionSet): void {
       set.conversions.add(conversion.id);
     }
   }
+  for (const stop of snapshot.stops) {
+    if (set.actors.has(stop.actor as string)) {
+      set.stops.add(stop.id);
+    }
+  }
 }
 
 /** The ids of every instance of the set, whatever its kind. */
@@ -133,6 +145,7 @@ export function allIds(set: DeletionSet): Set<string> {
     ...set.transformations,
     ...set.lines,
     ...set.conversions,
+    ...set.stops,
   ]);
 }
 

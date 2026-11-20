@@ -49,9 +49,9 @@ scflow/update_actor {"id":"<actor>","display_name":"text","description":"text","
 
 ### `scflow/delete_actor`
 
-Delete an actor. Deletes an actor. It is refused while child actors, flows, held items, transformations or conversions reference the actor, unless cascade is true, which deletes the child actors recursively, the flows incident to the actor and its descendants, the items they hold, their transformations and conversions and the notes of every deleted entity.
+Delete an actor. Deletes an actor. It is refused while child actors, flows, held items, transformations, conversions or stops of modes reference the actor, unless cascade is true, which deletes the child actors recursively, the flows incident to the actor and its descendants, the items they hold, their transformations and conversions, the stops of modes at them, and the notes of every deleted entity.
 
-Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`.
+Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`.
 
 Parameters:
 - `id` (id or name of actor, required): Id or name of the actor to delete.
@@ -68,7 +68,7 @@ scflow/delete_actor {"id":"<actor>","cascade":true}
 
 Delete an actor type. Deletes an actor type. It is refused while actors have this type, unless cascade is true, which deletes those actors first, each with the cascade of scflow/delete_actor.
 
-Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `actor_type`.
+Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`, `actor_type`.
 
 Parameters:
 - `id` (id or name of actor_type, required): Id or name of the actor type to delete.
@@ -85,7 +85,7 @@ scflow/delete_actor_type {"id":"<actor_type>","cascade":true}
 
 Delete a scope. Deletes a scope. It is refused while actors are assigned to it, unless cascade is true, which deletes those actors first, each with the cascade of scflow/delete_actor. The default scope of an actor type that names the scope is cleared.
 
-Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `scope`, `actor_type`.
+Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`, `scope`, `actor_type`.
 
 Parameters:
 - `id` (id or name of scope, required): Id or name of the scope to delete.
@@ -138,7 +138,7 @@ scflow/create_scope {"display_name":"text","description":"text","tags":["text"]}
 
 ### `scflow/create_flow`
 
-Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. Give display_name to name the flow; it has no name otherwise. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards.
+Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. Give display_name to name the flow; it has no name otherwise. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a mode.
 
 Flags: writes `flow`, `item_at_actor`.
 
@@ -147,6 +147,7 @@ Parameters:
 - `destination` (id or name of actor, required): Id or name of the actor the flow arrives at.
 - `item` (id or name of item): Id or name of the item the flow carries; required between an actor and its child.
 - `bidirectional` (boolean): Whether the flow carries items in both directions; false when omitted.
+- `mode` (id or name of mode): Id or name of the mode the flow travels on; none when omitted.
 - `display_name` (text or map language → text): Display name of the flow, a string or a map of language to string; the flow has no name when omitted.
 - `description` (text or map language → text): Markdown description of the flow.
 - `tags` (list of string): Tags of the flow.
@@ -155,12 +156,12 @@ Examples:
 
 ```
 scflow/create_flow {"source":"<actor>","destination":"<actor>"}
-scflow/create_flow {"source":"<actor>","destination":"<actor>","item":"<item>","bidirectional":true,"display_name":"text","description":"text","tags":["text"]}
+scflow/create_flow {"source":"<actor>","destination":"<actor>","item":"<item>","bidirectional":true,"mode":"<mode>","display_name":"text","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_flow`
 
-Update a flow. Changes the name, the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change; null removes the name. The source and the destination of a flow never change: delete the flow and create it again.
+Update a flow. Changes the name, the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change; null removes the name. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
 
 Flags: writes `flow`.
 
@@ -209,6 +210,215 @@ Examples:
 ```
 scflow/delete_flow {"id":"<flow>"}
 scflow/delete_flow {"id":"<flow>","cascade":true}
+```
+
+### `scflow/create_mode_type`
+
+Create a mode type. Creates a mode type, the category of a mode such as road, sea, air, rail, EDI or payment, bound to one flow domain (physical, information, financial or service), and returns it. A mode type is the category; a mode is the instance.
+
+Flags: writes `mode_type`.
+
+Parameters:
+- `display_name` (text or map language → text, required): Display name of the mode type, a string or a map of language to string.
+- `domain` (physical | information | financial | service, required): The flow domain of the modes of this type.
+- `description` (text or map language → text): Markdown description of the mode type.
+- `tags` (list of string): Tags of the mode type.
+
+Examples:
+
+```
+scflow/create_mode_type {"display_name":"text","domain":"physical"}
+scflow/create_mode_type {"display_name":"text","domain":"physical","description":"text","tags":["text"]}
+```
+
+### `scflow/delete_mode_type`
+
+Delete a mode type. Deletes a mode type. It is refused while modes have this type, unless cascade is true, which deletes those modes first, each with the cascade of scflow/delete_mode: their stops are deleted and their flows are kept, on no mode.
+
+Flags: destructive; writes `mode_type`, `mode`, `mode_stop`, `flow`.
+
+Parameters:
+- `id` (id or name of mode_type, required): Id or name of the mode type to delete.
+- `cascade` (boolean): When true, also deletes the modes of this type with their stops and notes; their flows are kept.
+
+Examples:
+
+```
+scflow/delete_mode_type {"id":"<mode_type>"}
+scflow/delete_mode_type {"id":"<mode_type>","cascade":true}
+```
+
+### `scflow/create_mode`
+
+Create a mode. Creates a mode, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI link), of a given mode type, with no stop and no flow yet, and returns it. Add its stops with scflow/add_mode_stop and assign flows with scflow/set_flow_mode. Set bidirectional to true when the stops are served in both orders; it is false otherwise. The schedule is a free text.
+
+Flags: writes `mode`.
+
+Parameters:
+- `display_name` (text or map language → text, required): Display name of the mode, a string or a map of language to string.
+- `type` (id or name of mode_type, required): Id or name of the mode type.
+- `description` (text or map language → text): Markdown description of the mode.
+- `schedule` (text or map language → text): Schedule of the mode as a free text, such as every Monday.
+- `bidirectional` (boolean): Whether the stops are served in both orders; false when omitted.
+- `tags` (list of string): Tags of the mode.
+
+Examples:
+
+```
+scflow/create_mode {"display_name":"text","type":"<mode_type>"}
+scflow/create_mode {"display_name":"text","type":"<mode_type>","description":"text","schedule":"text","bidirectional":true,"tags":["text"]}
+```
+
+### `scflow/update_mode`
+
+Update a mode. Changes the name, description, type, schedule, bidirectional flag or tags of a mode and returns it. Only the given properties change; null clears the description or the schedule. A change of type whose domain differs from the items of the flows of the mode is refused, and so is making a mode one-way while a flow needs it in the other direction.
+
+Flags: writes `mode`.
+
+Parameters:
+- `id` (id or name of mode, required): Id or name of the mode to update.
+- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept.
+- `description` (text or map language → text): New Markdown description; same language rule as name. null removes the description.
+- `type` (id or name of mode_type): Id or name of the new mode type.
+- `schedule` (text or map language → text): New schedule; same language rule as name. null removes the schedule.
+- `bidirectional` (boolean): Whether the stops are served in both orders.
+- `tags` (list of string): New tags; they replace the current ones.
+
+Examples:
+
+```
+scflow/update_mode {"id":"<mode>"}
+scflow/update_mode {"id":"<mode>","display_name":"text","description":"text","type":"<mode_type>","schedule":"text","bidirectional":true,"tags":["text"]}
+```
+
+### `scflow/delete_mode`
+
+Delete a mode. Deletes a mode with its stops and notes, and returns its id. It is refused while flows travel on the mode, unless cascade is true, which keeps those flows and clears their mode.
+
+Flags: destructive; writes `mode`, `mode_stop`, `flow`.
+
+Parameters:
+- `id` (id or name of mode, required): Id or name of the mode to delete.
+- `cascade` (boolean): When true, also clears the mode of the flows that travel on it; the flows are kept.
+
+Examples:
+
+```
+scflow/delete_mode {"id":"<mode>"}
+scflow/delete_mode {"id":"<mode>","cascade":true}
+```
+
+### `scflow/add_mode_stop`
+
+Add a stop to a mode. Adds a stop at an actor to a mode, at the position given by sequence (1 for the first stop), or after the last stop when sequence is omitted, and returns it. The stops from that position on move one place down. An actor may have several stops on one mode, such as the start and the end of a round trip. lead_time is the ISO 8601 duration of the leg from the previous stop, such as P2D or PT4H30M, and is ignored on the first stop; reverse_lead_time is the duration of the same leg backwards on a bidirectional mode, equal to lead_time when omitted.
+
+Flags: writes `mode_stop`.
+
+Parameters:
+- `mode` (id or name of mode, required): Id or name of the mode.
+- `actor` (id or name of actor, required): Id or name of the actor of the stop.
+- `sequence` (integer): Position of the stop, from 1; after the last stop when omitted.
+- `lead_time` (string): ISO 8601 duration of the leg from the previous stop to this one.
+- `reverse_lead_time` (string): ISO 8601 duration of the leg from this stop back to the previous one; lead_time when omitted.
+- `tags` (list of string): Tags of the stop.
+
+Examples:
+
+```
+scflow/add_mode_stop {"mode":"<mode>","actor":"<actor>"}
+scflow/add_mode_stop {"mode":"<mode>","actor":"<actor>","sequence":1,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
+```
+
+### `scflow/update_mode_stop`
+
+Update a stop of a mode. Moves a stop of a mode to another position, given by sequence, or changes its lead times or tags, and returns it. The other stops keep their order. null clears a lead time. A move after which the mode no longer serves one of its flows, a stop of the source before a stop of the destination, is refused.
+
+Flags: writes `mode_stop`.
+
+Parameters:
+- `id` (id or name of mode_stop, required): Id of the stop.
+- `sequence` (integer): New position of the stop, from 1, at most the number of stops.
+- `lead_time` (string,null): New ISO 8601 duration of the leg from the previous stop; null clears it.
+- `reverse_lead_time` (string,null): New ISO 8601 duration of the leg backwards; null clears it.
+- `tags` (list of string): New tags; they replace the current ones.
+
+Examples:
+
+```
+scflow/update_mode_stop {"id":"<mode_stop>"}
+scflow/update_mode_stop {"id":"<mode_stop>","sequence":1,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
+```
+
+### `scflow/remove_mode_stop`
+
+Remove a stop from a mode. Removes a stop from its mode and returns its id; the following stops move one place up. It is refused when a flow of the mode needs the stop: its source or destination would no longer be a stop, or no stop of its source would come before a stop of its destination. The cascade parameter is accepted for consistency with the other delete actions and changes nothing.
+
+Flags: destructive; writes `mode_stop`.
+
+Parameters:
+- `id` (id or name of mode_stop, required): Id of the stop to remove.
+- `cascade` (boolean): Has no effect: nothing depends on a stop but its notes, which are always deleted with it.
+
+Examples:
+
+```
+scflow/remove_mode_stop {"id":"<mode_stop>"}
+scflow/remove_mode_stop {"id":"<mode_stop>","cascade":true}
+```
+
+### `scflow/set_flow_mode`
+
+Set the mode of a flow. Makes a flow travel on a mode, or on none with null, and returns the flow. A flow travels on at most one mode, so this replaces its mode. The source and the destination of the flow must be stops of the mode, a stop of the source before a stop of the destination unless the mode is bidirectional; a bidirectional flow also needs the other direction. The item of the flow must be in the domain of the mode type.
+
+Flags: writes `flow`.
+
+Parameters:
+- `id` (id or name of flow, required): Id of the flow.
+- `mode` (id or name of mode, required): Id or name of the mode, or null to take the flow off its mode.
+
+Examples:
+
+```
+scflow/set_flow_mode {"id":"<flow>","mode":"<mode>"}
+```
+
+### `scflow/create_mode_from_flows`
+
+Create a mode from flows. Creates a mode of a given type for flows that share their source and their destination and travel on no mode yet, with two stops, the source then the destination, makes the flows travel on it and returns it. The items of the flows must be in the domain of the mode type. lead_time is the ISO 8601 duration from the source to the destination. The mode is bidirectional when bidirectional is true, or when it is omitted and one of the flows is bidirectional.
+
+Flags: writes `mode`, `mode_stop`, `flow`.
+
+Parameters:
+- `flows` (list of id or name of flow, required): Ids of the flows, at least one.
+- `type` (id or name of mode_type, required): Id or name of the mode type.
+- `display_name` (text or map language → text, required): Display name of the mode, a string or a map of language to string.
+- `description` (text or map language → text): Markdown description of the mode.
+- `schedule` (text or map language → text): Schedule of the mode as a free text, such as every Monday.
+- `bidirectional` (boolean): Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional.
+- `lead_time` (string): ISO 8601 duration from the source to the destination.
+- `reverse_lead_time` (string): ISO 8601 duration from the destination back to the source; lead_time when omitted.
+- `tags` (list of string): Tags of the mode.
+
+Examples:
+
+```
+scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","display_name":"text"}
+scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","display_name":"text","description":"text","schedule":"text","bidirectional":true,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
+```
+
+### `scflow/inspect_mode`
+
+Inspect a mode. Describes a mode: its type and domain, its stops in order with their lead times, and each of its flows with its lead time, the sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow of the mode, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.
+
+Flags: read-only.
+
+Parameters:
+- `id` (id or name of mode, required): Id or name of the mode.
+
+Examples:
+
+```
+scflow/inspect_mode {"id":"<mode>"}
 ```
 
 ### `scflow/create_item_type`
@@ -603,7 +813,7 @@ scflow/remove_tags {"entity":"<annotable>","tags":["text"]}
 
 ### `scflow/inspect_delete_impact`
 
-Inspect the impact of a delete. Lists what deleting the given entities with cascade true would remove besides the entities themselves: actors, flows, items, held items, transformations, transformation lines, conversions and notes, with counts. An entity reached from several targets is counted once. It changes nothing.
+Inspect the impact of a delete. Lists what deleting the given entities with cascade true would remove besides the entities themselves: actors, flows, items, held items, transformations, transformation lines, conversions, stops of modes and notes, with counts. An entity reached from several targets is counted once. It changes nothing.
 
 Flags: read-only.
 

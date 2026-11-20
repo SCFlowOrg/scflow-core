@@ -4,8 +4,26 @@ export { createActor } from "./actors.js";
 export type { CreateActorInput } from "./actors.js";
 export { createFlow, getCommonFlowDomains, setFlowItem } from "./flows.js";
 export type { CreateFlowInput, FlowEndsInput, SetFlowItemInput } from "./flows.js";
+export { addDurations, DURATION_PATTERN, leadTimeOnMode } from "./modes.js";
+export type { ModePath, StopInput } from "./modes.js";
 export { ACTIONS } from "./actions/index.js";
 export type {
+  AddModeStopParams,
+  CreateModeFromFlowsParams,
+  CreateModeParams,
+  CreateModeTypeParams,
+  DeleteModeParams,
+  DeleteModeTypeParams,
+  InspectModeParams,
+  InspectModeResult,
+  ModeFlowLeadTime,
+  ModeStopSummary,
+  ModeSummary,
+  ModeTypeSummary,
+  RemoveModeStopParams,
+  SetFlowModeParams,
+  UpdateModeParams,
+  UpdateModeStopParams,
   ActorSummary,
   ActorTypeSummary,
   AddNoteParams,

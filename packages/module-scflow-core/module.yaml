@@ -7,7 +7,7 @@
 name: scflow:core
 namespace: scflow
 # always the version of package.json
-version: 1.2.0
+version: 1.3.0
 mcl: ^1.0
 title: Supply chain flow
 
@@ -40,6 +40,10 @@ scalar_types:
   - name: un_locode
     extends: string
     pattern: ^([A-Z]{2}[A-Z2-9]{3})?$
+
+  - name: lead_time
+    extends: string
+    pattern: '^(P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?)?$'
 
 schemas:
   - name: annotable
@@ -172,6 +176,16 @@ schemas:
         when: { item: { exists: true } }
         each: ["${this.source}", "${this.destination}"]
         exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
+      - name: mode_stops_hold_flow_ends
+        when: { mode: { exists: true } }
+        each: ["${this.source}", "${this.destination}"]
+        exists: { schema: mode_stop, with: { mode: "${this.mode}", actor: "${each}" } }
+      - name: mode_item_domain
+        when:
+          and:
+            - mode: { exists: true }
+            - item: { exists: true }
+        require: { item.type.domain: { eq: "${this.mode.type.domain}" } }
     properties:
       - name: display_name
         type: localized_string
@@ -198,6 +212,11 @@ schemas:
         inverse_is_array: true
       - name: bidirectional
         type: boolean
+      - name: mode
+        type: mode
+        updated_by: scflow/set_flow_mode
+        inverse_name: flows
+        inverse_is_array: true
 
   - name: item
     description: A family of things the network moves and holds
@@ -347,6 +366,77 @@ schemas:
         mandatory: true
         constant: true
 
+  - name: mode_type
+    description: A category of mode, such as road, sea, air, EDI or payment, with the one flow domain it belongs to
+    crud:
+      create: scflow/create_mode_type
+      delete: scflow/delete_mode_type
+    extends: annotable
+    is_root: true
+    has_description: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: domain
+        type: flow_domain
+
+  - name: mode
+    description: How flows travel, the instance of a mode type, such as a shuttle or a round trip, with its ordered stops
+    crud:
+      create: scflow/create_mode
+      update: scflow/update_mode
+      delete: scflow/delete_mode
+    extends: annotable
+    is_root: true
+    properties:
+      - name: display_name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: type
+        type: mode_type
+        on_delete: confirm
+        mandatory: true
+        inverse_name: modes
+        inverse_is_array: true
+      - name: schedule
+        type: localized_string
+      - name: bidirectional
+        type: boolean
+
+  - name: mode_stop
+    description: One ordered stop of a mode at an actor, with the lead time from the previous stop
+    crud:
+      create: scflow/add_mode_stop
+      update: scflow/update_mode_stop
+      delete: scflow/remove_mode_stop
+    extends: annotable
+    unique:
+      - name: mode_stop_sequence_unique
+        properties: [mode, sequence]
+    properties:
+      - name: mode
+        type: mode
+        owner: true
+        inverse_name: stops
+        inverse_is_array: true
+      - name: actor
+        type: actor
+        on_delete: confirm
+        mandatory: true
+        inverse_name: mode_stops
+        inverse_is_array: true
+      - name: sequence
+        type: integer
+      - name: lead_time
+        type: lead_time
+      - name: reverse_lead_time
+        type: lead_time
+
   - name: scope
     description: A flat grouping of actors, a swim lane of the graph
     crud:
@@ -440,10 +530,11 @@ actions:
   - id: scflow/delete_actor
     title: Delete an actor
     description: >-
-      Deletes an actor. It is refused while child actors, flows, held items, transformations or
-      conversions reference the actor, unless cascade is true, which deletes the child actors
-      recursively, the flows incident to the actor and its descendants, the items they hold, their
-      transformations and conversions and the notes of every deleted entity.
+      Deletes an actor. It is refused while child actors, flows, held items, transformations,
+      conversions or stops of modes reference the actor, unless cascade is true, which deletes the
+      child actors recursively, the flows incident to the actor and its descendants, the items they
+      hold, their transformations and conversions, the stops of modes at them, and the notes of every
+      deleted entity.
     kind: action
     destructive: true
     writes:
@@ -453,6 +544,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
+      - mode_stop
     parameters:
       type: object
       properties:
@@ -464,8 +556,8 @@ actions:
   - id: scflow/delete_actor_type
     title: Delete an actor type
     description: >-
-      Deletes an actor type. It is refused while actors have this type, unless cascade is true,
-      which deletes those actors first, each with the cascade of scflow/delete_actor.
+      Deletes an actor type. It is refused while actors have this type, unless cascade is true, which
+      deletes those actors first, each with the cascade of scflow/delete_actor.
     kind: action
     destructive: true
     writes:
@@ -475,6 +567,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
+      - mode_stop
       - actor_type
     parameters:
       type: object
@@ -499,6 +592,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
+      - mode_stop
       - scope
       - actor_type
     parameters:
@@ -550,10 +644,12 @@ actions:
     description: >-
       Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to
       true so that the flow carries items in both directions; it is one-way otherwise. Give
-      display_name to name the flow; it has no name otherwise. A flow carries at most one item,
-      given by item. A flow between an actor and one of its child actors, in either direction, must
-      carry an item, otherwise the action fails. The domain of the item must be among the domains of
-      both actors, and the actors that do not hold the item yet hold it afterwards.
+      display_name to name the flow; it has no name otherwise. A flow carries at most one item, given
+      by item. A flow between an actor and one of its child actors, in either direction, must carry an
+      item, otherwise the action fails. The domain of the item must be among the domains of both
+      actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the
+      flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a
+      mode.
     kind: action
     writes:
       - flow
@@ -565,6 +661,7 @@ actions:
         destination: {type: string, ref: actor, description: Id or name of the actor the flow arrives at.}
         item: {type: string, ref: item, description: Id or name of the item the flow carries; required between an actor and its child.}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions; false when omitted.}
+        mode: {type: string, ref: mode, description: Id or name of the mode the flow travels on; none when omitted.}
         display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the flow, a string or a map of language to string; the flow has no name when omitted.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the flow.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the flow.}
@@ -575,9 +672,10 @@ actions:
   - id: scflow/update_flow
     title: Update a flow
     description: >-
-      Changes the name, the bidirectional flag, the description or the tags of a flow and returns
-      it. Only the given properties change; null removes the name. The source and the destination of
-      a flow never change: delete the flow and create it again.
+      Changes the name, the bidirectional flag, the description or the tags of a flow and returns it.
+      Only the given properties change; null removes the name. The source and the destination of a
+      flow never change: delete the flow and create it again. Making a flow bidirectional is refused
+      when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
     kind: action
     writes:
       - flow
@@ -628,6 +726,247 @@ actions:
       properties:
         id: {type: string, ref: flow, description: Id of the flow to delete.}
         cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a flow but its notes, which are always deleted with it.'}
+      required:
+        - id
+      additionalProperties: false
+  - id: scflow/create_mode_type
+    title: Create a mode type
+    description: >-
+      Creates a mode type, the category of a mode such as road, sea, air, rail, EDI or payment, bound
+      to one flow domain (physical, information, financial or service), and returns it. A mode type is
+      the category; a mode is the instance.
+    kind: action
+    writes:
+      - mode_type
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode type, a string or a map of language to string.'}
+        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the modes of this type.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode type.}
+      required:
+        - display_name
+        - domain
+      additionalProperties: false
+  - id: scflow/delete_mode_type
+    title: Delete a mode type
+    description: >-
+      Deletes a mode type. It is refused while modes have this type, unless cascade is true, which
+      deletes those modes first, each with the cascade of scflow/delete_mode: their stops are deleted
+      and their flows are kept, on no mode.
+    kind: action
+    destructive: true
+    writes:
+      - mode_type
+      - mode
+      - mode_stop
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode_type, description: Id or name of the mode type to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the modes of this type with their stops and notes; their flows are kept.'}
+      required:
+        - id
+      additionalProperties: false
+  - id: scflow/create_mode
+    title: Create a mode
+    description: >-
+      Creates a mode, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI
+      link), of a given mode type, with no stop and no flow yet, and returns it. Add its stops with
+      scflow/add_mode_stop and assign flows with scflow/set_flow_mode. Set bidirectional to true when
+      the stops are served in both orders; it is false otherwise. The schedule is a free text.
+    kind: action
+    writes:
+      - mode
+    parameters:
+      type: object
+      properties:
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode, a string or a map of language to string.'}
+        type: {type: string, ref: mode_type, description: Id or name of the mode type.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
+        bidirectional: {type: boolean, description: Whether the stops are served in both orders; false when omitted.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
+      required:
+        - display_name
+        - type
+      additionalProperties: false
+  - id: scflow/update_mode
+    title: Update a mode
+    description: >-
+      Changes the name, description, type, schedule, bidirectional flag or tags of a mode and returns
+      it. Only the given properties change; null clears the description or the schedule. A change of
+      type whose domain differs from the items of the flows of the mode is refused, and so is making a
+      mode one-way while a flow needs it in the other direction.
+    kind: action
+    writes:
+      - mode
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode, description: Id or name of the mode to update.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New Markdown description; same language rule as name. null removes the description.}
+        type: {type: string, ref: mode_type, description: Id or name of the new mode type.}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New schedule; same language rule as name. null removes the schedule.}
+        bidirectional: {type: boolean, description: Whether the stops are served in both orders.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
+  - id: scflow/delete_mode
+    title: Delete a mode
+    description: >-
+      Deletes a mode with its stops and notes, and returns its id. It is refused while flows travel on
+      the mode, unless cascade is true, which keeps those flows and clears their mode.
+    kind: action
+    destructive: true
+    writes:
+      - mode
+      - mode_stop
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode, description: Id or name of the mode to delete.}
+        cascade: {type: boolean, default: false, description: 'When true, also clears the mode of the flows that travel on it; the flows are kept.'}
+      required:
+        - id
+      additionalProperties: false
+  - id: scflow/add_mode_stop
+    title: Add a stop to a mode
+    description: >-
+      Adds a stop at an actor to a mode, at the position given by sequence (1 for the first stop), or
+      after the last stop when sequence is omitted, and returns it. The stops from that position on
+      move one place down. An actor may have several stops on one mode, such as the start and the end
+      of a round trip. lead_time is the ISO 8601 duration of the leg from the previous stop, such as
+      P2D or PT4H30M, and is ignored on the first stop; reverse_lead_time is the duration of the same
+      leg backwards on a bidirectional mode, equal to lead_time when omitted.
+    kind: action
+    writes:
+      - mode_stop
+    parameters:
+      type: object
+      properties:
+        mode: {type: string, ref: mode, description: Id or name of the mode.}
+        actor: {type: string, ref: actor, description: Id or name of the actor of the stop.}
+        sequence: {type: integer, minimum: 1, description: 'Position of the stop, from 1; after the last stop when omitted.'}
+        lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from the previous stop to this one.}
+        reverse_lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from this stop back to the previous one; lead_time when omitted.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the stop.}
+      required:
+        - mode
+        - actor
+      additionalProperties: false
+  - id: scflow/update_mode_stop
+    title: Update a stop of a mode
+    description: >-
+      Moves a stop of a mode to another position, given by sequence, or changes its lead times or
+      tags, and returns it. The other stops keep their order. null clears a lead time. A move after
+      which the mode no longer serves one of its flows, a stop of the source before a stop of the
+      destination, is refused.
+    kind: action
+    writes:
+      - mode_stop
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode_stop, description: Id of the stop.}
+        sequence: {type: integer, minimum: 1, description: 'New position of the stop, from 1, at most the number of stops.'}
+        lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg from the previous stop; null clears it.}
+        reverse_lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg backwards; null clears it.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
+      required:
+        - id
+      minProperties: 2
+      additionalProperties: false
+  - id: scflow/remove_mode_stop
+    title: Remove a stop from a mode
+    description: >-
+      Removes a stop from its mode and returns its id; the following stops move one place up. It is
+      refused when a flow of the mode needs the stop: its source or destination would no longer be a
+      stop, or no stop of its source would come before a stop of its destination. The cascade
+      parameter is accepted for consistency with the other delete actions and changes nothing.
+    kind: action
+    destructive: true
+    writes:
+      - mode_stop
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode_stop, description: Id of the stop to remove.}
+        cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a stop but its notes, which are always deleted with it.'}
+      required:
+        - id
+      additionalProperties: false
+  - id: scflow/set_flow_mode
+    title: Set the mode of a flow
+    description: >-
+      Makes a flow travel on a mode, or on none with null, and returns the flow. A flow travels on at
+      most one mode, so this replaces its mode. The source and the destination of the flow must be
+      stops of the mode, a stop of the source before a stop of the destination unless the mode is
+      bidirectional; a bidirectional flow also needs the other direction. The item of the flow must be
+      in the domain of the mode type.
+    kind: action
+    writes:
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: flow, description: Id of the flow.}
+        mode: {type: [string, 'null'], ref: mode, description: 'Id or name of the mode, or null to take the flow off its mode.'}
+      required:
+        - id
+        - mode
+      additionalProperties: false
+  - id: scflow/create_mode_from_flows
+    title: Create a mode from flows
+    description: >-
+      Creates a mode of a given type for flows that share their source and their destination and
+      travel on no mode yet, with two stops, the source then the destination, makes the flows travel
+      on it and returns it. The items of the flows must be in the domain of the mode type. lead_time
+      is the ISO 8601 duration from the source to the destination. The mode is bidirectional when
+      bidirectional is true, or when it is omitted and one of the flows is bidirectional.
+    kind: action
+    writes:
+      - mode
+      - mode_stop
+      - flow
+    parameters:
+      type: object
+      properties:
+        flows: {type: array, minItems: 1, items: {type: string, ref: flow}, description: 'Ids of the flows, at least one.'}
+        type: {type: string, ref: mode_type, description: Id or name of the mode type.}
+        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode, a string or a map of language to string.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
+        bidirectional: {type: boolean, description: Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional.}
+        lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration from the source to the destination.}
+        reverse_lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration from the destination back to the source; lead_time when omitted.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
+      required:
+        - flows
+        - type
+        - display_name
+      additionalProperties: false
+  - id: scflow/inspect_mode
+    title: Inspect a mode
+    description: >-
+      Describes a mode: its type and domain, its stops in order with their lead times, and each of its
+      flows with its lead time, the sum of the lead times of the legs from a stop of its source to a
+      stop of its destination; a bidirectional flow also has the lead time back. A lead time is null
+      when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow
+      of the mode, such as a transit hub or a truck depot where a round trip starts and ends. It
+      changes nothing.
+    kind: read
+    writes: []
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: mode, description: Id or name of the mode.}
       required:
         - id
       additionalProperties: false
@@ -1060,8 +1399,8 @@ actions:
     description: >-
       Lists what deleting the given entities with cascade true would remove besides the entities
       themselves: actors, flows, items, held items, transformations, transformation lines,
-      conversions and notes, with counts. An entity reached from several targets is counted once. It
-      changes nothing.
+      conversions, stops of modes and notes, with counts. An entity reached from several targets
+      is counted once. It changes nothing.
     kind: read
     writes: []
     parameters:
@@ -1093,6 +1432,11 @@ skills:
       - scflow/create_transformation
       - scflow/connect_transformation_line
       - scflow/define_process
+      - scflow/create_mode_type
+      - scflow/create_mode
+      - scflow/add_mode_stop
+      - scflow/set_flow_mode
+      - scflow/create_mode_from_flows
       - scflow/add_note
     file: skills/image-to-model.md
   - id: scflow/physical_to_information_flows
@@ -1139,6 +1483,17 @@ docs:
       - scflow/update_flow
       - scflow/set_flow_item
       - scflow/delete_flow
+      - scflow/create_mode_type
+      - scflow/delete_mode_type
+      - scflow/create_mode
+      - scflow/update_mode
+      - scflow/delete_mode
+      - scflow/add_mode_stop
+      - scflow/update_mode_stop
+      - scflow/remove_mode_stop
+      - scflow/set_flow_mode
+      - scflow/create_mode_from_flows
+      - scflow/inspect_mode
       - scflow/create_item_type
       - scflow/create_item
       - scflow/update_item

@@ -71,6 +71,7 @@ describe("scflow/inspect_delete_impact", () => {
       transformations: 2,
       transformationLines: 1,
       conversions: 0,
+      modeStops: 0,
       notes: 4,
       total: 13,
     });
@@ -99,6 +100,7 @@ describe("scflow/inspect_delete_impact", () => {
       transformations: 2,
       transformationLines: 1,
       conversions: 0,
+      modeStops: 0,
       notes: 4,
       total: 11,
     });
