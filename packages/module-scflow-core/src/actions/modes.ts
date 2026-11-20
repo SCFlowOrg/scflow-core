@@ -154,8 +154,11 @@ export interface InspectModeResult extends ModeSummary {
   domain: string;
   /** The flows of the mode with their lead times. */
   lead_times: ModeFlowLeadTime[];
-  /** The ids of the stops whose actor is the end of no flow of the mode, such as a transit hub. */
-  idle_stops: string[];
+  /**
+   * The ids of the stops whose actor is the end of no flow of the mode, such as a transit hub or a
+   * truck depot where a round trip starts and ends.
+   */
+  stops_without_flow: string[];
 }
 
 /** JSON Schema of an ISO 8601 duration parameter. */
@@ -523,8 +526,8 @@ export const inspectModeAction: ScflowActionDefinition<InspectModeParams, Inspec
   description:
     "Describes a mode: its type and domain, its stops in order with their lead times, and each of its flows with its lead time, the " +
     "sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the " +
-    "lead time back. A lead time is null when a leg of the path has none. idle_stops lists the stops that are the end of no flow " +
-    "of the mode, which is allowed. It changes nothing.",
+    "lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of " +
+    "no flow of the mode, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.",
   parameters: {
     type: "object",
     properties: {
@@ -556,8 +559,8 @@ export const inspectModeAction: ScflowActionDefinition<InspectModeParams, Inspec
       };
     });
     const ends = new Set(flows.flatMap((flow) => [flow.source as string, flow.destination as string]));
-    const idle_stops = stops.filter((stop) => !ends.has(stop.actor as string)).map((stop) => stop.id);
-    return { ...summary, domain: type.domain as string, lead_times, idle_stops };
+    const stops_without_flow = stops.filter((stop) => !ends.has(stop.actor as string)).map((stop) => stop.id);
+    return { ...summary, domain: type.domain as string, lead_times, stops_without_flow };
   },
 };
 

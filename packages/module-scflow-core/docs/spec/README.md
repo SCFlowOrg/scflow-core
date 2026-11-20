@@ -71,7 +71,7 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin installs the module `scflow:core` in its environment.
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
 - [Network Rules](implementation.md#network-rules): The thirteen rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`
-- [Mode Rules Checked By Actions](implementation.md#mode-rules-checked-by-actions): `mode_serves_flow` cannot be declared, so the actions that can break it check it; a stop that ends no flow is reported, not refused
+- [Mode Rules Checked By Actions](implementation.md#mode-rules-checked-by-actions): `mode_serves_flow` cannot be declared, so the actions that can break it check it; a stop that ends no flow, such as a depot, is a normal case listed by inspect_mode
 - [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow): leadTimeOnMode derives the lead time of a flow from the legs of its mode, summing ISO 8601 durations component by component
 - [Network Check](implementation.md#network-check): The engine refuses a breach of a network rule at the end of any transaction; there is no separate check
 - [Common Flow Domains And Flow Creation](implementation.md#common-flow-domains-and-flow-creation): getCommonFlowDomains lists the flow domains common to two actors, and createFlow creates one flow between them

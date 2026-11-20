@@ -408,7 +408,7 @@ scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","display_
 
 ### `scflow/inspect_mode`
 
-Inspect a mode. Describes a mode: its type and domain, its stops in order with their lead times, and each of its flows with its lead time, the sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the lead time back. A lead time is null when a leg of the path has none. idle_stops lists the stops that are the end of no flow of the mode, which is allowed. It changes nothing.
+Inspect a mode. Describes a mode: its type and domain, its stops in order with their lead times, and each of its flows with its lead time, the sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow of the mode, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.
 
 Flags: read-only.
 

@@ -87,8 +87,9 @@ most one mode, through its optional `mode`, and creating a flow never creates on
 `mode_stops_hold_flow_ends` and `mode_item_domain` are declared on `flow`; `mode_serves_flow`,
 a stop of the source before a stop of the destination unless the mode is bidirectional, compares
 positions, which a declared rule cannot, so the actions that can break it check it. A stop that
-ends no flow is allowed and listed in the `idle_stops` of `scflow/inspect_mode`, which also
-derives the lead time of each flow.
+ends no flow, such as a transit hub or a truck depot where a round trip starts and ends, is a
+normal case, listed in the `stops_without_flow` of `scflow/inspect_mode`, which also derives the
+lead time of each flow.
 
 ## Actions
 

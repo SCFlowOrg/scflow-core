@@ -61,7 +61,7 @@ The `acyclic` rule is reported under the name of its property, `parent_actor`, a
 
 The rule `mode_serves_flow` of [Mode](flow-model.md#mode) compares the positions of two stops among the stops of a mode. A [rule](../../../core/docs/spec/meta-model.md#rules) has no quantifier over instances, so it cannot be declared: the actions that can break it check it before they return, and throw an error that names `mode_serves_flow`, the mode and the flow, which rolls the whole action back. They are the actions that write the mode of a flow (`scflow/create_flow`, `scflow/set_flow_mode`, `scflow/create_mode_from_flows`), the `bidirectional` flag of a flow or a mode (`scflow/update_flow`, `scflow/update_mode`) and the order of the stops (`scflow/update_mode_stop`, `scflow/remove_mode_stop`). Adding a stop keeps the order of the others, and deleting an actor deletes the flows that end at it with its stops, so neither breaks the rule. A write command run below the actions is not checked against it.
 
-A stop that is the end of no flow of its mode is allowed. The rules have no severity levels, so it is reported, not refused: `scflow/inspect_mode` lists it among the `idle_stops` of the mode.
+A stop that is the end of no flow of its mode, such as a transit hub or a truck depot where a round trip starts and ends, is a normal case: no rule applies to it, and `scflow/inspect_mode` lists it among the `stops_without_flow` of the mode.
 
 ## Lead Time Of A Flow
 

@@ -166,7 +166,7 @@ describe("moving and removing stops", () => {
     expect(order).toEqual([plant.id, shop.id, depot.id, plant.id]);
   });
 
-  it("removes an idle stop and renumbers, and refuses to remove a stop a flow needs", async () => {
+  it("removes a stop without flow and renumbers, and refuses to remove a stop a flow needs", async () => {
     const { run } = await roundTrip();
     await run("scflow/create_flow", { source: "Plant", destination: "Depot", mode: "Milk run" });
     const { stops } = await run("scflow/inspect_mode", { id: "Milk run" });
@@ -179,7 +179,7 @@ describe("moving and removing stops", () => {
 });
 
 describe("scflow/inspect_mode", () => {
-  it("derives the lead time of each flow, both ways for a bidirectional flow, and lists the idle stops", async () => {
+  it("derives the lead time of each flow, both ways for a bidirectional flow, and lists the stops without flow", async () => {
     const { run, mode, plant, shop } = await roundTrip();
     await run("scflow/add_mode_stop", { mode: "Milk run", actor: "Hub", lead_time: "PT1H" });
     const out = await run("scflow/create_flow", { source: "Plant", destination: "Shop", item: "Bolt", mode: "Milk run" });
@@ -191,7 +191,7 @@ describe("scflow/inspect_mode", () => {
       { id: out.id, source: plant.id, destination: shop.id, bidirectional: false, item: expect.any(String), lead_time: "P1DT6H" },
       { id: both.id, source: plant.id, destination: both.destination, bidirectional: true, lead_time: "P1D", reverse_lead_time: "P1DT8H" },
     ]);
-    expect(inspected.idle_stops).toEqual([inspected.stops[4].id]);
+    expect(inspected.stops_without_flow).toEqual([inspected.stops[4].id]);
   });
 
   it("uses the reverse lead times on a bidirectional mode, and gives null when a leg has no lead time", async () => {
