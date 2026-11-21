@@ -157,8 +157,8 @@ function fakeFormat(): PersistenceInterface {
 
 const itemDescription = (properties: TransientObject[]): TransientObject => ({
   name: "item",
-  shared_by_name: true,
-  properties: [{ name: "name", type: "identifier" }, ...properties],
+  name_scope: [],
+  properties: [{ name: "name", type: "string" }, ...properties],
 });
 
 const UNIQUE_PROPERTIES: TransientObject[] = [

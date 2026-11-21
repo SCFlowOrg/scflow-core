@@ -49,6 +49,7 @@ Each rule is stated in the file named in brackets; read it before relying on the
 - [commands.md](commands.md): commands, text and map operations, filters, scripts, examples.
 - [authoring.md](authoring.md): schemas, properties, map types, relations, placeholders, `ui_access`.
 - [rules.md](rules.md): declared rules, `checks`, `unique`, `acyclic`, `set_once`, and when the engine checks them.
+- [references.md](references.md): `name_scope`, qualified names, the separator `/`, resolving a reference by contiguous suffix, and exporting the shortest one.
 - [multilingual.md](multilingual.md): `localized_string` and `localized_markdown`, translating one language, filtering on one.
 - [observability.md](observability.md): `observable` constraints and `subscribeObservable`.
 - [limitations.md](limitations.md): what the engine does not do.

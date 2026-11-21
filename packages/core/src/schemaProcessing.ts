@@ -4,6 +4,7 @@ import { parseMapType } from "./mapTypes.js";
 import { modelError } from "./errors.js";
 import { validateFacetSchema } from "./facets.js";
 import { processRuleDeclarations } from "./ruleDeclarations.js";
+import { validateNameScopeDeclaration } from "./nameScope.js";
 import type {
   NormalizedProperty,
   NormalizedScalarType,
@@ -233,6 +234,7 @@ export function processSchemaDescription(raw: TransientValue, ctx: TypeResolutio
   validateOnDeleteConstraints(obj.name, properties, ctx);
   validateUiAccessConstraints(obj.name, properties, constraints);
   validateFacetSchema(obj.name, properties, constraints, parent, ctx);
+  validateNameScopeDeclaration(obj.name, properties, constraints, ownConstraints, parent);
 
   return {
     name: obj.name,

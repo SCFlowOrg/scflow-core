@@ -12,8 +12,8 @@ await runScript(upgrade, { commands: [
     { name: "task_status", extends: "string", enum: ["open", "in_progress", "done"] },
   ] },
   { kind: "create", schema: "schema", input: [
-    { name: "person", shared_by_name: true, properties: [
-      { name: "name", type: "identifier" },
+    { name: "person", name_scope: [], properties: [
+      { name: "name", type: "string" },
       { name: "email", type: "email" },
     ] },
     { name: "task", is_root: true, ui_access: "editable", properties: [
@@ -40,7 +40,8 @@ Create a scalar type before the schemas that name it.
 
 | Constraint | Effect |
 | --- | --- |
-| `shared_by_name` | Instances are shared and keyed by their `name` |
+| `name_scope: [relation]` | Instances are referred to by their `name`, unique in a scope: the first relation of the list an instance has set, or the dataset when the list is empty (see [references.md](references.md)) |
+| `shared_by_name` | Reserved to the schemas of the meta-model: instances keyed by their `name`. A module or a dataset that declares it is refused |
 | `is_root` | Instances are not owned; the dataset owns them |
 | `embedded` | Instances live inside their owner and are not shared |
 | `singleton` | At most one instance in the dataset; a `create` of a second one fails with `constraint_violation` |
@@ -49,7 +50,7 @@ Create a scalar type before the schemas that name it.
 | `extends: "schema"` | Inherits the properties and constraints of another schema |
 | `ui_access` | `hidden`, `read_only` (default) or `editable`: how a user interface may expose the instances |
 
-- A schema that is shared but not `shared_by_name` has an `id`, a generated uuid or
+- A shared schema has an `id`, a generated uuid or
   the uuid a `create` supplies; `id` and `key` are reserved property names. The key
   of an instance cannot change. An instance created before uuid ids keeps its
   `<schema>_<n>` id, which stays valid.

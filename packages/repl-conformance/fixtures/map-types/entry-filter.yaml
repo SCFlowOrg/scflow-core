@@ -3,10 +3,10 @@ name: a filter on display_name.fr matches the instances that have an entry for t
 seed:
   schemas:
     - name: actor_type
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: display_name
           type: localized_string
 

@@ -20,7 +20,8 @@ import { substitutePlaceholders } from "./placeholders.js";
 import { isPlainObject, resolveTextOperation } from "./textOperations.js";
 import { importNamespaceOf } from "./resolvers.js";
 import type { Resolvers } from "./resolvers.js";
-import { findProperty, isRoot, isSharedByName, keyPropertyName, ownerProperties } from "./schema.js";
+import { assertValidName } from "./nameScope.js";
+import { findProperty, hasNameScope, isRoot, isSharedByName, keyPropertyName, ownerProperties } from "./schema.js";
 import { derivePropertyRoles, resolveType, scalarDefaultValue, scalarNullValue, NO_ROLES, SCHEMA_ROLES } from "./schemaProcessing.js";
 import type { OnDelete, ResolvedType } from "./schemaProcessing.js";
 import { COMMAND_KINDS } from "./types.js";
@@ -655,6 +656,8 @@ function validateInstance(
       validateScalarValue(prop.name, resolved.base, value, eff);
     }
   }
+
+  if (hasNameScope(schema)) assertValidName(schema.name, instance.name);
 
   if (!isRoot(schema)) {
     const owners = ownerProperties(schema);

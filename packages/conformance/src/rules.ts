@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { readModuleManifest } from "@scfloworg/core";
-import { createApiSession, createUpgradeLocator, initDataset, queryDataset, runCommand, runScript, upgradeDataset } from "@scfloworg/core/testing";
+import { createApiSession as createRawApiSession, createUpgradeLocator, initDataset, queryDataset, runCommand as runRawCommand, runScript as runRawScript, upgradeDataset } from "@scfloworg/core/testing";
+import { uid, withIdsInCommand } from "./ids.js";
+
+/** The schemas of the cases keyed by an id that a case gives from the name, and the relations whose values are those names. */
+const KEYED = new Set(["net.region", "net.actor_type", "net.item", "net.actor", "net.special_actor"]);
+const RELATIONS = new Set(["default_region", "region", "type", "parent", "actor", "item", "source", "destination"]);
+const runCommand = (locator: string, command: Parameters<typeof runRawCommand>[1]) => runRawCommand(locator, withIdsInCommand(command, KEYED, RELATIONS) as Parameters<typeof runRawCommand>[1]);
+const runScript = (locator: string, script: Parameters<typeof runRawScript>[1]) => runRawScript(locator, withIdsInCommand(script, KEYED, RELATIONS) as Parameters<typeof runRawScript>[1]);
+const createApiSession = () => {
+  const session = createRawApiSession();
+  const run = session.runCommand.bind(session);
+  session.runCommand = ((locator: string, command: never) => run(locator, withIdsInCommand(command, KEYED, RELATIONS) as never)) as typeof session.runCommand;
+  return session;
+};
 
 /** Runs a module upgrade through a session of its own. */
 const upgradeModule = (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) =>
@@ -23,17 +36,17 @@ mcl: ^1.0
 title: Net
 schemas:
   - name: region
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
   - name: actor_type
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: domains
         type: "[string]"
       - name: default_scope
@@ -41,15 +54,15 @@ schemas:
       - name: default_region
         type: region
   - name: item
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: domain
         type: string
   - name: actor
-    shared_by_name:
+    name_scope: []
     is_root:
     checks:
       - name: parent_actor_domains
@@ -58,7 +71,7 @@ schemas:
 ${actorExtra}
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: type
         type: actor_type
         mandatory:
@@ -204,7 +217,7 @@ export function ruleCases(formatPrefix: string, newLocator: () => string): void 
     it("reads a default across a relation, keeps the type of a whole placeholder and copies a literal array", async () => {
       const locator = await network();
       const [f1] = await query(locator, "net.actor", { name: "f1" });
-      expect(f1).toMatchObject({ scope: "local", region: "north", label: "f1 (local)", tags: ["new"] });
+      expect(f1).toMatchObject({ scope: "local", region: uid("north"), label: "f1 (local)", tags: ["new"] });
       // a null relation on the path gives the ordinary default
       const [s1] = await query(locator, "net.actor", { name: "s1" });
       expect(s1).toMatchObject({ scope: "", region: null, tags: ["new"] });
@@ -246,7 +259,7 @@ export function ruleCases(formatPrefix: string, newLocator: () => string): void 
       expect(await codeOf(runCommand(locator, { delete: "net.actor", filters: { name: "lone" } }))).toBe("constraint_violation");
       expect(await query(locator, "net.actor", { name: "lone" })).toHaveLength(1);
       const deleted = await runCommand(locator, { delete: "net.actor", filters: { name: "lone" }, cascade: true });
-      expect(deleted["cascade-deleted"]).toMatchObject([{ actor: "lone", item: "pear" }]);
+      expect(deleted["cascade-deleted"]).toMatchObject([{ actor: uid("lone"), item: uid("pear") }]);
       expect(await query(locator, "net.holding", { actor: "lone" })).toHaveLength(0);
     });
 
@@ -305,7 +318,7 @@ export function ruleCases(formatPrefix: string, newLocator: () => string): void 
       await create(locator, "net.flow", [{ source: "f1", destination: "s1", item: "apple" }]);
       expect(await codeOf(runCommand(locator, { delete: "net.holding", filters: { actor: "s1", item: "apple" } }))).toBe("rule_violation");
       expect(await codeOf(runCommand(locator, { update: "net.holding", filters: { actor: "s1", item: "apple" }, input: { item: "pear" } }))).toBe("rule_violation");
-      expect(await query(locator, "net.holding", { actor: "s1" })).toMatchObject([{ item: "apple" }]);
+      expect(await query(locator, "net.holding", { actor: "s1" })).toMatchObject([{ item: uid("apple") }]);
     });
 
     it("refuses two instances that share the values of a unique group, and a null relation does not count", async () => {
@@ -480,7 +493,7 @@ ${body}
       const error = await upgradeModule(locator, stricter).catch((e) => e);
       expect(error.code).toBe("rule_violation");
       const atFault = (error.details.violations as Row[]).map((v) => v.key).sort();
-      expect(atFault).toEqual(["f1", "f2", "s1"]);
+      expect(atFault).toEqual(["f1", "f2", "s1"].map(uid).sort());
       const info = (await queryDataset(locator)) as Row;
       expect((info.modules as Row[]).find((m) => m.module === "acme:net")).toMatchObject({ version: "1.0.0" });
 
@@ -509,6 +522,35 @@ ${body}
       expect(error.code).toBe("rule_violation");
       expect(error.details.violations).toHaveLength(1);
       expect(await codeOf(runCommand(locator, { create: "box", input: [{ size: 0 }] }))).toBe("ok");
+    });
+  });
+
+  describe(`names and keys — ${formatPrefix}`, () => {
+    it("refuses shared_by_name outside the meta-model, in a module and in a dataset, and accepts name_scope", async () => {
+      const module = (constraint: string) => `
+name: acme:tips
+namespace: tips
+version: 1.0.0
+mcl: ^1.0
+title: Tips
+schemas:
+  - name: tip
+    ${constraint}
+    properties:
+      - name: name
+        type: string
+`;
+      await expect(initDataset(newLocator(), "tips-shared", { modules: [readModuleManifest(module("shared_by_name:"))] })).rejects.toMatchObject({ code: "constraint_violation" });
+      const locator = newLocator();
+      await initDataset(locator, "tips-scoped", { modules: [readModuleManifest(module("name_scope: []"))] });
+      const [tip] = (await runCommand(locator, { create: "tips.tip", input: [{ name: "a" }] })).after as Row[];
+      expect(typeof tip.id).toBe("string");
+      expect(await codeOf(runCommand(locator, { create: "tips.tip", input: [{ name: "a" }] }))).toBe("rule_violation");
+
+      const own = newLocator();
+      await initDataset(own, "own-shared");
+      const upgrade = await createUpgradeLocator(own);
+      expect(await codeOf(runCommand(upgrade, { create: "schema", input: [{ name: "tip", shared_by_name: null, properties: [{ name: "name", type: "string" }] }] }))).toBe("constraint_violation");
     });
   });
 }

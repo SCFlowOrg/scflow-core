@@ -177,6 +177,12 @@ export const ErrorCode = {
   // Script
   /** A placeholder does not resolve: its root, function, `as` name or path is unknown. */
   unknown_reference: "unknown_reference",
+
+  // References by name
+  /** A reference, an id or a name, designates no instance of a schema with `name_scope`. */
+  unresolved_reference: "unresolved_reference",
+  /** A reference designates several instances: `details.candidates` lists their qualified names. */
+  ambiguous_reference: "ambiguous_reference",
 } as const;
 
 /** The name of one code of `ErrorCode`. */

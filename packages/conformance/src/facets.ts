@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readModuleManifest } from "@scfloworg/core";
-import { createImport, dumpDataset, initDataset, runCommand } from "@scfloworg/core/testing";
+import { createImport, dumpDataset, initDataset } from "@scfloworg/core/testing";
+import { idCommands, uid } from "./ids.js";
 import type { ModuleManifest } from "@scfloworg/core";
+
+/** The commands of the cases write the instances they designate by name: see `idCommands`. */
+const { runCommand } = idCommands(["assignee", "author", "person", "carbon.auditor", "auditor"]);
 
 type Row = Record<string, unknown>;
 
@@ -14,11 +18,11 @@ mcl: ^1.0
 title: Tasks
 schemas:
   - name: person
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: code
         type: string
 ${extra}
@@ -100,8 +104,8 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
       const locator = await datasetWith([tasks, carbon]);
       const created = await runCommand(locator, { create: "tasks.person", input: { name: "ada", code: "A", carbon: { co2: 12 } } });
       // an unset value is left out, a default_value is read when nothing is stored
-      expect(created.after[0]).toEqual({ name: "ada", code: "A", carbon: { co2: 12, rating: "unrated", emissions: [] } });
-      expect(await query(locator)).toEqual([{ name: "ada", code: "A", carbon: { co2: 12, rating: "unrated", emissions: [] } }]);
+      expect(created.after[0]).toEqual({ id: uid("ada"), name: "ada", code: "A", carbon: { co2: 12, rating: "unrated", emissions: [] } });
+      expect(await query(locator)).toEqual([{ id: uid("ada"), name: "ada", code: "A", carbon: { co2: 12, rating: "unrated", emissions: [] } }]);
 
       // a facet of the target's own module carries that module's namespace
       await runCommand(locator, { create: "tasks.contractor", input: { name: "bob", company: "acme", tasks: { badge: "B-1" }, carbon: { co2: 3 } } });
@@ -111,7 +115,7 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
       // a dataset without the module sees the target bare
       const bare = await datasetWith([tasks]);
       const plain = await runCommand(bare, { create: "tasks.person", input: { name: "ada", code: "A" } });
-      expect(plain.after[0]).toEqual({ name: "ada", code: "A" });
+      expect(plain.after[0]).toEqual({ id: uid("ada"), name: "ada", code: "A" });
       expect((await runCommand(bare, { query: "tasks.person", filters: { "carbon.co2": 1 } }).catch((e: { code: string }) => e.code))).toBe("unknown_property");
     });
 
@@ -131,9 +135,9 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
 
       // result.properties names a facet property by path, or a whole namespace
       const narrowed = await query(locator, { filters: { name: "ada" }, result: { properties: ["carbon.co2"] } });
-      expect(narrowed).toEqual([{ name: "ada", carbon: { co2: 12 } }]);
+      expect(narrowed).toEqual([{ id: uid("ada"), name: "ada", carbon: { co2: 12 } }]);
       const namespace = await query(locator, { filters: { name: "ada" }, result: { properties: ["carbon"] } });
-      expect(namespace).toEqual([{ name: "ada", carbon: { co2: 12, rating: "unrated", emissions: [] } }]);
+      expect(namespace).toEqual([{ id: uid("ada"), name: "ada", carbon: { co2: 12, rating: "unrated", emissions: [] } }]);
 
       // a path crossing a relation reaches the facet values of its target
       await runCommand(locator, { update: "tasks.person", filters: { name: "cyd" }, input: { carbon: { auditor: "ada" } } });
@@ -147,18 +151,18 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
       expect(Object.keys((await stored(locator, "carbon.actor_emissions")) ?? {})).toEqual([]);
 
       await runCommand(locator, { update: "tasks.person", filters: { name: "ada" }, input: { carbon: { co2: 5 } } });
-      expect(Object.keys((await stored(locator, "carbon.actor_emissions")) ?? {})).toEqual(["ada"]);
+      expect(Object.keys((await stored(locator, "carbon.actor_emissions")) ?? {})).toEqual([uid("ada")]);
       // the instance of the target never holds them
-      expect(((await stored(locator, "tasks.person")) as Row).ada).not.toHaveProperty("carbon");
-      expect(((await stored(locator, "tasks.person")) as Row).ada).not.toHaveProperty("carbon.co2");
+      expect(((await stored(locator, "tasks.person")) as Row)[uid("ada")]).not.toHaveProperty("carbon");
+      expect(((await stored(locator, "tasks.person")) as Row)[uid("ada")]).not.toHaveProperty("carbon.co2");
 
       // a patch changes only the properties it names
       const patched = await runCommand(locator, { update: "tasks.person", filters: { name: "ada" }, input: { carbon: { auditor: "bob" } } });
       expect(patched.before[0]).toMatchObject({ carbon: { co2: 5 } });
-      expect(patched.after[0]).toMatchObject({ carbon: { co2: 5, auditor: "bob" } });
+      expect(patched.after[0]).toMatchObject({ carbon: { co2: 5, auditor: uid("bob") } });
 
       const unset = await runCommand(locator, { update: "tasks.person", filters: { name: "ada" }, input: { carbon: { co2: null } } });
-      expect(unset.after[0]).toEqual({ name: "ada", code: "", carbon: { rating: "unrated", auditor: "bob", emissions: [] } });
+      expect(unset.after[0]).toEqual({ id: uid("ada"), name: "ada", code: "", carbon: { rating: "unrated", auditor: uid("bob"), emissions: [] } });
 
       // values are checked against the facet's properties
       await expect(runCommand(locator, { update: "tasks.person", filters: { name: "ada" }, input: { carbon: { co2: -1 } } })).rejects.toMatchObject({
@@ -188,11 +192,11 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
 
       const deleted = await runCommand(locator, { delete: "tasks.person", filters: { name: "ada" } });
       expect(deleted.before[0]).toMatchObject({ name: "ada", carbon: { co2: 1 } });
-      expect(deleted["updated-before"]).toEqual([expect.objectContaining({ name: "bob", carbon: expect.objectContaining({ auditor: "ada" }) })]);
-      expect(deleted["updated-after"]).toEqual([{ name: "bob", code: "", carbon: { co2: 2, rating: "unrated", emissions: [] } }]);
-      expect(Object.keys((await stored(locator, "carbon.actor_emissions")) ?? {})).toEqual(["bob"]);
+      expect(deleted["updated-before"]).toEqual([expect.objectContaining({ name: "bob", carbon: expect.objectContaining({ auditor: uid("ada") }) })]);
+      expect(deleted["updated-after"]).toEqual([{ id: uid("bob"), name: "bob", code: "", carbon: { co2: 2, rating: "unrated", emissions: [] } }]);
+      expect(Object.keys((await stored(locator, "carbon.actor_emissions")) ?? {})).toEqual([uid("bob")]);
       expect(Object.keys((await stored(locator, "tasks.badge_holder")) ?? {})).toEqual([]);
-      expect((await query(locator))[0]).toEqual({ name: "bob", code: "", carbon: { co2: 2, rating: "unrated", emissions: [] } });
+      expect((await query(locator))[0]).toEqual({ id: uid("bob"), name: "bob", code: "", carbon: { co2: 2, rating: "unrated", emissions: [] } });
 
       // an instance whose last value is unset is removed
       await runCommand(locator, { update: "tasks.person", filters: { name: "bob" }, input: { carbon: { co2: null } } });
@@ -219,8 +223,8 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
       await createImport(target, source);
 
       const [ada] = await query(target, { namespace: "*" });
-      expect(ada).toMatchObject({ name: "facets.ada", carbon: { co2: 7 } });
-      expect(names(await query(target, { namespace: "facets.", filters: { "carbon.co2": 7 } }))).toEqual(["facets.ada"]);
+      expect(ada).toMatchObject({ id: `facets.${uid("ada")}`, name: "ada", carbon: { co2: 7 } });
+      expect(names(await query(target, { namespace: "facets.", filters: { "carbon.co2": 7 } }))).toEqual(["ada"]);
       await expect(runCommand(target, { update: "tasks.person", namespace: "facets.", input: { carbon: { co2: 1 } } })).rejects.toMatchObject({
         code: "constraint_violation",
       });
@@ -253,7 +257,7 @@ export function facetCases(formatPrefix: string, newLocator: () => string): void
       const locator = await datasetWith([tasks, water]);
       const created = await runCommand(locator, { create: "tasks.person", input: { name: "ada", carbon: { co2: 1, liters: 2 } } });
       expect(created.after[0]).toMatchObject({ carbon: { co2: 1, liters: 2 } });
-      expect(Object.keys((await stored(locator, "carbon.actor_water")) ?? {})).toEqual(["ada"]);
+      expect(Object.keys((await stored(locator, "carbon.actor_water")) ?? {})).toEqual([uid("ada")]);
     });
   });
 }

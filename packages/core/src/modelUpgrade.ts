@@ -2,6 +2,7 @@ import { modelError } from "./errors.js";
 import { isFacet } from "./facets.js";
 import { checkFilter, matchFilter } from "./filter.js";
 import type { Resolvers } from "./resolvers.js";
+import { refuseSharedByNameOutsideMetaModel } from "./nameScope.js";
 import { NO_ROLES, SCHEMA_ROLES, processScalarTypeDescription, processSchemaDescription } from "./schemaProcessing.js";
 import type {
   Command,
@@ -243,6 +244,7 @@ export async function applyInverseRelations(
  * `constraint_violation`. A facet is declared in a module (see `docs/modules.md`).
  */
 function refuseFacetOutsideModule(schema: NormalizedSchema): NormalizedSchema {
+  refuseSharedByNameOutsideMetaModel(schema);
   if (isFacet(schema)) {
     throw modelError("constraint_violation", `schema "${schema.name}" has "facet_of" but belongs to no module — a facet is declared in a module, whose namespace its properties carry`);
   }

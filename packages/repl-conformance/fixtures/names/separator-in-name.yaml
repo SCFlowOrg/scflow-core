@@ -1,0 +1,33 @@
+name: a name of a schema with name_scope cannot contain the separator, or be empty
+
+seed:
+  schemas:
+    - name: plant
+      name_scope: []
+      properties:
+        - name: name
+          type: string
+
+commands:
+  - run: |
+      create: plant
+      input: [{name: "Lyon / Line 1"}]
+    expectError: constraint_violation
+  - run: |
+      create: plant
+      input: [{name: "   "}]
+    expectError: constraint_violation
+  - run: |
+      create: plant
+      input: [{name: Lyon}]
+  - run: |
+      update: plant
+      input: [{name: "a/b"}]
+    expectError: constraint_violation
+  - as: plants
+    run: |
+      query: plant
+
+expect:
+  - path: plants.after
+    length: 1

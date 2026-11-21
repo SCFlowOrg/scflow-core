@@ -14,10 +14,10 @@ mcl: ^1.0
 title: Guide
 schemas:
   - name: tip
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
 docs:
   - id: guide/tips
     title: Tips

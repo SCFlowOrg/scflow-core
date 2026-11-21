@@ -3,10 +3,10 @@ name: a map entry whose key is not a language code or whose value is not a strin
 seed:
   schemas:
     - name: actor_type
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: display_name
           type: localized_string
 

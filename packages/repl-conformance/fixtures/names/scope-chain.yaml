@@ -1,0 +1,56 @@
+name: names are unique per scope along a chain of three levels, and a move that creates a duplicate is refused
+
+seed:
+  schemas:
+    - name: country
+      name_scope: []
+      properties:
+        - name: name
+          type: localized_string
+    - name: city
+      name_scope: [country]
+      properties:
+        - name: name
+          type: string
+        - name: country
+          type: country
+          mandatory:
+    - name: line
+      name_scope: [city]
+      properties:
+        - name: name
+          type: string
+        - name: city
+          type: city
+          mandatory:
+
+commands:
+  - run: |
+      create: country
+      input: [{id: 00000000-0000-4000-8000-0000000000c1, name: {en: France, fr: France}}, {id: 00000000-0000-4000-8000-0000000000c2, name: {en: Spain}}]
+  # two cities called Lyon, one per country
+  - run: |
+      create: city
+      input: [{id: 00000000-0000-4000-8000-0000000000d1, name: Lyon, country: 00000000-0000-4000-8000-0000000000c1}, {id: 00000000-0000-4000-8000-0000000000d2, name: Lyon, country: 00000000-0000-4000-8000-0000000000c2}]
+  - run: |
+      create: line
+      input: [{id: 00000000-0000-4000-8000-0000000000e1, name: Line 1, city: 00000000-0000-4000-8000-0000000000d1}, {name: Line 1, city: 00000000-0000-4000-8000-0000000000d2}]
+  # a country is compared in every language
+  - run: |
+      create: country
+      input: [{name: {fr: Spain}}]
+    expectError: rule_violation
+  # moving the Spanish Lyon under France would give France two cities called Lyon
+  - run: |
+      update: city
+      filters:
+        id: 00000000-0000-4000-8000-0000000000d2
+      input: [{country: 00000000-0000-4000-8000-0000000000c1}]
+    expectError: rule_violation
+  - as: lines
+    run: |
+      query: line
+
+expect:
+  - path: lines.after
+    length: 2

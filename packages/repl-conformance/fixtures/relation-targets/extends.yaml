@@ -4,20 +4,20 @@ seed:
   schemas:
     - name: team
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: special_team
       is_root: null
       extends: team
       properties: []
     - name: person
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: team
           type: team
 
@@ -25,7 +25,7 @@ commands:
   - run: |
       kind: create
       schema: special_team
-      input: [{name: "st1"}]
+      input: [{id: "0cc64073-3b67-4442-832b-eeb9bf0d7556", name: "st1"}]
 
   # st1 is a special_team, which extends team — the "team" relation on
   # person is declared `type: team`, so an instance of an extending schema
@@ -34,12 +34,12 @@ commands:
     run: |
       kind: create
       schema: person
-      input: [{name: "p1", team: "st1"}]
+      input: [{id: "b78f5766-11ec-46f9-8af3-ca654c22172a", name: "p1", team: "0cc64073-3b67-4442-832b-eeb9bf0d7556"}]
 
   - run: |
       kind: create
       schema: team
-      input: [{name: "t1"}]
+      input: [{id: "e5353879-bd69-4fdd-8b46-5dad176ff52d", name: "t1"}]
 
   # Same on update, and against the exact base schema too, not just the
   # extending one.
@@ -49,10 +49,10 @@ commands:
       schema: person
       filters:
         name: p1
-      input: [{team: "t1"}]
+      input: [{team: "e5353879-bd69-4fdd-8b46-5dad176ff52d"}]
 
 expect:
   - path: created.after.0.team
-    equals: st1
+    equals: 0cc64073-3b67-4442-832b-eeb9bf0d7556
   - path: updated.after.0.team
-    equals: t1
+    equals: e5353879-bd69-4fdd-8b46-5dad176ff52d

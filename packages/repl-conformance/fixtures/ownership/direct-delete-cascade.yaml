@@ -16,15 +16,15 @@ seed:
     # for the same reason).
     - name: owner_box
       is_root:
-      shared_by_name:
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: thing
-      shared_by_name:
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: box
           type: owner_box
           owner:
@@ -34,10 +34,10 @@ seed:
 commands:
   - run: |
       create: owner_box
-      input: [{name: b1}]
+      input: [{id: 7e83ca2a-65d6-490a-809c-8570c6c905a9, name: b1}]
   - run: |
       create: thing
-      input: [{name: t1, box: b1}, {name: t2, box: b1}]
+      input: [{id: e5353879-bd69-4fdd-8b46-5dad176ff52d, name: t1, box: 7e83ca2a-65d6-490a-809c-8570c6c905a9}, {id: 2a5bd027-10e9-45a7-8bb9-2da876655950, name: t2, box: 7e83ca2a-65d6-490a-809c-8570c6c905a9}]
   - as: deleted
     run: |
       delete: owner_box

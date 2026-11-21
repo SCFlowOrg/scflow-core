@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { moduleDigest, readModuleManifest } from "@scfloworg/core";
-import { checkImport, createImport, dumpDataset, initDataset, queryDataset, refreshImport, removeImport, restoreDataset, runCommand, setLocalModule } from "@scfloworg/core/testing";
+import { checkImport, createImport, dumpDataset, initDataset, queryDataset, refreshImport, removeImport, restoreDataset, setLocalModule } from "@scfloworg/core/testing";
+import { idCommands, uid } from "./ids.js";
 import type { ModuleManifest, TransientValue } from "@scfloworg/core";
+
+/** The commands of the cases write the instances they designate by name: see `idCommands`. */
+const { runCommand } = idCommands(["assignee", "author", "about", "person", "auditor", "carbon.auditor"]);
 
 type Row = Record<string, unknown>;
 
@@ -17,11 +21,11 @@ scalar_types:
     pattern: '^[A-Z]{3}$'
 schemas:
   - name: person
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: code
         type: code
 ${extra}
@@ -95,7 +99,7 @@ export function datasetModuleCases(formatPrefix: string, newLocator: () => strin
     it("runs commands on the schemas of its modules, by qualified name", async () => {
       const locator = await datasetWith("commands", [tasks], ["ada"]);
       const created = await runCommand(locator, { create: "tasks.task", input: { title: "write", assignee: "ada", due: "2026-11-07" } });
-      expect(created.after[0]).toMatchObject({ title: "write", assignee: "ada" });
+      expect(created.after[0]).toMatchObject({ title: "write", assignee: uid("ada") });
       expect(await people(locator)).toEqual([expect.objectContaining({ name: "ada", tasks: [(created.after[0] as Row).id] })]);
       // a short name is never searched for across modules
       await expect(runCommand(locator, { query: "person" })).rejects.toMatchObject({ code: "unknown_schema" });
@@ -182,9 +186,9 @@ export function datasetModuleCases(formatPrefix: string, newLocator: () => strin
 
       // the keys of the copies are prefixed, and so are their relations
       expect(await people(target)).toEqual([]);
-      expect(await people(target, "suppliers.")).toEqual([expect.objectContaining({ name: "suppliers.ada", tasks: [`suppliers.${task.id}`] })]);
+      expect(await people(target, "suppliers.")).toEqual([expect.objectContaining({ id: `suppliers.${uid("ada")}`, name: "ada", tasks: [`suppliers.${task.id}`] })]);
       const copies = (await runCommand(target, { query: "tasks.task", namespace: "*" })).after;
-      expect(copies).toEqual([expect.objectContaining({ id: `suppliers.${task.id}`, assignee: "suppliers.ada" })]);
+      expect(copies).toEqual([expect.objectContaining({ id: `suppliers.${task.id}`, assignee: `suppliers.${uid("ada")}` })]);
       expect((await runCommand(target, { query: "import" })).after).toEqual([expect.objectContaining({ name: "suppliers", namespace: "suppliers." })]);
     });
 
@@ -198,10 +202,10 @@ export function datasetModuleCases(formatPrefix: string, newLocator: () => strin
       });
       await runCommand(target, { update: "tasks.person", input: { code: "XYZ" } });
       await runCommand(target, { delete: "tasks.person" });
-      expect(await people(target, "*")).toEqual([expect.objectContaining({ name: "catalog.ada", code: "ABC" })]);
+      expect(await people(target, "*")).toEqual([expect.objectContaining({ id: `catalog.${uid("ada")}`, name: "ada", code: "ABC" })]);
 
       const own = await runCommand(target, { create: "tasks.task", input: { title: "call", assignee: "catalog.ada", due: "2026-11-07" } });
-      expect(own.after[0]).toMatchObject({ assignee: "catalog.ada" });
+      expect(own.after[0]).toMatchObject({ assignee: `catalog.${uid("ada")}` });
       await expect(runCommand(target, { create: "import", input: { name: "x" } })).rejects.toMatchObject({ code: "import_cannot_be_created" });
     });
 
@@ -251,9 +255,9 @@ export function datasetModuleCases(formatPrefix: string, newLocator: () => strin
       const dataset = (await queryDataset(top)) as Row;
       expect([...(dataset.imports as string[])].sort()).toEqual(["base", "middle"]);
       expect(keys(dataset.modules as TransientValue[], "module")).toEqual(["acme:notes", "acme:tasks"]);
-      expect(await people(top, "base.")).toEqual([expect.objectContaining({ name: "base.ada" })]);
+      expect(await people(top, "base.")).toEqual([expect.objectContaining({ id: `base.${uid("ada")}`, name: "ada" })]);
       const copied = (await runCommand(top, { query: "notes.note", namespace: "middle." })).after;
-      expect(copied).toEqual([expect.objectContaining({ text: "reliable", about: "base.ada" })]);
+      expect(copied).toEqual([expect.objectContaining({ text: "reliable", about: `base.${uid("ada")}` })]);
 
       // importing the nested dataset again finds it already there
       expect((await checkImport(top, base)).existingImport).toMatchObject({ locator: base });
@@ -272,12 +276,12 @@ export function datasetModuleCases(formatPrefix: string, newLocator: () => strin
       await runCommand(source, { delete: "tasks.person", filters: { name: "bob" } });
 
       const refreshed = await refreshImport(target, "shared");
-      expect(keys(refreshed.added)).toEqual(["shared.cyd"]);
-      expect(keys(refreshed.removed)).toEqual(["shared.bob"]);
-      expect(refreshed.before).toEqual([expect.objectContaining({ name: "shared.ada", code: "ABC" })]);
-      expect(refreshed.after).toEqual([expect.objectContaining({ name: "shared.ada", code: "ADA" })]);
+      expect(keys(refreshed.added)).toEqual(["cyd"]);
+      expect(keys(refreshed.removed)).toEqual(["bob"]);
+      expect(refreshed.before).toEqual([expect.objectContaining({ id: `shared.${uid("ada")}`, name: "ada", code: "ABC" })]);
+      expect(refreshed.after).toEqual([expect.objectContaining({ id: `shared.${uid("ada")}`, name: "ada", code: "ADA" })]);
       expect(refreshed["updated-after"]).toEqual([expect.objectContaining({ id: own.id, assignee: null })]);
-      expect(keys(await people(target, "shared."))).toEqual(["shared.ada", "shared.cyd"]);
+      expect(keys(await people(target, "shared."))).toEqual(["ada", "cyd"]);
       const sourceVersion = ((await queryDataset(source)) as Row).data_minor_version;
       expect((await runCommand(target, { query: "import" })).after[0]).toMatchObject({ data_minor_version: sourceVersion });
 

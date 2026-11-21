@@ -41,3 +41,16 @@ export function findProperty(schema: NormalizedSchema, name: string): Normalized
 export function ownerProperties(schema: NormalizedSchema): NormalizedProperty[] {
   return schema.properties.filter((p) => p.constraints.owner === true);
 }
+
+/** The separator of the segments of a qualified name, `/`; the spaces around it are ignored. */
+export const NAME_SEPARATOR = "/";
+
+/** Whether the schema declares `name_scope`: its instances are referred to by `name`. */
+export function hasNameScope(schema: NormalizedSchema): boolean {
+  return Array.isArray(schema.constraints.name_scope);
+}
+
+/** The relations of `name_scope`, the first one an instance has set being its scope; `[]` for a schema without `name_scope` and for a scope that is the dataset. */
+export function nameScopeOf(schema: NormalizedSchema): string[] {
+  return Array.isArray(schema.constraints.name_scope) ? (schema.constraints.name_scope as unknown as string[]) : [];
+}

@@ -4,22 +4,22 @@ seed:
   schemas:
     - name: dog
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: team
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: person
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: team
           type: team
 
@@ -27,19 +27,19 @@ commands:
   - run: |
       kind: create
       schema: dog
-      input: [{name: "rex"}]
+      input: [{id: "6e6c26f0-ffbf-4a2d-82c4-5d548bcec0b9", name: "rex"}]
 
   - run: |
       kind: create
       schema: team
-      input: [{name: "t1"}]
+      input: [{id: "e5353879-bd69-4fdd-8b46-5dad176ff52d", name: "t1"}]
 
   # rex is a dog, not a team, and dog doesn't extend team — the "team"
   # relation on person is declared `type: team`, so this must be rejected.
   - run: |
       kind: create
       schema: person
-      input: [{name: "p1", team: "rex"}]
+      input: [{id: "b78f5766-11ec-46f9-8af3-ca654c22172a", name: "p1", team: "6e6c26f0-ffbf-4a2d-82c4-5d548bcec0b9"}]
     expectError: unknown_relation_target
 
   # A correctly-typed target still works — control for the check above.
@@ -47,7 +47,7 @@ commands:
     run: |
       kind: create
       schema: person
-      input: [{name: "p2", team: "t1"}]
+      input: [{id: "c5fd961c-9f73-4a95-8a30-8050062e7a2c", name: "p2", team: "e5353879-bd69-4fdd-8b46-5dad176ff52d"}]
 
   # Same check on update, not just create — computePropertyValue is shared
   # by both.
@@ -56,9 +56,9 @@ commands:
       schema: person
       filters:
         name: p2
-      input: [{team: "rex"}]
+      input: [{team: "6e6c26f0-ffbf-4a2d-82c4-5d548bcec0b9"}]
     expectError: unknown_relation_target
 
 expect:
   - path: created.after.0.team
-    equals: t1
+    equals: e5353879-bd69-4fdd-8b46-5dad176ff52d

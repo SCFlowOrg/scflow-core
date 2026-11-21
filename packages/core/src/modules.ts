@@ -3,6 +3,7 @@ import { isBaseScalarType } from "./builtins.js";
 import { coerceScalar, validateScalarValue } from "./command.js";
 import { modelError } from "./errors.js";
 import { parseMapType, LOCALIZED_MAP_TYPES } from "./mapTypes.js";
+import { refuseSharedByNameOutsideMetaModel } from "./nameScope.js";
 import { MCL_CORE, MCL_CORE_KEY, MCL_NAMESPACE } from "./mclCore.js";
 import type { ModuleDependency, ModuleManifest, ModuleSkill, ModuleTopic } from "./mclCore.js";
 import { generatedActionIds } from "./moduleActions.js";
@@ -659,7 +660,7 @@ export function createModuleSet(manifests: readonly ModuleManifest[]): ModuleSet
     }
     entry.inProgress.add(short);
     try {
-      const normalized = processSchemaDescription(authored, canonicalContext);
+      const normalized = refuseSharedByNameOutsideMetaModel(processSchemaDescription(authored, canonicalContext));
       // every reference resolves: a short name of another module does not
       for (const prop of normalized.properties) resolveType(prop.type, canonicalContext);
       entry.schemas.set(short, normalized);

@@ -5,10 +5,10 @@ version: 1.0.0
 mcl: ^1.0
 schemas:
   - name: tip
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
 docs:
   - id: wrong/intro
     title: Intro

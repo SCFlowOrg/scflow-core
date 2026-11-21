@@ -3,10 +3,10 @@ name: set and remove edit the entries of a localized_string one language at a ti
 seed:
   schemas:
     - name: actor_type
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: display_name
           type: localized_string
           min_length: 1

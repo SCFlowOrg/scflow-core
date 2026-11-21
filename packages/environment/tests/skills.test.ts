@@ -14,10 +14,10 @@ mcl: ^1.0
 title: Tips
 schemas:
   - name: tip
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
 skills:
   - id: tips/write_tips
     title: Write tips
