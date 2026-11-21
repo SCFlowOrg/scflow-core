@@ -98,6 +98,13 @@ set.requireSchema("actor");                 // throws unknown_schema
   dependency in the set, declared or generated (`generatedActionIds` gives the
   ids a dataset generates for a module), else `constraint_violation`.
 
+`buildDatasetModel(manifests)` goes one step further and gives the model a
+dataset reads from its modules: the schemas by qualified name, with the generated
+inverse relations and the properties of the facets, and the scalar types. A tool
+that works on any model, such as `@scfloworg/spreadsheet`, builds it from the
+manifests a dump embeds. `facetOfProperty(property)` tells which facet adds a
+property of such a schema, or `undefined` for a property of the schema itself.
+
 ## Resolve a name
 
 `resolveSchema(name, from?)` and `resolveScalarType(name, from?)` resolve `name`

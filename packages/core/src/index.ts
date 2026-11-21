@@ -10,6 +10,7 @@ export type { CheckRule, UniqueGroup } from "./ruleDeclarations.js";
 export type { CheckImportResult, RefreshResult } from "./imports.js";
 export { LOCAL_PUBLISHER, isLocalModule, moduleDigest } from "./datasetModules.js";
 export type { DatasetModel, DatasetModule } from "./datasetModules.js";
+export { buildDatasetModel } from "./datasetModules.js";
 export type { MigrationStep, UpgradeModuleOptions, UpgradeModuleResult } from "./migrations.js";
 export type { RestoreResult, CheckUpgradeResult, ApiSession, TransactionId, DatasetVersions, Delta, PreparedTransaction, ObservableChange, ObservableDelta, ObservableListener } from "./api.js";
 export type { ModelActionDefinition, ModelActionParamsSchema } from "./action.js";
@@ -27,6 +28,7 @@ export type { LoadedModule, ModuleSet, ResolvedName } from "./modules.js";
 export { uiAccessOf } from "./uiAccess.js";
 export type { UiAccess } from "./uiAccess.js";
 export { isEmbedded, isRoot, isShared, isSharedByName, keyPropertyName, findProperty, ownerProperties } from "./schema.js";
+export { facetOfProperty } from "./facets.js";
 export {
   resolveType,
   processPropertyDescription,
