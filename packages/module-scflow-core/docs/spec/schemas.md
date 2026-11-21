@@ -41,20 +41,20 @@ erDiagram
         localized_markdown description
         boolean bidirectional
     }
-    MODE_TYPE {
+    MODE {
         string id PK
         localized_string name
         localized_markdown description
         flow_domain domain
     }
-    MODE {
+    ROUTE {
         string id PK
         string name
         localized_markdown description
         localized_string schedule
         boolean bidirectional
     }
-    MODE_STOP {
+    ROUTE_STOP {
         string id PK
         integer sequence
         lead_time lead_time
@@ -119,10 +119,10 @@ erDiagram
     LOCATION |o--o{ ACTOR : "location (actors)"
     ACTOR |o--o{ ACTOR : "parent_actor (child_actors)"
     SCOPE |o--o{ ACTOR_TYPE : "default_scope"
-    MODE_TYPE ||--o{ MODE : "type (modes)"
-    MODE ||--o{ MODE_STOP : "owns (stops)"
-    ACTOR ||--o{ MODE_STOP : "actor (mode_stops)"
-    MODE |o--o{ FLOW : "mode (flows)"
+    MODE ||--o{ ROUTE : "mode (routes)"
+    ROUTE ||--o{ ROUTE_STOP : "owns (stops)"
+    ACTOR ||--o{ ROUTE_STOP : "actor (route_stops)"
+    ROUTE |o--o{ FLOW : "route (flows)"
 ```
 
 Every entity of the diagram extends `ANNOTABLE`, so it owns its notes and carries its tags.
@@ -222,7 +222,7 @@ extends: string
 pattern: '^(P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?)?$'
 ```
 
-A lead time of a [mode](flow-model.md#mode): an ISO 8601 duration, `PnYnMnWnDTnHnMnS` such as `P2D` or `PT4H30M`, the pattern of the `duration` scalar type of `mcl:core`, or the empty string when the lead time is unknown. An unset string is empty, so the empty string is allowed, as for `country_code`.
+A lead time of a [route](flow-model.md#route): an ISO 8601 duration, `PnYnMnWnDTnHnMnS` such as `P2D` or `PT4H30M`, the pattern of the `duration` scalar type of `mcl:core`, or the empty string when the lead time is unknown. An unset string is empty, so the empty string is allowed, as for `country_code`.
 
 ## Write actions
 
@@ -243,18 +243,18 @@ Each schema names the business action that takes the place of a generated CRUD o
 | `transformation` | `scflow/create_transformation` | generated | `scflow/delete_transformation` |
 | `transformation_line` | `scflow/connect_transformation_line` | generated | generated |
 | `conversion` | `scflow/create_conversion` | `scflow/update_conversion` | `scflow/delete_conversion` |
-| `mode_type` | `scflow/create_mode_type` | generated | `scflow/delete_mode_type` |
-| `mode` | `scflow/create_mode` | `scflow/update_mode` | `scflow/delete_mode` |
-| `mode_stop` | `scflow/add_mode_stop` | `scflow/update_mode_stop` | `scflow/remove_mode_stop` |
+| `mode` | `scflow/create_mode` | generated | `scflow/delete_mode` |
+| `route` | `scflow/create_route` | `scflow/update_route` | `scflow/delete_route` |
+| `route_stop` | `scflow/add_route_stop` | `scflow/update_route_stop` | `scflow/remove_route_stop` |
 | `scope` | `scflow/create_scope` | generated | `scflow/delete_scope` |
 
-The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item of a flow is set once and never changes. The `mode` of a `flow` is `updated_by` `scflow/set_flow_mode`, which checks that the mode serves the flow (see [Mode Rules Checked By Actions](implementation.md#mode-rules-checked-by-actions)). The actions of `mode_stop` number the stops of a mode from 1, with no gap. Deleting an actor deletes its stops and may leave a gap, which the next action on the stops of the mode closes; a gap changes no order.
+The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item of a flow is set once and never changes. The `route` of a `flow` is `updated_by` `scflow/set_flow_route`, which checks that the route serves the flow (see [Route Rules Checked By Actions](implementation.md#route-rules-checked-by-actions)). The actions of `route_stop` number the stops of a route from 1, with no gap. Deleting an actor deletes its stops and may leave a gap, which the next action on the stops of the route closes; a gap changes no order.
 
 ## Deletion
 
 *Rule.*
 
-Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type`, the `location` of an `actor` and the `mode` of a `flow` have no `on_delete`, so they are cleared when their target is deleted: deleting a mode keeps its flows, which travel on no mode afterwards. The stops of a mode go with it silently, and the stops at an actor are confirmed with the actor.
+Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type`, the `location` of an `actor` and the `route` of a `flow` have no `on_delete`, so they are cleared when their target is deleted: deleting a route keeps its flows, which travel on no route afterwards. The stops of a route go with it silently, and the stops at an actor are confirmed with the actor.
 
 ## Names
 
@@ -266,17 +266,17 @@ An instance has a generated id that no interface shows; a person, a script or an
 | --- | --- | --- |
 | `actor` | `string` | `[parent_actor, scope]`: the parent actor, else the scope of the actor, else the dataset |
 | `transformation` | `string` | `[actor]`: the actor that executes it |
-| `item`, `mode`, `location` | `string` | `[]`: the dataset |
-| `actor_type`, `item_type`, `mode_type`, `transformation_type`, `scope` | `localized_string` | `[]`: the dataset |
+| `item`, `route`, `location` | `string` | `[]`: the dataset |
+| `actor_type`, `item_type`, `mode`, `transformation_type`, `scope` | `localized_string` | `[]`: the dataset |
 
-- **A plain `string`** is the name of an instance that is the same for every stakeholder: an actor, an item, a mode, a transformation, a location. It is also where a user puts a code, such as a site code or a SKU; what else there is to say goes in the description.
+- **A plain `string`** is the name of an instance that is the same for every stakeholder: an actor, an item, a route, a transformation, a location. It is also where a user puts a code, such as a site code or a SKU; what else there is to say goes in the description.
 - **A `localized_string`** is the name of a vocabulary that a reader wants in their language: the types and the scopes. An action takes a plain string, which it stores in the source language of the dataset, or a map of language to text.
 - **Descriptions** stay `localized_markdown`.
 - **The same name may repeat** where the real world repeats it: two plants each have a `Line 1`, two actors each have an `Assembly`. The qualified name is `France / Lyon / Line 1`; a reference is its shortest unambiguous end, `Line 1` or `Lyon / Line 1`. A name cannot contain `/`.
-- **A flow has no name.** Its source, destination, item and mode identify it; two flows with the same four values are two flows. What else there is to say goes in its description.
+- **A flow has no name.** Its source, destination, item and route identify it; two flows with the same four values are two flows. What else there is to say goes in its description.
 - **A conversion has no name.** Its actor, `from_item` and `to_item` identify it, and what else there is to say goes in its description.
 - **A transformation has a name that its author writes**, with no default: two transformations of one type would otherwise share a name, and a localized text would flow into a name that is not localized.
-- **`item_at_actor`, `mode_stop`, `transformation_line` and `note`** have no name. They are reached through their owner and the properties of their `unique` group, or by id.
+- **`item_at_actor`, `route_stop`, `transformation_line` and `note`** have no name. They are reached through their owner and the properties of their `unique` group, or by id.
 - **`shared_by_name`** is used by no schema of this module: it is reserved to the meta-model.
 
 ## annotable
@@ -438,16 +438,16 @@ checks:
     when: { item: { exists: true } }
     each: ["${this.source}", "${this.destination}"]
     exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
-  - name: mode_stops_hold_flow_ends
-    when: { mode: { exists: true } }
+  - name: route_stops_hold_flow_ends
+    when: { route: { exists: true } }
     each: ["${this.source}", "${this.destination}"]
-    exists: { schema: mode_stop, with: { mode: "${this.mode}", actor: "${each}" } }
-  - name: mode_item_domain
+    exists: { schema: route_stop, with: { route: "${this.route}", actor: "${each}" } }
+  - name: route_item_domain
     when:
       and:
-        - mode: { exists: true }
+        - route: { exists: true }
         - item: { exists: true }
-    require: { item.type.domain: { eq: "${this.mode.type.domain}" } }
+    require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
 properties:
   - name: description
     type: localized_markdown
@@ -471,14 +471,14 @@ properties:
     inverse_is_array:
   - name: bidirectional
     type: boolean
-  - name: mode
-    type: mode
-    updated_by: scflow/set_flow_mode
+  - name: route
+    type: route
+    updated_by: scflow/set_flow_route
     inverse_name: flows
     inverse_is_array:
 ```
 
-Per [Flow](flow-model.md#flow). A flow has no name (see [Names](#names)); `item` and `mode` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `mode` is cleared when its mode is deleted.
+Per [Flow](flow-model.md#flow). A flow has no name (see [Names](#names)); `item` and `route` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `route` is cleared when its route is deleted.
 
 ## item
 
@@ -657,14 +657,14 @@ properties:
 
 Per [Conversion](flow-model.md#conversion). A conversion has no name (see [Names](#names)). `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
 
-## mode_type
+## mode
 
 *Schema.*
 
 ```yaml
-name: mode_type
+name: mode
 extends: annotable
-description: A category of mode, such as road, sea, air, EDI or payment, with the one flow domain it belongs to
+description: A category of transport or exchange, such as road, sea, air, rail, EDI or payment, with the one flow domain it belongs to
 is_root:
 has_description:
 name_scope: []
@@ -678,16 +678,16 @@ properties:
     type: flow_domain
 ```
 
-Per [Mode](flow-model.md#mode) and [Typing](flow-model.md#typing). A mode type is the category; a [mode](#mode) is the instance. `modes` is generated from `mode`'s `type` relation.
+Per [Route](flow-model.md#route) and [Typing](flow-model.md#typing). A mode is the category; a [route](#route) is the instance. `routes` is generated from `route`'s `mode` relation.
 
-## mode
+## route
 
 *Schema.*
 
 ```yaml
-name: mode
+name: route
 extends: annotable
-description: How flows travel, the instance of a mode type, such as a shuttle or a round trip, with its ordered stops
+description: How flows travel, an instance of a mode, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
 is_root:
 name_scope: []
 properties:
@@ -696,11 +696,11 @@ properties:
     min_length: 1
   - name: description
     type: localized_markdown
-  - name: type
-    type: mode_type
+  - name: mode
+    type: mode
     on_delete: confirm
     mandatory:
-    inverse_name: modes
+    inverse_name: routes
     inverse_is_array:
   - name: schedule
     type: localized_string
@@ -708,22 +708,22 @@ properties:
     type: boolean
 ```
 
-Per [Mode](flow-model.md#mode). `schedule` is a free text, in one or more languages; a structured format may replace it later. `bidirectional` is `false` when the actions create a mode without it. `stops` is generated from `mode_stop`'s `mode` relation, and `flows` from `flow`'s `mode` relation. A later schema may reference other actors from a mode, such as carriers; nothing here forbids it.
+Per [Route](flow-model.md#route). `schedule` is a free text, in one or more languages; a structured format may replace it later. `bidirectional` is `false` when the actions create a route without it. `stops` is generated from `route_stop`'s `route` relation, and `flows` from `flow`'s `route` relation. A later schema may reference other actors from a route, such as carriers; nothing here forbids it.
 
-## mode_stop
+## route_stop
 
 *Schema.*
 
 ```yaml
-name: mode_stop
+name: route_stop
 extends: annotable
-description: One ordered stop of a mode at an actor, with the lead time from the previous stop
+description: One ordered stop of a route at an actor, with the lead time from the previous stop
 unique:
-  - name: mode_stop_sequence_unique
-    properties: [mode, sequence]
+  - name: route_stop_sequence_unique
+    properties: [route, sequence]
 properties:
-  - name: mode
-    type: mode
+  - name: route
+    type: route
     owner:
     inverse_name: stops
     inverse_is_array:
@@ -731,7 +731,7 @@ properties:
     type: actor
     on_delete: confirm
     mandatory:
-    inverse_name: mode_stops
+    inverse_name: route_stops
     inverse_is_array:
   - name: sequence
     type: integer
@@ -741,7 +741,7 @@ properties:
     type: lead_time
 ```
 
-Per [Mode](flow-model.md#mode). Shared with an id key. A stop is owned by its mode and deleted with it. `sequence` orders the stops of a mode, from 1; two stops of a mode never share it (`mode_stop_sequence_unique`). An actor may be the actor of several stops of one mode. `lead_time` is the [lead time](#lead_time) of the leg from the previous stop to this one, empty when unknown, and is ignored on the first stop. `reverse_lead_time` is the duration of the same leg travelled backwards, from this stop to the previous one, on a bidirectional mode; it equals `lead_time` when empty.
+Per [Route](flow-model.md#route). Shared with an id key. A stop is owned by its route and deleted with it. `sequence` orders the stops of a route, from 1; two stops of a route never share it (`route_stop_sequence_unique`). An actor may be the actor of several stops of one route. `lead_time` is the [lead time](#lead_time) of the leg from the previous stop to this one, empty when unknown, and is ignored on the first stop. `reverse_lead_time` is the duration of the same leg travelled backwards, from this stop to the previous one, on a bidirectional route; it equals `lead_time` when empty.
 
 ## scope
 

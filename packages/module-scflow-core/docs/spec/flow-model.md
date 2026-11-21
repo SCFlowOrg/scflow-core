@@ -52,25 +52,25 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 - The item's domain is among the domains of the source and of the destination (`carried_item_domain`).
 - Both ends hold the item through an [item at actor](#item-at-actor): what leaves the source and what reaches the destination is held there (`flow_ends_hold_item`).
 - Its `bidirectional` flag is a boolean, `false` by default. When `true`, the item may move in both directions; when `false`, only from source to destination.
-- It has no name. Its source, destination, item and mode identify it, and what else there is to say goes in its description; see [Names](schemas.md#names).
-- Its `mode` is optional: a flow travels on at most one [mode](#mode), which says how it travels. A flow keeps its `source` and `destination` on a mode: on a round trip they say where the item is loaded and unloaded.
+- It has no name. Its source, destination, item and route identify it, and what else there is to say goes in its description; see [Names](schemas.md#names).
+- Its `route` is optional: a flow travels on at most one [route](#route), which says how it travels. A flow keeps its `source` and `destination` on a route: on a round trip they say where the item is loaded and unloaded.
 
-## Mode
+## Route
 
 *Definition.*
 
-A **mode** says **how** flows travel, where a [flow](#flow) says **what** moves: a shuttle between two plants, a weekly round trip of a truck, an EDI link, a payment term. `mode` names the instance; its category, such as road, sea, air, rail, EDI or payment, is its `mode_type`. In everyday logistics "mode" often names the category: in SCFLOW the category is always the mode type.
+A **route** says **how** flows travel, where a [flow](#flow) says **what** moves: a shuttle between two plants, a weekly round trip of a truck, an EDI link, a payment term. A **mode** is the category of transport or exchange: road, sea, air, rail, EDI, payment. A **route** is an instance that serves ordered stops with a schedule and lead times, and it has exactly one mode. In everyday logistics "mode" is the category and "route" the instance, and SCFLOW keeps both words in that sense.
 
-- Its `mode_type` is mandatory and gives its [domain](#flow-domain), exactly one, as an `item_type` does: a mode carries one domain.
+- Its `mode` is mandatory and gives its [domain](#flow-domain), exactly one, as an `item_type` does: a route carries one domain.
 - It has a name, a description and a `schedule`, a free text in one or more languages such as "every Monday" or "daily at 6:00". The format of a structured schedule is left open.
-- It owns its ordered **stops**. A stop is an [actor](#actor), a `sequence` and the `lead_time` from the previous stop, an ISO 8601 duration such as `P2D`, unknown when empty. A point-to-point mode has two stops; a round trip has more, and an actor may appear at several stops, so a round trip that returns to its start repeats it last (A, B, C, A). A stop may be the end of no flow, such as a transit hub, or a truck depot where a round trip starts and ends. Two consecutive stops make a **leg**.
+- It owns its ordered **stops**. A stop is an [actor](#actor), a `sequence` and the `lead_time` from the previous stop, an ISO 8601 duration such as `P2D`, unknown when empty. A point-to-point route has two stops; a round trip has more, and an actor may appear at several stops, so a round trip that returns to its start repeats it last (A, B, C, A). A stop may be the end of no flow, such as a transit hub, or a truck depot where a round trip starts and ends. Two consecutive stops make a **leg**.
 - Its `bidirectional` flag, `false` by default, says that its stops are served in both orders, such as a shuttle between two plants. Each leg then has a lead time in each direction: the reverse lead time of a stop, from it back to the previous stop, equals its lead time unless given.
-- A flow with a mode has its source and destination among the stops of the mode (`mode_stops_hold_flow_ends`).
-- The domain of the item of a flow with a mode is the domain of the mode type (`mode_item_domain`).
-- The mode **serves** the flow (`mode_serves_flow`): a stop of the source comes before a stop of the destination, unless the mode is bidirectional. A [bidirectional](#flow) flow is served in both directions: the mode is bidirectional, or its stops also hold a stop of the destination before a stop of the source, as a round trip A, B, A does.
-- A flow never gets a mode implicitly: creating a flow creates no mode. A mode is created on its own, or from given flows that share their source and destination.
+- A flow with a route has its source and destination among the stops of the route (`route_stops_hold_flow_ends`).
+- The domain of the item of a flow with a route is the domain of the mode (`route_item_domain`).
+- The route **serves** the flow (`route_serves_flow`): a stop of the source comes before a stop of the destination, unless the route is bidirectional. A [bidirectional](#flow) flow is served in both directions: the route is bidirectional, or its stops also hold a stop of the destination before a stop of the source, as a round trip A, B, A does.
+- A flow never gets a route implicitly: creating a flow creates no route. A route is created on its own, or from given flows that share their source and destination.
 
-The **lead time of a flow** on its mode is derived, never stored: the sum of the lead times of the legs from a stop of its source to a stop of its destination, along the first such path in the order of the stops. On a bidirectional mode, when no stop of the destination follows a stop of the source, the path runs backwards through the reverse lead times. A bidirectional flow has a lead time in each direction. It is unknown when a leg of the path has no lead time. See [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow).
+The **lead time of a flow** on its route is derived, never stored: the sum of the lead times of the legs from a stop of its source to a stop of its destination, along the first such path in the order of the stops. On a bidirectional route, when no stop of the destination follows a stop of the source, the path runs backwards through the reverse lead times. A bidirectional flow has a lead time in each direction. It is unknown when a leg of the path has no lead time. See [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow).
 
 ## Item
 
@@ -87,9 +87,9 @@ At [scoping granularity](why-modelling-flows.md#scoping-granularity), an item is
 
 *Concept.*
 
-Every [actor](#actor), [item](#item), [transformation](#transformation) and [mode](#mode) has a type, instance of `actor_type`, `item_type`, `transformation_type` or `mode_type` respectively. The type is mandatory and can change.
+Every [actor](#actor), [item](#item) and [transformation](#transformation) has a type, instance of `actor_type`, `item_type` or `transformation_type` respectively, and a [route](#route) has a `mode`, instance of `mode`. The type, and the mode of a route, is mandatory and can change.
 
-A type is data: an instance with a name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type` and `mode_type`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A [flow](#flow) has neither a type nor a domain. A transformation has no domain either: the domain of each item it consumes or produces comes from that item.
+A type, like a mode, is data: an instance with a name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type` and `mode`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A [flow](#flow) has neither a type nor a domain. A transformation has no domain either: the domain of each item it consumes or produces comes from that item.
 
 An `actor_type` can name a `default_scope`: the [scope](#scope) given to an actor created with that type. It is optional, and an explicit scope overrides it.
 
@@ -188,10 +188,10 @@ erDiagram
     SCOPE |o--o{ ACTOR_TYPE : "default scope of"
     LOCATION |o--o{ ACTOR : "locates"
     ACTOR |o--o{ ACTOR : "contains"
-    MODE_TYPE ||--o{ MODE : "types"
-    MODE ||--o{ MODE_STOP : "owns"
-    ACTOR ||--o{ MODE_STOP : "stop of"
-    MODE |o--o{ FLOW : "travels on"
+    MODE ||--o{ ROUTE : "categorizes"
+    ROUTE ||--o{ ROUTE_STOP : "owns"
+    ACTOR ||--o{ ROUTE_STOP : "stop of"
+    ROUTE |o--o{ FLOW : "travels on"
 ```
 
 ## Domain Type Examples

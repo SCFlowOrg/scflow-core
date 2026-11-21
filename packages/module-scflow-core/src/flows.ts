@@ -24,10 +24,10 @@ export interface CreateFlowInput extends FlowEndsInput {
    */
   bidirectional?: boolean;
   /**
-   * Id of the mode the flow travels on; none when absent. The mode is never created here: the
-   * engine refuses a mode whose stops do not hold both ends (`mode_stops_hold_flow_ends`).
+   * Id of the route the flow travels on; none when absent. The route is never created here: the
+   * engine refuses a route whose stops do not hold both ends (`route_stops_hold_flow_ends`).
    */
-  mode?: string;
+  route?: string;
   /** Markdown description of the flow, one entry per language. The flow has none when absent. */
   description?: Record<string, string>;
   /** Tags of the flow. */
@@ -83,7 +83,7 @@ export async function createFlow(
   locator: string,
   input: CreateFlowInput,
 ): Promise<Record<string, unknown>> {
-  const { source, destination, item, bidirectional = false, mode, description, tags } = input;
+  const { source, destination, item, bidirectional = false, route, description, tags } = input;
 
   if (item !== undefined) {
     await holdItem(onDataset(mcl, locator), source, item);
@@ -98,7 +98,7 @@ export async function createFlow(
       destination,
       bidirectional,
       ...(item === undefined ? {} : { item }),
-      ...(mode === undefined ? {} : { mode }),
+      ...(route === undefined ? {} : { route }),
       ...(description === undefined ? {} : { description: { ...description } }),
       ...(tags === undefined ? {} : { tags: [...tags] }),
     },

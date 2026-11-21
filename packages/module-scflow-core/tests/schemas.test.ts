@@ -31,9 +31,9 @@ describe("SCFLOW schemas", () => {
       "transformation",
       "transformation_line",
       "conversion",
-      "mode_type",
       "mode",
-      "mode_stop",
+      "route",
+      "route_stop",
       "scope",
       "location",
     ]);
@@ -99,11 +99,11 @@ describe("SCFLOW schemas", () => {
       actor: { type: "string", scope: ["parent_actor", "scope"] },
       transformation: { type: "string", scope: ["actor"] },
       item: { type: "string", scope: [] },
-      mode: { type: "string", scope: [] },
+      route: { type: "string", scope: [] },
       location: { type: "string", scope: [] },
       actor_type: { type: "localized_string", scope: [] },
       item_type: { type: "localized_string", scope: [] },
-      mode_type: { type: "localized_string", scope: [] },
+      mode: { type: "localized_string", scope: [] },
       transformation_type: { type: "localized_string", scope: [] },
       scope: { type: "localized_string", scope: [] },
     };
@@ -782,7 +782,7 @@ describe("SCFLOW schemas", () => {
     expect(schema.properties.find((p) => p.name === "bidirectional")).toMatchObject({ type: "boolean" });
   });
 
-  it("holds two flows with the same source, destination, item and mode: they are not merged by the model", async () => {
+  it("holds two flows with the same source, destination, item and route: they are not merged by the model", async () => {
     const { mcl, locator } = await setup();
     const type = await createSiteType(mcl, locator);
     const actors = await mcl.runCommand(locator, {

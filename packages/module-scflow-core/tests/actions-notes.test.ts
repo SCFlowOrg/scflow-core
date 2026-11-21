@@ -17,7 +17,7 @@ async function withEntities() {
 }
 
 describe("note actions", () => {
-  it("are declared with scoped unique ids, and only find_notes, inspect_mode and inspect_delete_impact are read actions", () => {
+  it("are declared with scoped unique ids, and only find_notes, inspect_route and inspect_delete_impact are read actions", () => {
     const notes = ACTIONS.filter((action) => /^scflow\/(add|update|remove)_note$|^scflow\/find_notes$/.test(action.id));
 
     expect(notes.map((action) => action.id).sort()).toEqual([
@@ -28,7 +28,7 @@ describe("note actions", () => {
     ]);
     expect(new Set(ACTIONS.map((action) => action.id)).size).toBe(ACTIONS.length);
     expect(ACTIONS.filter((action) => action.kind === "read").map((action) => action.id)).toEqual([
-      "scflow/inspect_mode",
+      "scflow/inspect_route",
       "scflow/find_notes",
       "scflow/inspect_delete_impact",
     ]);

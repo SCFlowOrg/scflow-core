@@ -19,7 +19,7 @@ Give the name as short as it stays unambiguous, and never an id that you were no
 | `item` | plain text | the dataset | `<item>` |
 | `transformation_type` | localized | the dataset | `<transformation_type>` |
 | `transformation` | plain text | the first of `actor` that is set | `<actor> / <transformation>` |
-| `mode_type` | localized | the dataset | `<mode_type>` |
-| `mode` | plain text | the dataset | `<mode>` |
+| `mode` | localized | the dataset | `<mode>` |
+| `route` | plain text | the dataset | `<route>` |
 | `scope` | localized | the dataset | `<scope>` |
 | `location` | plain text | the dataset | `<location>` |

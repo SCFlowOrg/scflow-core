@@ -24,7 +24,7 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [Flow Domain](flow-model.md#flow-domain): The four domains: physical, information, financial, service
 - [Actor](flow-model.md#actor): Where items are consumed, created, transformed, stored or queued; belongs to one or more domains
 - [Flow](flow-model.md#flow): Connects a source actor to a destination actor to move one optional item; has no domain
-- [Mode](flow-model.md#mode): How flows travel: the instance, with a mode type, ordered stops, a schedule and lead times; optional on a flow
+- [Route](flow-model.md#route): How flows travel: the instance, with a mode, ordered stops, a schedule and lead times; optional on a flow
 - [Item](flow-model.md#item): What moves on a flow and is held at an actor; exactly one domain; a family at scoping granularity
 - [Typing](flow-model.md#typing): Every actor, item and transformation has a mandatory type, which can change and carries its description and, except for a transformation, its domains
 - [Item At Actor](flow-model.md#item-at-actor): An item held at an actor: inventory, waiting queue, cash, work in progress
@@ -59,9 +59,9 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [transformation](schemas.md#transformation): A transformation of consumed items into produced items at an actor
 - [transformation_line](schemas.md#transformation_line): One item consumed or produced by a transformation
 - [conversion](schemas.md#conversion): A conversion of one item into another item at an actor
-- [mode_type](schemas.md#mode_type): A category of mode, such as road, sea or EDI, with the one flow domain it belongs to
-- [mode](schemas.md#mode): How flows travel, the instance: a type, a schedule and the bidirectional flag
-- [mode_stop](schemas.md#mode_stop): One ordered stop of a mode, at an actor, with the lead time from the previous stop
+- [mode](schemas.md#mode): A category of transport or exchange, such as road, sea or EDI, with the one flow domain it belongs to
+- [route](schemas.md#route): How flows travel, an instance of a mode: a mode, a schedule and the bidirectional flag
+- [route_stop](schemas.md#route_stop): One ordered stop of a route, at an actor, with the lead time from the previous stop
 - [scope](schemas.md#scope): A flat grouping of actors, a swim lane of the graph
 - [location](schemas.md#location): A geographic place or site where actors operate
 
@@ -71,8 +71,8 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin installs the module `scflow:core` in its environment.
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
 - [Network Rules](implementation.md#network-rules): The thirteen rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`
-- [Mode Rules Checked By Actions](implementation.md#mode-rules-checked-by-actions): `mode_serves_flow` cannot be declared, so the actions that can break it check it; a stop that ends no flow, such as a depot, is a normal case listed by inspect_mode
-- [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow): leadTimeOnMode derives the lead time of a flow from the legs of its mode, summing ISO 8601 durations component by component
+- [Route Rules Checked By Actions](implementation.md#route-rules-checked-by-actions): `route_serves_flow` cannot be declared, so the actions that can break it check it; a stop that ends no flow, such as a depot, is a normal case listed by inspect_route
+- [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow): leadTimeOnRoute derives the lead time of a flow from the legs of its route, summing ISO 8601 durations component by component
 - [Network Check](implementation.md#network-check): The engine refuses a breach of a network rule at the end of any transaction; there is no separate check
 - [Common Flow Domains And Flow Creation](implementation.md#common-flow-domains-and-flow-creation): getCommonFlowDomains lists the flow domains common to two actors, and createFlow creates one flow between them
 - [Actor Creation](implementation.md#actor-creation): createActor creates an actor and gives it the default scope of its type when no scope is given

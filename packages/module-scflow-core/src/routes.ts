@@ -1,4 +1,4 @@
-/** One stop of a mode, as {@link leadTimeOnMode} reads it. */
+/** One stop of a route, as {@link leadTimeOnRoute} reads it. */
 export interface StopInput {
   /** Id of the actor of the stop. */
   actor: string;
@@ -8,8 +8,8 @@ export interface StopInput {
   reverse_lead_time?: string | null;
 }
 
-/** A path between two stops of a mode, found by {@link leadTimeOnMode}. */
-export interface ModePath {
+/** A path between two stops of a route, found by {@link leadTimeOnRoute}. */
+export interface RoutePath {
   /** `forward` follows the order of the stops, `reverse` goes against it. */
   direction: "forward" | "reverse";
   /** Index of the stop the path starts from, in the list of stops. */
@@ -21,7 +21,7 @@ export interface ModePath {
 }
 
 /**
- * Finds the path of a mode from a stop of the actor `from` to a stop of the actor `to`, and sums
+ * Finds the path of a route from a stop of the actor `from` to a stop of the actor `to`, and sums
  * the lead times of its legs.
  *
  * The forward path starts at the first stop of `from` that a later stop of `to` follows, and ends
@@ -29,18 +29,18 @@ export interface ModePath {
  * is the forward path of the stops taken in reverse order, and sums the reverse lead times, each
  * defaulting to the lead time of its stop.
  *
- * @param stops The stops of one mode, in the order of their `sequence`.
+ * @param stops The stops of one route, in the order of their `sequence`.
  * @param from Id of the actor the path starts from.
  * @param to Id of the actor the path ends at.
- * @param bidirectional Whether the mode serves its stops in both orders.
- * @returns The path, or `undefined` when the mode has none from `from` to `to`.
+ * @param bidirectional Whether the route serves its stops in both orders.
+ * @returns The path, or `undefined` when the route has none from `from` to `to`.
  */
-export function leadTimeOnMode(
+export function leadTimeOnRoute(
   stops: readonly StopInput[],
   from: string,
   to: string,
   bidirectional: boolean,
-): ModePath | undefined {
+): RoutePath | undefined {
   for (let i = 0; i < stops.length; i += 1) {
     if (stops[i].actor !== from) continue;
     for (let j = i + 1; j < stops.length; j += 1) {

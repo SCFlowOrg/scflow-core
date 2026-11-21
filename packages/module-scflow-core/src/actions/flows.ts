@@ -2,7 +2,7 @@ import { type Instance } from "./refs.js";
 import { cascadeParam, type ScflowActionDefinition, localizedTextParam, refParam, tagsParam, unique } from "./params.js";
 import { createFlow, setFlowItem } from "../flows.js";
 import { localizedText } from "./text.js";
-import { checkModeServesFlows } from "./modes.js";
+import { checkRouteServesFlows } from "./routes.js";
 
 /** Parameters of `scflow/create_flow`. */
 export interface CreateFlowParams {
@@ -10,7 +10,7 @@ export interface CreateFlowParams {
   destination: string;
   item?: string;
   bidirectional?: boolean;
-  mode?: string;
+  route?: string;
   description?: string | Record<string, string>;
   tags?: string[];
 }
@@ -36,8 +36,8 @@ export interface DeleteFlowParams {
 }
 
 /**
- * A flow as `scflow/create_flow` returns it; `item` is absent when it carries none and `mode` when it travels on none.
- * A flow has no name: its source, destination, item and mode identify it.
+ * A flow as `scflow/create_flow` returns it; `item` is absent when it carries none and `route` when it travels on none.
+ * A flow has no name: its source, destination, item and route identify it.
  */
 export interface FlowSummary {
   id: string;
@@ -45,7 +45,7 @@ export interface FlowSummary {
   destination: string;
   item?: string;
   bidirectional: boolean;
-  mode?: string;
+  route?: string;
 }
 
 /** Creates a flow between two actors; see `scflow/create_flow` in the topic `scflow/actions`. */
@@ -56,11 +56,11 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
   description:
     "Creates a flow from a source actor to a destination actor and returns it. " +
     "Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. " +
-    "A flow has no name: its source, destination, item and mode identify it, and the description holds what else there is to say. " +
+    "A flow has no name: its source, destination, item and route identify it, and the description holds what else there is to say. " +
     "A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, " +
     "must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, " +
     "and the actors that do not hold the item yet hold it afterwards. " +
-    "Give mode to make the flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a mode.",
+    "Give route to make the flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a route.",
   parameters: {
     type: "object",
     properties: {
@@ -71,7 +71,7 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
         type: "boolean",
         description: "Whether the flow carries items in both directions; false when omitted.",
       },
-      mode: refParam("mode", "Id or name of the mode the flow travels on; none when omitted."),
+      route: refParam("route", "Id or name of the route the flow travels on; none when omitted."),
       description: localizedTextParam("Markdown description of the flow."),
       tags: tagsParam("Tags of the flow."),
     },
@@ -88,11 +88,11 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
       destination: params.destination,
       ...(params.item === undefined ? {} : { item: params.item }),
       ...(bidirectional === undefined ? {} : { bidirectional }),
-      ...(params.mode === undefined ? {} : { mode: params.mode }),
+      ...(params.route === undefined ? {} : { route: params.route }),
       ...(description === undefined ? {} : { description }),
       ...(tags === undefined ? {} : { tags }),
     });
-    if (params.mode !== undefined) await checkModeServesFlows(context, params.mode, [flow.id as string]);
+    if (params.route !== undefined) await checkRouteServesFlows(context, params.route, [flow.id as string]);
     return summarizeFlow(flow as unknown as Instance);
   },
 };
@@ -129,7 +129,7 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
   description:
     "Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change. " +
     "The source and the destination of a flow never change: delete the flow and create it again. " +
-    "Making a flow bidirectional is refused when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.",
+    "Making a flow bidirectional is refused when its route does not serve the other direction. Its route changes with scflow/set_flow_route.",
   parameters: {
     type: "object",
     properties: {
@@ -167,7 +167,7 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
       input: patch,
     });
     const flow = after[0] as unknown as Instance;
-    if (bidirectional === true && flow.mode) await checkModeServesFlows(context, flow.mode as string, [flow.id]);
+    if (bidirectional === true && flow.route) await checkRouteServesFlows(context, flow.route as string, [flow.id]);
     return summarizeFlow(flow);
   },
 };
@@ -208,8 +208,8 @@ export function summarizeFlow(flow: Instance): FlowSummary {
   if (flow.item) {
     summary.item = flow.item as string;
   }
-  if (flow.mode) {
-    summary.mode = flow.mode as string;
+  if (flow.route) {
+    summary.route = flow.route as string;
   }
   return summary;
 }

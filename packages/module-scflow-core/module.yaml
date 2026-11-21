@@ -179,16 +179,16 @@ schemas:
         when: { item: { exists: true } }
         each: ["${this.source}", "${this.destination}"]
         exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
-      - name: mode_stops_hold_flow_ends
-        when: { mode: { exists: true } }
+      - name: route_stops_hold_flow_ends
+        when: { route: { exists: true } }
         each: ["${this.source}", "${this.destination}"]
-        exists: { schema: mode_stop, with: { mode: "${this.mode}", actor: "${each}" } }
-      - name: mode_item_domain
+        exists: { schema: route_stop, with: { route: "${this.route}", actor: "${each}" } }
+      - name: route_item_domain
         when:
           and:
-            - mode: { exists: true }
+            - route: { exists: true }
             - item: { exists: true }
-        require: { item.type.domain: { eq: "${this.mode.type.domain}" } }
+        require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
     properties:
       - name: description
         type: localized_markdown
@@ -213,9 +213,9 @@ schemas:
         inverse_is_array: true
       - name: bidirectional
         type: boolean
-      - name: mode
-        type: mode
-        updated_by: scflow/set_flow_mode
+      - name: route
+        type: route
+        updated_by: scflow/set_flow_route
         inverse_name: flows
         inverse_is_array: true
 
@@ -367,11 +367,11 @@ schemas:
         mandatory: true
         constant: true
 
-  - name: mode_type
-    description: A category of mode, such as road, sea, air, EDI or payment, with the one flow domain it belongs to
+  - name: mode
+    description: A category of transport or exchange, such as road, sea, air, rail, EDI or payment, with the one flow domain it belongs to
     crud:
-      create: scflow/create_mode_type
-      delete: scflow/delete_mode_type
+      create: scflow/create_mode
+      delete: scflow/delete_mode
     extends: annotable
     is_root: true
     has_description: true
@@ -385,12 +385,12 @@ schemas:
       - name: domain
         type: flow_domain
 
-  - name: mode
-    description: How flows travel, the instance of a mode type, such as a shuttle or a round trip, with its ordered stops
+  - name: route
+    description: How flows travel, an instance of a mode, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
     crud:
-      create: scflow/create_mode
-      update: scflow/update_mode
-      delete: scflow/delete_mode
+      create: scflow/create_route
+      update: scflow/update_route
+      delete: scflow/delete_route
     extends: annotable
     is_root: true
     name_scope: []
@@ -400,30 +400,30 @@ schemas:
         min_length: 1
       - name: description
         type: localized_markdown
-      - name: type
-        type: mode_type
+      - name: mode
+        type: mode
         on_delete: confirm
         mandatory: true
-        inverse_name: modes
+        inverse_name: routes
         inverse_is_array: true
       - name: schedule
         type: localized_string
       - name: bidirectional
         type: boolean
 
-  - name: mode_stop
-    description: One ordered stop of a mode at an actor, with the lead time from the previous stop
+  - name: route_stop
+    description: One ordered stop of a route at an actor, with the lead time from the previous stop
     crud:
-      create: scflow/add_mode_stop
-      update: scflow/update_mode_stop
-      delete: scflow/remove_mode_stop
+      create: scflow/add_route_stop
+      update: scflow/update_route_stop
+      delete: scflow/remove_route_stop
     extends: annotable
     unique:
-      - name: mode_stop_sequence_unique
-        properties: [mode, sequence]
+      - name: route_stop_sequence_unique
+        properties: [route, sequence]
     properties:
-      - name: mode
-        type: mode
+      - name: route
+        type: route
         owner: true
         inverse_name: stops
         inverse_is_array: true
@@ -431,7 +431,7 @@ schemas:
         type: actor
         on_delete: confirm
         mandatory: true
-        inverse_name: mode_stops
+        inverse_name: route_stops
         inverse_is_array: true
       - name: sequence
         type: integer
@@ -536,9 +536,9 @@ actions:
     title: Delete an actor
     description: >-
       Deletes an actor. It is refused while child actors, flows, held items, transformations,
-      conversions or stops of modes reference the actor, unless cascade is true, which deletes the
+      conversions or stops of routes reference the actor, unless cascade is true, which deletes the
       child actors recursively, the flows incident to the actor and its descendants, the items they
-      hold, their transformations and conversions, the stops of modes at them, and the notes of every
+      hold, their transformations and conversions, the stops of routes at them, and the notes of every
       deleted entity.
     kind: action
     destructive: true
@@ -549,7 +549,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
-      - mode_stop
+      - route_stop
     parameters:
       type: object
       properties:
@@ -572,7 +572,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
-      - mode_stop
+      - route_stop
       - actor_type
     parameters:
       type: object
@@ -597,7 +597,7 @@ actions:
       - transformation
       - transformation_line
       - conversion
-      - mode_stop
+      - route_stop
       - scope
       - actor_type
     parameters:
@@ -649,13 +649,13 @@ actions:
     description: >-
       Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to
       true so that the flow carries items in both directions; it is one-way otherwise. A flow has
-      no name: its source, destination, item and mode identify it, and the description holds what
+      no name: its source, destination, item and route identify it, and the description holds what
       else there is to say. A flow carries at most one item, given
       by item. A flow between an actor and one of its child actors, in either direction, must carry an
       item, otherwise the action fails. The domain of the item must be among the domains of both
-      actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the
-      flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a
-      mode.
+      actors, and the actors that do not hold the item yet hold it afterwards. Give route to make the
+      flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a
+      route.
     kind: action
     writes:
       - flow
@@ -667,7 +667,7 @@ actions:
         destination: {type: string, ref: actor, description: 'Id or name of the actor the flow arrives at. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         item: {type: string, ref: item, description: 'Id or name of the item the flow carries; required between an actor and its child. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions; false when omitted.}
-        mode: {type: string, ref: mode, description: 'Id or name of the mode the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        route: {type: string, ref: route, description: 'Id or name of the route the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the flow.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the flow.}
       required:
@@ -679,7 +679,7 @@ actions:
     description: >-
       Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the
       given properties change. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused
-      when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
+      when its route does not serve the other direction. Its route changes with scflow/set_flow_route.
     kind: action
     writes:
       - flow
@@ -732,87 +732,87 @@ actions:
       required:
         - id
       additionalProperties: false
-  - id: scflow/create_mode_type
-    title: Create a mode type
+  - id: scflow/create_mode
+    title: Create a mode
     description: >-
-      Creates a mode type, the category of a mode such as road, sea, air, rail, EDI or payment, bound
-      to one flow domain (physical, information, financial or service), and returns it. A mode type is
-      the category; a mode is the instance.
+      Creates a mode, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound
+      to one flow domain (physical, information, financial or service), and returns it. A mode is
+      the category; a route is the instance.
     kind: action
     writes:
-      - mode_type
+      - mode
     parameters:
       type: object
       properties:
-        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the mode type, a string or a map of language to string.'}
-        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the modes of this type.}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode type.}
-        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode type.}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the mode, a string or a map of language to string.'}
+        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the routes of this mode.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
       required:
         - name
         - domain
       additionalProperties: false
-  - id: scflow/delete_mode_type
-    title: Delete a mode type
+  - id: scflow/delete_mode
+    title: Delete a mode
     description: >-
-      Deletes a mode type. It is refused while modes have this type, unless cascade is true, which
-      deletes those modes first, each with the cascade of scflow/delete_mode: their stops are deleted
-      and their flows are kept, on no mode.
+      Deletes a mode. It is refused while routes have this mode, unless cascade is true, which
+      deletes those routes first, each with the cascade of scflow/delete_route: their stops are deleted
+      and their flows are kept, on no route.
     kind: action
     destructive: true
     writes:
-      - mode_type
       - mode
-      - mode_stop
+      - route
+      - route_stop
       - flow
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_type, description: 'Id or name of the mode type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
-        cascade: {type: boolean, default: false, description: 'When true, also deletes the modes of this type with their stops and notes; their flows are kept.'}
+        id: {type: string, ref: mode, description: 'Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the routes of this mode with their stops and notes; their flows are kept.'}
       required:
         - id
       additionalProperties: false
-  - id: scflow/create_mode
-    title: Create a mode
+  - id: scflow/create_route
+    title: Create a route
     description: >-
-      Creates a mode, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI
-      link), of a given mode type, with no stop and no flow yet, and returns it. Add its stops with
-      scflow/add_mode_stop and assign flows with scflow/set_flow_mode. Set bidirectional to true when
+      Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI
+      link), of a given mode, with no stop and no flow yet, and returns it. Add its stops with
+      scflow/add_route_stop and assign flows with scflow/set_flow_route. Set bidirectional to true when
       the stops are served in both orders; it is false otherwise. The schedule is a free text.
     kind: action
     writes:
-      - mode
+      - route
     parameters:
       type: object
       properties:
-        name: {type: string, pattern: \S, description: 'Name of the mode, unique among the modes.'}
-        type: {type: string, ref: mode_type, description: 'Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
-        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
+        name: {type: string, pattern: \S, description: 'Name of the route, unique among the routes.'}
+        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the route.}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the route as a free text, such as every Monday.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders; false when omitted.}
-        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the route.}
       required:
         - name
-        - type
+        - mode
       additionalProperties: false
-  - id: scflow/update_mode
-    title: Update a mode
+  - id: scflow/update_route
+    title: Update a route
     description: >-
-      Changes the name, description, type, schedule, bidirectional flag or tags of a mode and returns
+      Changes the name, description, mode, schedule, bidirectional flag or tags of a route and returns
       it. Only the given properties change; null clears the description or the schedule. A change of
-      type whose domain differs from the items of the flows of the mode is refused, and so is making a
-      mode one-way while a flow needs it in the other direction.
+      mode whose domain differs from the items of the flows of the route is refused, and so is making a
+      route one-way while a flow needs it in the other direction.
     kind: action
     writes:
-      - mode
+      - route
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: 'Id or name of the mode to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
-        name: {type: string, pattern: \S, description: 'New name of the mode.'}
+        id: {type: string, ref: route, description: 'Id or name of the route to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        name: {type: string, pattern: \S, description: 'New name of the route.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New Markdown description; each given language replaces the same language, the others are kept. null removes the description.'}
-        type: {type: string, ref: mode_type, description: 'Id or name of the new mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        mode: {type: string, ref: mode, description: 'Id or name of the new mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New schedule; each given language replaces the same language, the others are kept. null removes the schedule.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders.}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
@@ -820,64 +820,64 @@ actions:
         - id
       minProperties: 2
       additionalProperties: false
-  - id: scflow/delete_mode
-    title: Delete a mode
+  - id: scflow/delete_route
+    title: Delete a route
     description: >-
-      Deletes a mode with its stops and notes, and returns its id. It is refused while flows travel on
-      the mode, unless cascade is true, which keeps those flows and clears their mode.
+      Deletes a route with its stops and notes, and returns its id. It is refused while flows travel on
+      the route, unless cascade is true, which keeps those flows and clears their route.
     kind: action
     destructive: true
     writes:
-      - mode
-      - mode_stop
+      - route
+      - route_stop
       - flow
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: 'Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
-        cascade: {type: boolean, default: false, description: 'When true, also clears the mode of the flows that travel on it; the flows are kept.'}
+        id: {type: string, ref: route, description: 'Id or name of the route to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        cascade: {type: boolean, default: false, description: 'When true, also clears the route of the flows that travel on it; the flows are kept.'}
       required:
         - id
       additionalProperties: false
-  - id: scflow/add_mode_stop
-    title: Add a stop to a mode
+  - id: scflow/add_route_stop
+    title: Add a stop to a route
     description: >-
-      Adds a stop at an actor to a mode, at the position given by sequence (1 for the first stop), or
+      Adds a stop at an actor to a route, at the position given by sequence (1 for the first stop), or
       after the last stop when sequence is omitted, and returns it. The stops from that position on
-      move one place down. An actor may have several stops on one mode, such as the start and the end
+      move one place down. An actor may have several stops on one route, such as the start and the end
       of a round trip. lead_time is the ISO 8601 duration of the leg from the previous stop, such as
       P2D or PT4H30M, and is ignored on the first stop; reverse_lead_time is the duration of the same
-      leg backwards on a bidirectional mode, equal to lead_time when omitted.
+      leg backwards on a bidirectional route, equal to lead_time when omitted.
     kind: action
     writes:
-      - mode_stop
+      - route_stop
     parameters:
       type: object
       properties:
-        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        route: {type: string, ref: route, description: 'Id or name of the route. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         actor: {type: string, ref: actor, description: 'Id or name of the actor of the stop. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         sequence: {type: integer, minimum: 1, description: 'Position of the stop, from 1; after the last stop when omitted.'}
         lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from the previous stop to this one.}
         reverse_lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from this stop back to the previous one; lead_time when omitted.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the stop.}
       required:
-        - mode
+        - route
         - actor
       additionalProperties: false
-  - id: scflow/update_mode_stop
-    title: Update a stop of a mode
+  - id: scflow/update_route_stop
+    title: Update a stop of a route
     description: >-
-      Moves a stop of a mode to another position, given by sequence, or changes its lead times or
+      Moves a stop of a route to another position, given by sequence, or changes its lead times or
       tags, and returns it. The other stops keep their order. null clears a lead time. A move after
-      which the mode no longer serves one of its flows, a stop of the source before a stop of the
+      which the route no longer serves one of its flows, a stop of the source before a stop of the
       destination, is refused.
     kind: action
     writes:
-      - mode_stop
+      - route_stop
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_stop, description: 'Id of the stop.'}
+        id: {type: string, ref: route_stop, description: 'Id of the stop.'}
         sequence: {type: integer, minimum: 1, description: 'New position of the stop, from 1, at most the number of stops.'}
         lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg from the previous stop; null clears it.}
         reverse_lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg backwards; null clears it.}
@@ -886,33 +886,33 @@ actions:
         - id
       minProperties: 2
       additionalProperties: false
-  - id: scflow/remove_mode_stop
-    title: Remove a stop from a mode
+  - id: scflow/remove_route_stop
+    title: Remove a stop from a route
     description: >-
-      Removes a stop from its mode and returns its id; the following stops move one place up. It is
-      refused when a flow of the mode needs the stop: its source or destination would no longer be a
+      Removes a stop from its route and returns its id; the following stops move one place up. It is
+      refused when a flow of the route needs the stop: its source or destination would no longer be a
       stop, or no stop of its source would come before a stop of its destination. The cascade
       parameter is accepted for consistency with the other delete actions and changes nothing.
     kind: action
     destructive: true
     writes:
-      - mode_stop
+      - route_stop
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_stop, description: 'Id of the stop to remove.'}
+        id: {type: string, ref: route_stop, description: 'Id of the stop to remove.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a stop but its notes, which are always deleted with it.'}
       required:
         - id
       additionalProperties: false
-  - id: scflow/set_flow_mode
-    title: Set the mode of a flow
+  - id: scflow/set_flow_route
+    title: Set the route of a flow
     description: >-
-      Makes a flow travel on a mode, or on none with null, and returns the flow. A flow travels on at
-      most one mode, so this replaces its mode. The source and the destination of the flow must be
-      stops of the mode, a stop of the source before a stop of the destination unless the mode is
+      Makes a flow travel on a route, or on none with null, and returns the flow. A flow travels on at
+      most one route, so this replaces its route. The source and the destination of the flow must be
+      stops of the route, a stop of the source before a stop of the destination unless the route is
       bidirectional; a bidirectional flow also needs the other direction. The item of the flow must be
-      in the domain of the mode type.
+      in the domain of the mode.
     kind: action
     writes:
       - flow
@@ -920,56 +920,56 @@ actions:
       type: object
       properties:
         id: {type: string, ref: flow, description: 'Id of the flow.'}
-        mode: {type: [string, 'null'], ref: mode, description: 'Id or name of the mode, or null to take the flow off its mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        route: {type: [string, 'null'], ref: route, description: 'Id or name of the route, or null to take the flow off its route. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - id
-        - mode
+        - route
       additionalProperties: false
-  - id: scflow/create_mode_from_flows
-    title: Create a mode from flows
+  - id: scflow/create_route_from_flows
+    title: Create a route from flows
     description: >-
-      Creates a mode of a given type for flows that share their source and their destination and
-      travel on no mode yet, with two stops, the source then the destination, makes the flows travel
-      on it and returns it. The items of the flows must be in the domain of the mode type. lead_time
-      is the ISO 8601 duration from the source to the destination. The mode is bidirectional when
+      Creates a route of a given mode for flows that share their source and their destination and
+      travel on no route yet, with two stops, the source then the destination, makes the flows travel
+      on it and returns it. The items of the flows must be in the domain of the mode. lead_time
+      is the ISO 8601 duration from the source to the destination. The route is bidirectional when
       bidirectional is true, or when it is omitted and one of the flows is bidirectional.
     kind: action
     writes:
-      - mode
-      - mode_stop
+      - route
+      - route_stop
       - flow
     parameters:
       type: object
       properties:
         flows: {type: array, minItems: 1, items: {type: string, ref: flow}, description: 'Ids of the flows, at least one.'}
-        type: {type: string, ref: mode_type, description: 'Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
-        name: {type: string, pattern: \S, description: 'Name of the mode, unique among the modes.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
-        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
-        bidirectional: {type: boolean, description: Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional.}
+        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        name: {type: string, pattern: \S, description: 'Name of the route, unique among the routes.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the route.}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the route as a free text, such as every Monday.'}
+        bidirectional: {type: boolean, description: Whether the route serves its stops in both orders; true when omitted and a flow is bidirectional.}
         lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration from the source to the destination.}
         reverse_lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration from the destination back to the source; lead_time when omitted.}
-        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the route.}
       required:
         - flows
-        - type
+        - mode
         - name
       additionalProperties: false
-  - id: scflow/inspect_mode
-    title: Inspect a mode
+  - id: scflow/inspect_route
+    title: Inspect a route
     description: >-
-      Describes a mode: its type and domain, its stops in order with their lead times, and each of its
+      Describes a route: its mode and domain, its stops in order with their lead times, and each of its
       flows with its lead time, the sum of the lead times of the legs from a stop of its source to a
       stop of its destination; a bidirectional flow also has the lead time back. A lead time is null
       when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow
-      of the mode, such as a transit hub or a truck depot where a round trip starts and ends. It
+      of the route, such as a transit hub or a truck depot where a round trip starts and ends. It
       changes nothing.
     kind: read
     writes: []
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        id: {type: string, ref: route, description: 'Id or name of the route. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - id
       additionalProperties: false
@@ -1404,7 +1404,7 @@ actions:
     description: >-
       Lists what deleting the given entities with cascade true would remove besides the entities
       themselves: actors, flows, items, held items, transformations, transformation lines,
-      conversions, stops of modes and notes, with counts. An entity reached from several targets
+      conversions, stops of routes and notes, with counts. An entity reached from several targets
       is counted once. It changes nothing.
     kind: read
     writes: []
@@ -1437,11 +1437,11 @@ skills:
       - scflow/create_transformation
       - scflow/connect_transformation_line
       - scflow/define_process
-      - scflow/create_mode_type
       - scflow/create_mode
-      - scflow/add_mode_stop
-      - scflow/set_flow_mode
-      - scflow/create_mode_from_flows
+      - scflow/create_route
+      - scflow/add_route_stop
+      - scflow/set_flow_route
+      - scflow/create_route_from_flows
       - scflow/add_note
     file: skills/image-to-model.md
   - id: scflow/physical_to_information_flows
@@ -1495,17 +1495,17 @@ docs:
       - scflow/update_flow
       - scflow/set_flow_item
       - scflow/delete_flow
-      - scflow/create_mode_type
-      - scflow/delete_mode_type
       - scflow/create_mode
-      - scflow/update_mode
       - scflow/delete_mode
-      - scflow/add_mode_stop
-      - scflow/update_mode_stop
-      - scflow/remove_mode_stop
-      - scflow/set_flow_mode
-      - scflow/create_mode_from_flows
-      - scflow/inspect_mode
+      - scflow/create_route
+      - scflow/update_route
+      - scflow/delete_route
+      - scflow/add_route_stop
+      - scflow/update_route_stop
+      - scflow/remove_route_stop
+      - scflow/set_flow_route
+      - scflow/create_route_from_flows
+      - scflow/inspect_route
       - scflow/create_item_type
       - scflow/create_item
       - scflow/update_item
