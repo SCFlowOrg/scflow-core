@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createModuleSet, MCL_CORE, NO_ROLES, processScalarTypeDescription, processSchemaDescription, readModuleManifest } from "@scfloworg/core";
-import { bumpMajorVersions, createApiSession, checkUpgrade, createUpgradeLocator, deleteDataset, dumpDataset, initDataset, queryDataset, queryUpgradeLocator, registerPersistentFormat, restoreDataset, runCommand, runScript, upgradeDataset } from "@scfloworg/core/testing";
+import { bumpMajorVersions, checkUpgrade, createUpgradeLocator, deleteDataset, dumpDataset, initDataset, queryDataset, queryUpgradeLocator, registerPersistentFormat, restoreDataset, upgradeDataset } from "@scfloworg/core/testing";
+import { idCommands, uid } from "./ids.js";
 import type { NormalizedSchema, PersistenceInterface, TransientValue } from "@scfloworg/core";
 import { datasetModuleCases } from "./datasetModules.js";
 import { facetCases } from "./facets.js";
@@ -10,6 +11,9 @@ import { procedureCases } from "./procedures.js";
 import { ruleCases } from "./rules.js";
 import { languageCases } from "./languages.js";
 import { writeCases } from "./writes.js";
+
+/** The commands of the cases write the instances they designate by name: see `idCommands`. */
+const { createApiSession, runCommand, runScript } = idCommands(["assignee", "author", "bucket", "scope", "owning_actor", "actor", "student", "course", "team", "badge"]);
 
 /**
  * A format-agnostic vitest suite, derived from packages/core/docs/spec/model-command-language.md#examples's
@@ -56,9 +60,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       input: [
         {
           name: "person",
-          shared_by_name: null,
+          name_scope: [],
           properties: [
-            { name: "name", type: "identifier" },
+            { name: "name", type: "string" },
             { name: "email", type: "email" },
           ],
         },
@@ -192,20 +196,20 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       });
       expect(tasksResult.after).toHaveLength(3);
       const [t1, t2, t3] = tasksResult.after as Record<string, unknown>[];
-      expect(t1).toMatchObject({ title: "Design the schema processing pass", status: "open", priority: 3, assignee: "alice", tags: ["design"] });
-      expect(t2).toMatchObject({ title: "Write the persistence interface", status: "open", priority: 0, assignee: "bob", tags: [] });
-      expect(t3).toMatchObject({ title: "Draft the command examples", status: "open", priority: 5, assignee: "alice", tags: ["docs", "urgent"] });
+      expect(t1).toMatchObject({ title: "Design the schema processing pass", status: "open", priority: 3, assignee: uid("alice"), tags: ["design"] });
+      expect(t2).toMatchObject({ title: "Write the persistence interface", status: "open", priority: 0, assignee: uid("bob"), tags: [] });
+      expect(t3).toMatchObject({ title: "Draft the command examples", status: "open", priority: 5, assignee: uid("alice"), tags: ["docs", "urgent"] });
       for (const t of [t1, t2, t3]) expect(typeof t.id).toBe("string");
 
       // --- Create — ownership and placeholders ---
       const commentResult = await runCommand(locator, {
         kind: "create",
         schema: "comment",
-        input: [{ task: t1.id as string, author: "bob", body: "Should this also cover scalar_type constraints?" }],
+        input: [{ task: t1.id as string, author: uid("bob"), body: "Should this also cover scalar_type constraints?" }],
       });
       expect(commentResult.after).toHaveLength(1);
       const c1 = commentResult.after[0] as Record<string, unknown>;
-      expect(c1).toMatchObject({ task: t1.id, author: "bob", body: "Should this also cover scalar_type constraints?" });
+      expect(c1).toMatchObject({ task: t1.id, author: uid("bob"), body: "Should this also cover scalar_type constraints?" });
       expect(typeof c1.created_at).toBe("string");
       expect(() => new Date(String(c1.created_at)).toISOString()).not.toThrow();
       // t1 changes only as a side effect of comment.task's inverse_name — updated-*, not before/after
@@ -275,7 +279,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       });
       expect(scriptResult.after).toHaveLength(1);
       const c2 = scriptResult.after[0] as Record<string, unknown>;
-      expect(c2).toMatchObject({ author: "bob", body: "Linked to the persistence interface work." });
+      expect(c2).toMatchObject({ author: uid("bob"), body: "Linked to the persistence interface work." });
       expect(typeof c2.task).toBe("string");
       const newTaskCheck = await runCommand(locator, { kind: "query", schema: "task", filters: { id: c2.task } });
       expect(newTaskCheck.after).toHaveLength(1);
@@ -314,12 +318,12 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       ).rejects.toMatchObject({ code: "constraint_violation" });
     });
 
-    it("rejects updating the key property", async () => {
+    it("rejects updating the id, the key of a person", async () => {
       const locator = newLocator();
       await setupTaskDemo(locator);
       await runCommand(locator, { kind: "create", schema: "person", input: [{ name: "carol", email: "carol@example.com" }] });
       await expect(
-        runCommand(locator, { kind: "update", schema: "person", filters: { name: "carol" }, input: [{ name: "dave" }] }),
+        runCommand(locator, { kind: "update", schema: "person", filters: { name: "carol" }, input: [{ id: "00000000-0000-4000-8000-000000000001" }] }),
       ).rejects.toMatchObject({ code: "constraint_violation" });
     });
 
@@ -450,9 +454,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       input: [
         {
           name: "bucket",
-          shared_by_name: null,
+          name_scope: [],
           properties: [
-            { name: "name", type: "identifier" },
+            { name: "name", type: "string" },
             { name: "title", type: "string" },
           ],
         },
@@ -463,9 +467,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       input: [
         {
           name: "item",
-          shared_by_name: null,
+          name_scope: [],
           properties: [
-            { name: "name", type: "identifier" },
+            { name: "name", type: "string" },
             { name: "bucket", type: "bucket", inverse_name: "items", inverse_is_array: null },
           ],
         },
@@ -485,13 +489,13 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       await runCommand(locator, { create: "special_item", input: [{ name: "s1", bucket: "b1" }] });
 
       const read = await runCommand(locator, { query: "bucket", filters: { name: "b1" } });
-      expect(read.after[0]).toMatchObject({ name: "b1", items: ["i1", "s1"] });
+      expect(read.after[0]).toMatchObject({ name: "b1", items: [uid("i1"), uid("s1")] });
 
       // Writing the bucket back validates its own relation targets, `items`
       // included: a generated property typed to an extending schema instead
       // of the declaring one rejects every instance of its siblings.
       const updated = await runCommand(locator, { update: "bucket", filters: { name: "b1" }, input: [{ title: "renamed" }] });
-      expect(updated.after[0]).toMatchObject({ title: "renamed", items: ["i1", "s1"] });
+      expect(updated.after[0]).toMatchObject({ title: "renamed", items: [uid("i1"), uid("s1")] });
     });
 
     it("creates two schemas that reference each other through inverse relations in one command, whatever their order", async () => {
@@ -503,17 +507,17 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
         input: [
           {
             name: "actor",
-            shared_by_name: null,
+            name_scope: [],
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "scope", type: "scope", inverse_name: "actors", inverse_is_array: null },
             ],
           },
           {
             name: "scope",
-            shared_by_name: null,
+            name_scope: [],
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "owning_actor", type: "actor", inverse_name: "inner_scopes", inverse_is_array: null },
             ],
           },
@@ -526,9 +530,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       await runCommand(locator, { create: "scope", input: [{ name: "cell", owning_actor: "press" }] });
 
       const plant = await runCommand(locator, { query: "scope", filters: { name: "plant" } });
-      expect(plant.after[0]).toMatchObject({ name: "plant", actors: ["press"] });
+      expect(plant.after[0]).toMatchObject({ name: "plant", actors: [uid("press")] });
       const press = await runCommand(locator, { query: "actor", filters: { name: "press" } });
-      expect(press.after[0]).toMatchObject({ name: "press", scope: "plant", inner_scopes: ["cell"] });
+      expect(press.after[0]).toMatchObject({ name: "press", scope: uid("plant"), inner_scopes: [uid("cell")] });
     });
   });
 
@@ -769,7 +773,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const upgradeLocator = await createUpgradeLocator(locator);
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "target", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "target", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
 
       await expect(
@@ -786,20 +790,20 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const upgradeLocator = await createUpgradeLocator(locator);
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "student", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "student", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "course", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "course", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
       await runCommand(upgradeLocator, {
         create: "schema",
         input: [
           {
             name: "enrollment",
-            shared_by_name: null,
+            name_scope: [],
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "student", type: "student", mandatory: true, inverse_name: "enrollments", inverse_is_array: true },
               { name: "course", type: "course", mandatory: true, inverse_name: "enrollments", inverse_is_array: true },
             ],
@@ -820,10 +824,10 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       });
 
       const aliceRead = await runCommand(locator, { query: "student", filters: { name: "alice" } });
-      expect(((aliceRead.after[0] as Record<string, unknown>).enrollments as string[]).slice().sort()).toEqual(["e1", "e2"]);
+      expect(((aliceRead.after[0] as Record<string, unknown>).enrollments as string[]).slice().sort()).toEqual([uid("e1"), uid("e2")].sort());
 
       const mathRead = await runCommand(locator, { query: "course", filters: { name: "math" } });
-      expect(((mathRead.after[0] as Record<string, unknown>).enrollments as string[]).slice().sort()).toEqual(["e1", "e3"]);
+      expect(((mathRead.after[0] as Record<string, unknown>).enrollments as string[]).slice().sort()).toEqual([uid("e1"), uid("e3")].sort());
     });
   });
 
@@ -839,7 +843,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const upgradeLocator = await createUpgradeLocator(locator);
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "settings", shared_by_name: null, is_root: null, singleton: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "settings", name_scope: [], is_root: null, singleton: null, properties: [{ name: "name", type: "string" }] }],
       });
       await upgradeDataset(locator, upgradeLocator);
 
@@ -1058,7 +1062,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
 
       const restoredTasks = await runCommand(restoreLocator, { kind: "query", schema: "task", filters: { title: "Dump me" } });
       expect(restoredTasks.after).toHaveLength(1);
-      expect(restoredTasks.after[0]).toMatchObject({ title: "Dump me", assignee: "wade", tags: ["dump"] });
+      expect(restoredTasks.after[0]).toMatchObject({ title: "Dump me", assignee: uid("wade"), tags: ["dump"] });
 
       // restoring into an already-used locator is rejected, the original dataset untouched
       await expect(restoreDataset(locator, dump, format)).rejects.toMatchObject({ code: "dataset_already_exists" });
@@ -1092,9 +1096,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       input: [
         {
           name: "plant",
-          shared_by_name: null,
+          name_scope: [],
           properties: [
-            { name: "name", type: "identifier" },
+            { name: "name", type: "string" },
             { name: "display_name", type: "localized_string", min_length: 1 },
             { name: "description", type: "localized_markdown" },
             { name: "synonyms", type: "{language_code: string}" },
@@ -1123,9 +1127,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       input: [
         {
           name: "flower",
-          shared_by_name: null,
+          name_scope: [],
           properties: [
-            { name: "name", type: "identifier" },
+            { name: "name", type: "string" },
             { name: "colors", type: "color", is_set: null, max_length: 2 },
           ],
         },
@@ -1180,13 +1184,13 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const upgradeLocator = await createUpgradeLocator(locator);
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "target", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "target", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
 
       await expect(
         runCommand(upgradeLocator, {
           create: "schema",
-          input: [{ name: "words", shared_by_name: null, properties: [{ name: "name", type: "identifier" }, { name: "list", type: "string", is_set: null }] }],
+          input: [{ name: "words", name_scope: [], properties: [{ name: "name", type: "string" }, { name: "list", type: "string", is_set: null }] }],
         }),
       ).rejects.toMatchObject({ code: "constraint_violation" });
       await expect(
@@ -1218,47 +1222,47 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
   });
 
   const onDeleteModel = [
-    { name: "team", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] },
+    { name: "team", name_scope: [], properties: [{ name: "name", type: "string" }] },
     {
       // mandatory, no on_delete: restrict
       name: "member",
-      shared_by_name: null,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "team", type: "team", mandatory: null },
       ],
     },
     {
       name: "badge",
-      shared_by_name: null,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "team", type: "team", mandatory: null, on_delete: "cascade" },
       ],
     },
     {
       // optional, no on_delete: set_null
       name: "note",
-      shared_by_name: null,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "team", type: "team" },
       ],
     },
     {
       name: "tag",
-      shared_by_name: null,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "team", type: "team", on_delete: "restrict" },
       ],
     },
     {
       // owned by a badge, and mandatory on the same team: restrict, unless the same delete removes it
       name: "pass",
-      shared_by_name: null,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "badge", type: "badge", mandatory: null, owner: null },
         { name: "team", type: "team", mandatory: null },
       ],
@@ -1283,7 +1287,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
 
       await expect(runCommand(locator, { delete: "team", filters: { name: "t1" } })).rejects.toMatchObject({ code: "constraint_violation" });
       expect(namesOf((await runCommand(locator, { query: "team" })).after)).toEqual(["t1"]);
-      expect((await runCommand(locator, { query: "member" })).after[0]).toMatchObject({ name: "m1", team: "t1" });
+      expect((await runCommand(locator, { query: "member" })).after[0]).toMatchObject({ name: "m1", team: uid("t1") });
 
       // once nothing references the team any more, the delete goes through
       await runCommand(locator, { delete: "member", filters: { name: "m1" } });
@@ -1343,7 +1347,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       await runCommand(upgradeLocator, { create: "schema", input: [onDeleteModel[0]] });
       const withProperty = (property: Record<string, unknown>) => ({
         create: "schema",
-        input: [{ name: "link", shared_by_name: null, properties: [{ name: "name", type: "identifier" }, property] }],
+        input: [{ name: "link", name_scope: [], properties: [{ name: "name", type: "string" }, property] }],
       });
 
       // set_null on a mandatory relation
@@ -1521,7 +1525,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const upgradeLocator = await createUpgradeLocator(locator);
       await runCommand(upgradeLocator, {
         create: "schema",
-        input: [{ name: "label", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "label", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
 
       const { source_locator, namespace, commandResult } = await queryUpgradeLocator(upgradeLocator);
@@ -1567,9 +1571,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
             input: [
               {
                 name: "card",
-                shared_by_name: null,
+                name_scope: [],
                 properties: [
-                  { name: "name", type: "identifier" },
+                  { name: "name", type: "string" },
                   { name: "display_name", type: "string" },
                   { name: "title", type: "string", default_value: "${this.display_name}" },
                 ],
@@ -1603,10 +1607,10 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
         input: [
           {
             name: "note",
-            shared_by_name: null,
+            name_scope: [],
             content: "## Notes\n",
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "body", type: "markdown", is_content: null, default_value: "${this.schema.content}" },
             ],
           },
@@ -1643,9 +1647,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
         input: [
           {
             name: "person",
-            shared_by_name: null,
+            name_scope: [],
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "email", type: "email" },
               { name: "nickname", type: "string", default_value: "unknown" },
             ],
@@ -1686,9 +1690,9 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
         input: [
           {
             name: "person",
-            shared_by_name: null,
+            name_scope: [],
             properties: [
-              { name: "name", type: "identifier" },
+              { name: "name", type: "string" },
               { name: "email", type: "email" },
               { name: "primary_task", type: "task", mandatory: null },
             ],
@@ -1712,7 +1716,7 @@ export function runConformanceSuite(impl: PersistenceInterface, formatPrefix: st
       const seedLocator = await createUpgradeLocator(locator);
       await runCommand(seedLocator, {
         create: "schema",
-        input: [{ name: "base_item", shared_by_name: null, properties: [{ name: "name", type: "identifier" }] }],
+        input: [{ name: "base_item", name_scope: [], properties: [{ name: "name", type: "string" }] }],
       });
       await runCommand(seedLocator, { create: "schema", input: [{ name: "special_item", extends: "base_item", properties: [] }] });
       await upgradeDataset(locator, seedLocator);
@@ -1752,10 +1756,10 @@ scalar_types:
     pattern: '^[A-Z]{3}$'
 schemas:
   - name: actor
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: code
         type: code
       - name: founded
@@ -1907,7 +1911,7 @@ schemas:
       expect(site?.extends).toBe("scflow.actor");
       // inherited properties keep the references of the module that declares them
       expect(site?.properties.map((p) => [p.name, p.type])).toEqual([
-        ["name", "identifier"],
+        ["name", "string"],
         ["code", "scflow.code"],
         ["founded", "date"],
         ["co2", "number"],
@@ -1963,10 +1967,10 @@ mcl: ^1.0
 ${dependencies}
 schemas:
   - name: tip
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
 actions:
   - id: guide/publish_tip
     title: Publish a tip

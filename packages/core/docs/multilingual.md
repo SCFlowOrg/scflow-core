@@ -13,10 +13,10 @@ await runCommand(upgradeLocator, {
   create: "schema",
   input: [{
     name: "plant",
-    shared_by_name: null,
+    name_scope: [],
     properties: [
-      { name: "name", type: "identifier" },
-      { name: "display_name", type: "localized_string", min_length: 1 },
+      { name: "name", type: "localized_string" },
+      { name: "latin_name", type: "localized_string", min_length: 1 },
       { name: "description", type: "localized_markdown" },
     ],
   }],
@@ -26,12 +26,15 @@ await runCommand(upgradeLocator, {
 `min_length: 1` requires at least one language. A key is a `language_code`: two
 lowercase letters, optionally followed by a region (`en`, `fr`, `pt-BR`).
 
+The `name` of a schema with `name_scope` may be a `localized_string`: it is then
+unique and resolved in every language, see [references.md](references.md).
+
 ## Create and read
 
 ```ts
 await runCommand(locator, {
   create: "plant",
-  input: [{ name: "oak", display_name: { en: "Oak", fr: "Chêne" } }],
+  input: [{ name: { en: "Oak", fr: "Chêne" } }],
 });
 ```
 
@@ -51,8 +54,8 @@ An `update` edits one language and leaves the others as they are (see "Map
 operations" in [commands.md](commands.md)):
 
 ```ts
-{ update: "plant", filters: { name: "oak" }, input: { display_name: { set: { de: "Eiche" } } } }
-{ update: "plant", filters: { name: "oak" }, input: { display_name: { remove: ["de"] } } }
+{ update: "plant", filters: { "name.en": "Oak" }, input: { name: { set: { de: "Eiche" } } } }
+{ update: "plant", filters: { "name.en": "Oak" }, input: { name: { remove: ["de"] } } }
 ```
 
 A literal map replaces every language at once.
@@ -63,8 +66,8 @@ A path reaches the entry of one language (see "Filters" in
 [commands.md](commands.md)):
 
 ```ts
-{ query: "plant", filters: { "display_name.fr": "Chêne" } }
-{ query: "plant", filters: { not: { "display_name.fr": { exists: true } } } } // no French entry yet
+{ query: "plant", filters: { "name.fr": "Chêne" } }
+{ query: "plant", filters: { not: { "name.fr": { exists: true } } } } // no French entry yet
 ```
 
 An instance with no entry for the language satisfies no predicate on that path,
@@ -75,5 +78,5 @@ An instance with no entry for the language satisfies no predicate on that path,
 The engine has no source language, no `default_value` for a localized property, and
 no detection of a translation made stale by a change of the source (see
 [limitations.md](limitations.md)). A persistent format stores a map as an ordinary
-object; what a format does with a localized `display_name` is described in its own
+object; what a format does with a localized `name` is described in its own
 README (see [formats.md](formats.md)).

@@ -167,8 +167,8 @@ function fakeFormat(): PersistenceInterface {
 
 const itemDescription = (properties: TransientObject[]): TransientObject => ({
   name: "item",
-  shared_by_name: true,
-  properties: [{ name: "name", type: "identifier" }, ...properties],
+  name_scope: [],
+  properties: [{ name: "name", type: "string" }, ...properties],
 });
 
 const SET_PROPERTIES: TransientObject[] = [
@@ -189,9 +189,9 @@ async function setup(itemProperties: TransientObject[] = SET_PROPERTIES): Promis
   const strict = processSchemaDescription(
     {
       name: "strict",
-      shared_by_name: true,
+      name_scope: [],
       properties: [
-        { name: "name", type: "identifier" },
+        { name: "name", type: "string" },
         { name: "colors", type: "color", is_set: true, min_length: 1 },
       ],
     },

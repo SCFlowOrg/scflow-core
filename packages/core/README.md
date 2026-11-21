@@ -31,6 +31,6 @@ Two engines share nothing (see
   meta-model and of MCL. The code follows it.
 - [`docs/mcl.md`](docs/mcl.md) introduces the language and indexes the usage
   documents: formats, datasets with their modules and imports, modules and their facets, model upgrade and module migrations, sessions, commands and procedures, authoring, declared rules,
-  multilingual properties, observability, model actions and limitations.
+  references by name, multilingual properties, observability, model actions and limitations.
 - The contract of each exported symbol, its errors included, is its doc comment.
   `ErrorCode` documents every error code.

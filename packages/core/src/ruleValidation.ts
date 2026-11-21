@@ -2,7 +2,7 @@ import { modelError } from "./errors.js";
 import { isFacet } from "./facets.js";
 import { checkPath, checkRuleFilter } from "./filter.js";
 import { checksOf, uniqueGroupsOf } from "./ruleDeclarations.js";
-import { findProperty } from "./schema.js";
+import { findProperty, hasNameScope, nameScopeOf } from "./schema.js";
 import { resolveType } from "./schemaProcessing.js";
 import type { TypeResolutionContext } from "./schemaProcessing.js";
 import type { NormalizedSchema, TransientValue } from "./types.js";
@@ -41,7 +41,7 @@ export function thisPath(value: TransientValue): string[] | undefined {
  */
 export function validateRules(schemas: ReadonlyMap<string, NormalizedSchema>, ctx: TypeResolutionContext): void {
   for (const schema of schemas.values()) {
-    if (!hasRules(schema) || isFacet(schema)) continue;
+    if ((!hasRules(schema) && !hasNameScope(schema)) || isFacet(schema)) continue;
     const fail = (message: string): never => {
       throw modelError("constraint_violation", `schema "${schema.name}": ${message}`);
     };
@@ -69,6 +69,13 @@ export function validateRules(schemas: ReadonlyMap<string, NormalizedSchema>, ct
           fail(`the check "${check.name}" holds ${JSON.stringify(value)}: a value is a literal, \${each}, or one placeholder naming a path on this`);
         }
       }
+    }
+    for (const relation of nameScopeOf(schema)) {
+      const prop = findProperty(schema, relation);
+      if (!prop || prop.constraints.__generated === true) return fail(`the name_scope names "${relation}", which is not a direct property of the schema`);
+      const resolved = resolveType(prop.type, ctx);
+      if (resolved.kind !== "relation" || prop.constraints.is_array === true) return fail(`the name_scope names "${relation}", which is not a single-valued relation`);
+      if (!hasNameScope(resolved.schema)) fail(`the name_scope names "${relation}", which targets "${resolved.schema.name}", a schema with no name_scope: a scope is itself referred to by name`);
     }
     for (const group of uniqueGroupsOf(schema.constraints)) {
       for (const name of group.properties) {

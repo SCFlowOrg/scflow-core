@@ -5,10 +5,10 @@ import type { AuthoredCommand, Engine, PersistenceInterface } from "@scfloworg/c
 const ITEM = {
   name: "item",
   properties: [
-    { name: "name", type: "identifier" },
+    { name: "name", type: "string" },
     { name: "label", type: "localized_string" },
   ],
-  shared_by_name: true,
+  name_scope: [],
 };
 
 /**

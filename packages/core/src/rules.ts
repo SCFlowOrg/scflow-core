@@ -9,6 +9,7 @@ import type { CheckRule } from "./ruleDeclarations.js";
 import { EACH, hasRules, thisPath } from "./ruleValidation.js";
 import type { Resolvers } from "./resolvers.js";
 import { importNamespaceOf } from "./resolvers.js";
+import { loadNamedInstances, nameBreaches, namedSchemas } from "./names.js";
 import { findProperty, keyPropertyName } from "./schema.js";
 import { derivePropertyRoles, resolveType } from "./schemaProcessing.js";
 import type { Key, NormalizedSchema, PersistenceInterface, TransientObject, TransientValue } from "./types.js";
@@ -51,7 +52,7 @@ function ruledSchemas(resolvers: Resolvers): NormalizedSchema[] {
 
 /** Whether the model declares any rule on a schema with instances: without one, nothing needs capturing. */
 export function modelHasRules(resolvers: Resolvers): boolean {
-  return ruledSchemas(resolvers).length > 0;
+  return ruledSchemas(resolvers).length > 0 || namedSchemas(resolvers).length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +138,8 @@ export async function evaluateRules(
   scope: readonly TouchedInstance[] | "all",
 ): Promise<RuleViolation[]> {
   const schemas = ruledSchemas(resolvers);
-  if (schemas.length === 0) return [];
+  const named = namedSchemas(resolvers);
+  if (schemas.length === 0 && named.length === 0) return [];
   const namespaces = resolvers.importNamespaces ?? [];
   const ctx: FilterEvalContext = { ...resolvers.ctx, impl, rest };
 
@@ -247,6 +249,17 @@ export async function evaluateRules(
           next = byKey.get(next)?.[prop.name] ?? null;
         }
       }
+    }
+  }
+
+  // The names of the schemas with `name_scope`: unique in their scope. The instances a transaction wrote
+  // are the ones at fault; a rename never breaks a sibling, and moving a scope changes no sibling set.
+  if (named.length > 0) {
+    const writtenNamed = new Set<Key>();
+    for (const schema of named) for (const key of written.get(schema.name) ?? []) writtenNamed.add(key);
+    if (scope === "all" || writtenNamed.size > 0) {
+      const breaches = nameBreaches(await loadNamedInstances(impl, rest, resolvers), scope === "all" ? "all" : writtenNamed);
+      for (const b of breaches) violations.push({ rule: "name_scope", schema: b.schema, key: b.key, message: b.message });
     }
   }
   return violations;

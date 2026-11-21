@@ -42,3 +42,6 @@ export { isModelSchema } from "./modelUpgrade.js";
 export type { UpgradeMarker, ModelDiff, ModelDiffEntry } from "./modelUpgrade.js";
 export { createLogger, isLogLevel, noopLogger } from "./logging.js";
 export type { Logger, LogLevel } from "./logging.js";
+export { loadNamedInstances, matchReference, nameBreaches, qualifiedName, referenceOf, referenceOfIn, resolveReference, resolveReferenceIn, splitReference } from "./names.js";
+export type { NamedInstance, NamedInstances, ReferenceOf, ResolveOptions } from "./names.js";
+export { NAME_SEPARATOR, hasNameScope, nameScopeOf } from "./schema.js";

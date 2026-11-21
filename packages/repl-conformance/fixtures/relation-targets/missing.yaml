@@ -4,16 +4,16 @@ seed:
   schemas:
     - name: team
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: person
       is_root: null
-      shared_by_name: true
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: team
           type: team
 
@@ -22,19 +22,19 @@ commands:
   - run: |
       kind: create
       schema: person
-      input: [{name: "p1", team: "no-such-team"}]
+      input: [{id: "b78f5766-11ec-46f9-8af3-ca654c22172a", name: "p1", team: "5b5a98a9-5618-4690-8fa6-657b81eb0ae4"}]
     expectError: unknown_relation_target
 
   - run: |
       kind: create
       schema: team
-      input: [{name: "t1"}]
+      input: [{id: "e5353879-bd69-4fdd-8b46-5dad176ff52d", name: "t1"}]
 
   - as: createdPerson
     run: |
       kind: create
       schema: person
-      input: [{name: "p2", team: "t1"}]
+      input: [{id: "c5fd961c-9f73-4a95-8a30-8050062e7a2c", name: "p2", team: "e5353879-bd69-4fdd-8b46-5dad176ff52d"}]
 
   # Same check on update, not just create.
   - run: |
@@ -42,9 +42,9 @@ commands:
       schema: person
       filters:
         name: p2
-      input: [{team: "still-no-such-team"}]
+      input: [{team: "31b0908c-12f6-46ea-8dbd-1d3270bc2cdc"}]
     expectError: unknown_relation_target
 
 expect:
   - path: createdPerson.after.0.team
-    equals: t1
+    equals: e5353879-bd69-4fdd-8b46-5dad176ff52d

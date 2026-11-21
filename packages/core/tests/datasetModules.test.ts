@@ -10,10 +10,10 @@ version: 1.0.0
 mcl: ^1.0
 schemas:
   - name: person
-    shared_by_name:
+    name_scope: []
     properties:
       - name: name
-        type: identifier
+        type: string
   - name: task
     properties:
       - name: assignee

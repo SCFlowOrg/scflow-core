@@ -28,8 +28,8 @@ The error codes of a failing command are documented on `ErrorCode`.
 - **query** never changes anything. `before` and `after` hold the same copies.
 - **create** takes one entry of `input` per instance. A property left out takes
   its `default_value`. The instance is validated as a whole before it is stored.
-  A `shared_by_name` schema requires `name` and refuses an `id`. Any other shared
-  schema takes the `id` of the entry, a canonical lowercase uuid that no instance of
+  A schema of the meta-model, `shared_by_name`, requires `name` and refuses an `id`.
+  Any other shared schema takes the `id` of the entry, a canonical lowercase uuid that no instance of
   the schema uses yet, or gets a generated uuid when the entry has none. A malformed
   or already used `id` fails with `constraint_violation`.
 - **update** gives the i-th matched instance the patch `input[i mod n]` for n
@@ -200,7 +200,9 @@ await runScript(doc, { commands: [
 
 - The result of a script is the result of its last command.
 - `as` is only needed for a value not known in advance, such as a generated
-  `id`. A `shared_by_name` instance is referenced by the name you chose.
+  `id`. A schema with `name_scope` is referred to by name: the engine
+  resolves a reference (`Line 1`, `Lyon / Line 1`) to its id, see
+  [references.md](references.md).
 - A placeholder is `${name.path}`; in a path over an array, `0` selects an entry,
   `*` maps the rest of the path over every entry, and a name alone means entry
   `0`.

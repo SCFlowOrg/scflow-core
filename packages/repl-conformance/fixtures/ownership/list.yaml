@@ -4,7 +4,7 @@ seed:
   schemas:
     - name: owner
       is_root:
-      shared_by_name:
+      name_scope: []
       properties:
         - name: name
           type: string
@@ -21,7 +21,7 @@ seed:
 commands:
   - run: |
       create: owner
-      input: [{name: "o1"}]
+      input: [{id: "a473a8c1-ab29-455e-80e1-4f2c8d0fe078", name: "o1"}]
   # Owner set directly at creation — packages/core/docs/spec/meta-model.md#ownership: "When
   # an instance is created it must have an owner." (creating without one, then
   # assigning it via a later update, isn't valid — an update only ever *moves*
@@ -29,7 +29,7 @@ commands:
   # fixture exercises below).
   - run: |
       create: ownee
-      input: [{title: "t1", owner: o1}, {title: "t2", owner: o1}, {title: "t3", owner: o1}, {title: "t4", owner: o1}]
+      input: [{title: "t1", owner: a473a8c1-ab29-455e-80e1-4f2c8d0fe078}, {title: "t2", owner: a473a8c1-ab29-455e-80e1-4f2c8d0fe078}, {title: "t3", owner: a473a8c1-ab29-455e-80e1-4f2c8d0fe078}, {title: "t4", owner: a473a8c1-ab29-455e-80e1-4f2c8d0fe078}]
   - as: removed
     run: |
       update: owner

@@ -186,7 +186,7 @@ As this schema is its own schema (it's the only one doing that) it has a `proper
 The schema `property` is described in [Property](#property).
 
 Constraints (see [Constraint](#constraints)) can be set directly on schemas and property definitions, alongside the declared properties, and are told apart by the same rule everywhere: a key not declared on the meta-schema is a constraint. Here are the schema constraints used above:
-- `shared_by_name`: meaning instances of this schema (all schemas) are not embedded, and their name is used as a key (which means the name is unique in a dataset). This implies they have a property `name`, of type `identifier` unless the schema declares it with another string type, as [`module`](#module) does.
+- `shared_by_name`: meaning instances of this schema (all schemas) are not embedded, and their name is used as a key (which means the name is unique in a dataset). This implies they have a property `name`, of type `identifier` unless the schema declares it with another string type, as [`module`](#module) does. Only the schemas of the meta-model are `shared_by_name`: see [Keys](#keys).
 - `has_description`: meaning instances of this schema have a non empty `description` property of type `markdown`, descriptions are useful for humans and AI assistants.
 
 Constraints on a schema look like properties, but actually they are not defined in the `schema` meta-schema — that's how they are identified. Constraints on a property definition look also like properties, but they are not defined in the `property` meta-schema.
@@ -396,7 +396,8 @@ The pre-built schema constraints are the following, default type is boolean.
 | `name`           | `description`                                                                                                                                                           |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `embedded`       | the instances are is embedded, by default the instances of  a schema are shared (not embedded).                                                                         |
-| `shared_by_name` | the schema is not embedded and the `name` is used as key. <br>This constraint is incompatible with `embedded`.                                                          |
+| `shared_by_name` | the schema is not embedded and the `name` is used as key. <br>Reserved to the schemas of the meta-model: the engine refuses it on any other schema, whether a module ships it or a dataset declares it with `create: schema` (a facet already refuses it). <br>This constraint is incompatible with `embedded`. |
+| `name_scope: [relation]` | the instances are referred to by their `name`, within a scope, see [Names and References](#names-and-references). <br>This constraint is incompatible with `shared_by_name`, `embedded` and `facet_of`. |
 | `singleton`      | the schema has at most one instance in the dataset; a `create` of a second instance fails with `constraint_violation`. This constraint is incompatible with `embedded`.                                                                       |
 | `is_root`        | The schema instances are not owned, the schema must be shared. See [Ownership](#ownership). <br>This constraint is incompatible with `embedded`. |
 | `constant`       | The schema instances are immutable after creation. All properties are constant.                                                                                         |
@@ -1256,14 +1257,68 @@ When a relation is created or updated a key for a valid instance of the target s
 A key is always relative to a dataset and a schema, the same string can mean different things in different datasets and/or schemas.
 
 There are two kinds of keys:
-- **name keys**: if the schema is `shared_by_name`, the key is the instance's `name`.
+- **name keys**: if the schema is `shared_by_name`, the key is the instance's `name`. Only the schemas of the meta-model are `shared_by_name`, so a name that is a key is never a business name.
 - **id keys**: if the schema is just `shared` (not `shared_by_name`), the key is an id string. 
   This schema always have an `id: string` property, the name is reserved.
   A `create` may supply the `id`: a canonical lowercase uuid that no instance of the schema uses yet. Otherwise the modeling language generates a uuid. An id never changes, so instances of different datasets never collide and a shared dataset keeps stable keys across rebuilds. An instance created before uuid ids keeps its `<schema>_<n>` id, which stays valid.
 
+The **key** is technical: it is what the engine stores and compares, the id of an instance or the `name` of a schema of the meta-model. A **reference** is what a person writes to designate an instance: its name, as short as it stays unambiguous (`Line 1`, `Lyon / Line 1`). A relation holds a key and a person writes a reference; the first is stable, the second follows the names. [Names and References](#names-and-references) says how a reference resolves to a key.
+
 For convenience a virtual property `{name key, type: string}` exists on each shared schema unifying `name` an `id`, `key` is a reserved property name and this property can be used to read the name or the id.
 The key must be given at creation of the entity, explicitly if name, implicitly by the command language,.
 the key is `constant`, it cannot be modified after creation.
+
+## Names and References
+
+*Feature.*
+
+A schema says with the constraint `name_scope` that its instances are referred to by `name`. It is an explicit declaration, so a schema is never referable by the accident of having a property called `name`. A schema without it is reached by id, or through its owner and the properties of its `unique` groups.
+
+```yaml
+name: actor
+name_scope: [parent_actor, scope]
+properties:
+  - name: name
+    type: string
+  - name: parent_actor
+    type: actor
+  - name: scope
+    type: scope
+```
+
+**The declaration.** `name_scope` is a list of names of single-valued relations of the schema, each targeting a schema that has itself a `name_scope`; the empty list, `name_scope: []`, says the scope is the dataset. The schema declares a property `name` of type `string` or `localized_string`, which the constraint makes mandatory and not empty: a `create` or an `update` that leaves it empty, or a map with an empty text, is a `constraint_violation`. A `string` name is a map with one text in everything that follows. `name_scope` is incompatible with `shared_by_name`, `embedded` and `facet_of`. A `name_scope` that is not a list of names is refused with `constraint_violation`.
+
+**With `extends`.** A schema extending one that declares `name_scope` inherits it, with its property `name`, and cannot declare another list: a family of schemas has one scope rule, so one comparison of names. Repeating the same list is accepted. A schema that extends a schema without `name_scope` may declare it, and becomes the root of a family.
+
+**The scope.** The first relation of the list that an instance has set gives its **scope**, an instance. When none is set, or the list is empty, the scope is the dataset. A list of two relations lets an instance be under a parent or, failing that, directly under a scope.
+
+**Unique names.** No two instances of a family, the schema declaring `name_scope` and its descendants through `extends`, have the same name in the same scope. The check compares every text of the map, in every language, exactly and case-sensitively after trimming the spaces around each text, so `Lyon` in French and `Lyon` in English are the same name. Two instances of schemas not related by `extends` can share a name and a scope. It is a rule like those of [Rules](#rules): it is checked at the end of the outermost transaction, on the instances the transaction wrote, and a breach is a `rule_violation` named `name_scope`, which gives the schema and the key of the instance at fault, and whose message names the schema, the instances and the scope. An imported instance counts as a sibling and is never at fault.
+
+**The separator.** A name of a schema with `name_scope` cannot contain `/`: a `create` or an `update` that writes one is a `constraint_violation` saying so. There is no escape, so no cell, macro or prompt needs one.
+
+**The qualified name.** The qualified name of an instance is the qualified name of its scope, a `/`, and its own name. The scope is an instance of a schema with `name_scope` too, so the chain goes up to a schema whose scope is the dataset: `France / Lyon / Line 1`. An instance whose scope is the dataset is qualified by its own name. The spaces around `/` are ignored, so `France/Lyon` is `France / Lyon`. Moving a scope changes the qualified name of its whole subtree; relations hold ids and do not change.
+
+**Resolution.** A reference is an id or a name. The engine resolves it to one instance, so that actions, scripts and tools share one rule:
+
+1. a text that is a uuid is an id, tried first. When no instance has it, the text is read as a name;
+2. otherwise the text is split on `/` and trimmed. It matches an instance when its segments are a **contiguous suffix** of the qualified name of that instance, each segment compared with every language of the name, exactly and case-sensitively;
+3. one match resolves the reference. `Line 1` is enough when one instance has it; `Lyon / Line 1` when two sites have one; `France / Lyon / Line 1` when two sites are called `Lyon`. The ambiguity of a parent follows the same rule, with no special case;
+4. no match is `unresolved_reference`; several are `ambiguous_reference`, whose message and `details.candidates` list the full qualified names of the candidates.
+
+A resolution may be restricted to a schema and its descendants, the schema a reference parameter targets: only its instances are candidates, while their scopes are still those of the whole dataset.
+
+```text
+France / Lyon / Line 1     France / Paris / Line 1     France / Paris / Assembly
+
+"Assembly"       -> France / Paris / Assembly
+"Line 1"         -> ambiguous: France / Lyon / Line 1, France / Paris / Line 1
+"Lyon / Line 1"  -> France / Lyon / Line 1
+"Lyon/Line 1"    -> France / Lyon / Line 1
+```
+
+**Export.** The engine gives, for an instance, the shortest suffix of its qualified name that is unambiguous in the dataset at that moment, and its full path. A name is written in the first language of a list that has a text, and any language is accepted back. A file read in a dataset that has since gained a duplicate fails with the candidates: it never guesses.
+
+**What does not change.** `unique` does not take part: it refuses maps and has no scope, and `name_scope` is not one of its groups. Persistent formats do not change either, since relations hold ids. A schema without `name_scope` is the status quo.
 
 ## Import
 

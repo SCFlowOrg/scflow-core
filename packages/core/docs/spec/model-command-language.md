@@ -85,11 +85,13 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `invalid_map_operation` | a map operation's operand is not a mapping (`set`) or not an array of keys (`remove`) |
 | `text_not_found` | a `replace` finds no occurrence of `find` |
 | `text_not_unique` | a `replace` without `all: true` finds several occurrences of `find` |
-| `constraint_violation` | an `input` value or entry is malformed, or the resulting instance breaks a constraint of its schema (`mandatory`, `pattern`, `enum`, bounds, ownership, a patched key or `constant` property, a text or map operation where none applies), or a `create` supplies an `id` that is not a canonical lowercase uuid, already exists, or targets a `shared_by_name` schema |
+| `constraint_violation` | an `input` value or entry is malformed, or the resulting instance breaks a constraint of its schema (`mandatory`, `pattern`, `enum`, bounds, ownership, a patched key or `constant` property, a text or map operation where none applies), or a `create` supplies an `id` that is not a canonical lowercase uuid, already exists, or targets a `shared_by_name` schema, or the `name` of a schema with `name_scope` is empty or contains `/` |
 | `write_outside_action` | a `create`, `update` or `delete` runs outside an action |
 | `write_not_declared` | an action writes a schema outside its `writes`, or a property of a facet of another module |
 | `invalid_parameters` | the parameters of an action break its JSON Schema, or a `ref` matches no instance or several |
-| `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance |
+| `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance; two names of one scope that are equal break the rule `name_scope` |
+| `unresolved_reference` | a [reference](meta-model.md#names-and-references) given to the engine designates no instance |
+| `ambiguous_reference` | a reference designates several instances: `details.candidates` lists their qualified names |
 | `not_upgrade_locator` | a `schema` or `scalar_type` is changed against a locator that is not an upgrade locator |
 | `upgrade_locator` | a data instance is changed against an upgrade locator |
 | `facet_not_addressable` | `schema` names a facet |
@@ -160,7 +162,7 @@ filters:
   and:
     - status: open
     - or:
-        - assignee: alice
+        - assignee: p1
         - priority:
             gte: 3
     - not:
@@ -249,7 +251,7 @@ result: "${flow.after.0}"
 
 **Chaining.** A `script_command` may set `as: identifier`, naming its `result` within the script. A later step can reference that name through a [placeholder](meta-model.md#placeholders), e.g. `${n1.after.0.id}`. This is the only mechanism for moving data from one step's result into another step's input — there is no separate "variable" construct.
 
-Naming is only needed when the value isn't already known ahead of time — a generated id, a query result, an aggregate. If the target schema is [`shared_by_name`](meta-model.md#keys), you can usually just pick the name yourself when creating the instance and reference it directly by that name in a later command's `input`, without `as` at all — e.g. creating nodes named `n1` and `n2`, then a flow with `input: [{from: n1, to: n2}]`.
+Naming is only needed when the value isn't already known ahead of time — a generated id, a query result, an aggregate. A schema of the meta-model is [`shared_by_name`](meta-model.md#keys), so a name can be picked at creation and used in a later command; every other schema is keyed by a generated id, which a script reads from the result of the create it names (`${n1.after.0.id}`). A person writes a [reference](meta-model.md#names-and-references) instead, which the actions and tools resolve to an id.
 
 **Parameters.** A procedure reads its parameters as `${params.name}`. An absent parameter resolves like a null value: a property of an `input` that receives it is left out.
 
@@ -309,7 +311,9 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Extends resolution.** If `extends` is set on a schema or a scalar type, the parent must be processed first (recursively) — though in practice this will already be true, since the parent has to exist in the module, a dependency or `mcl:core` before it can be named. The child's `properties` (for a schema) and `constraints` are layered on top of copies of the parent's: everything the child doesn't mention carries through unchanged. A child entry with the same `name` as a parent property refines that property rather than replacing it — every key the entry states wins, every key it omits comes from the parent, and their `constraints` layer the same way the schema's own do. `type` is what makes the two the same property, so an override may restate it and may leave it out, and stating a different one → `property_type_change`. Every other property description still requires a `type`. Circular `extends` → `extends_cycle`.
 
-**Facets.** A schema F with `facet_of` is processed as a [facet](meta-model.md#facet) of its target T. Each breach below is a `constraint_violation`: F has a `name` property, or is `shared_by_name`, `embedded` or `is_root`; F takes part in `extends`, or another schema extends it; a property of F is a `mandatory` relation, or carries `inverse_name`, `owns` or `owner`; T is a facet or is `embedded`; a relation of any schema targets F. A property of F named like a property of another facet of the same module on T is refused the same way, and so is a property of T or of a descendant of T named like a namespace in use. The schema of T as stored holds no property of F when F belongs to another module: the engine adds the properties of the facets of the modules a dataset uses when it reads the schema for that dataset. Their values are stored in the instance of F, never in that of T.
+**Names.** A schema with `name_scope` follows [Names and References](meta-model.md#names-and-references). Each breach is a `constraint_violation`: `name_scope` is not a list of names, or names a property that is not a single-valued relation of the schema, or a relation targeting a schema with no `name_scope`; the schema has no property `name` of type `string` or `localized_string`; it is also `shared_by_name`, `embedded` or a facet; a schema extending one with `name_scope` declares another list. `shared_by_name` on a schema that is not of the meta-model, in a module or in a dataset, is a `constraint_violation` too.
+
+**Facets.** A schema F with `facet_of` is processed as a [facet](meta-model.md#facet) of its target T. Each breach below is a `constraint_violation`: F has a `name` property, or is `shared_by_name`, `name_scope`, `embedded` or `is_root`; F takes part in `extends`, or another schema extends it; a property of F is a `mandatory` relation, or carries `inverse_name`, `owns` or `owner`; T is a facet or is `embedded`; a relation of any schema targets F. A property of F named like a property of another facet of the same module on T is refused the same way, and so is a property of T or of a descendant of T named like a namespace in use. The schema of T as stored holds no property of F when F belongs to another module: the engine adds the properties of the facets of the modules a dataset uses when it reads the schema for that dataset. Their values are stored in the instance of F, never in that of T.
 
 **Actions.** Schema processing builds the generated actions of a schema (see [Action](meta-model.md#action)) and checks the declarations, and each breach is a `constraint_violation`: a declared action has no procedure and no bundle; a bundle has no declaration; an id named by `crud` or `updated_by` is not an action of the module; a schema named by `writes` belongs to another module; a module declares the `crud` of a schema of another module; `crud` offers a create or a delete on a facet or a `singleton`, or `updated_by` is set on a `constant` property.
 
@@ -352,14 +356,14 @@ All commands below share one dataset, at `locator: tasks-demo`; it is dropped fr
 
 **A single instance shorthand.** `input` for `create`, `update` and `delete` accepts a bare object as shorthand for a one-element array — `input: {status: in_progress}` is equivalent to `input: [{status: in_progress}]`. Anything else that isn't an array (a string, a number, `null`...) is rejected with `constraint_violation`.
 
-**The example dataset.** A `person` is `shared_by_name`, so its key is its `name`. A `task` is `is_root` — the dataset owns it directly — and keyed by a generated `id`, since it is only `shared`, not `shared_by_name`. A `comment` belongs to exactly one `task` through an `owner` relation; `inverse_name` gives `task` a virtual `comments` property for free. `task_status` is a small enum [scalar type](meta-model.md#scalar-types) rather than a bare `string`, so a bad value on `create` or `update` is a `constraint_violation`, not something to check by hand.
+**The example dataset.** A `person` is referred to by its `name` (`name_scope: []`, its scope is the dataset), and keyed by a generated `id`, shown here as `p1`/`p2`. A `task` is `is_root` — the dataset owns it directly — and keyed by a generated `id` as well, since only the schemas of the meta-model are `shared_by_name`. A `comment` belongs to exactly one `task` through an `owner` relation; `inverse_name` gives `task` a virtual `comments` property for free. `task_status` is a small enum [scalar type](meta-model.md#scalar-types) rather than a bare `string`, so a bad value on `create` or `update` is a `constraint_violation`, not something to check by hand.
 
 ```yaml
 name: person
-shared_by_name:
+name_scope: []
 properties:
   - name: name
-    type: identifier
+    type: string
   - name: email
     type: email
 
@@ -402,7 +406,7 @@ properties:
     default_value: ${now()}
 ```
 
-**Create — people, then tasks.** Two `create` commands seed the dataset. `person` instances key themselves by `name`, so no `id` appears; `task` instances get a generated `id`, shown here as `t1`/`t2`/`t3` for readability. Each `task` input only sets the properties it cares about — `status`, `priority` and `tags` fall back to their `default_value` when omitted.
+**Create — people, then tasks.** Two `create` commands seed the dataset. `person` and `task` instances get a generated `id`, shown here as `p1`/`p2` and `t1`/`t2`/`t3` for readability. Each `task` input only sets the properties it cares about — `status`, `priority` and `tags` fall back to their `default_value` when omitted.
 
 ```yaml
 locator: tasks-demo
@@ -418,9 +422,11 @@ input:
 ```yaml
 before: []
 after:
-  - name: alice
+  - id: p1
+    name: alice
     email: alice@example.com
-  - name: bob
+  - id: p2
+    name: bob
     email: bob@example.com
 ```
 
@@ -430,13 +436,13 @@ schema: task
 input:
   - title: Design the schema processing pass
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
   - title: Write the persistence interface
-    assignee: bob
+    assignee: p2
   - title: Draft the command examples
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 ```
 
@@ -447,19 +453,19 @@ after:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
   - id: t2
     title: Write the persistence interface
     status: open
     priority: 0
-    assignee: bob
+    assignee: p2
     tags: []
   - id: t3
     title: Draft the command examples
     status: open
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 ```
 
@@ -470,7 +476,7 @@ kind: create
 schema: comment
 input:
   - task: t1
-    author: bob
+    author: p2
     body: "Should this also cover scalar_type constraints?"
 ```
 
@@ -479,7 +485,7 @@ before: []
 after:
   - id: c1
     task: t1
-    author: bob
+    author: p2
     body: "Should this also cover scalar_type constraints?"
     created_at: "2026-08-10T09:14:02.000Z"
 updated-before:
@@ -487,7 +493,7 @@ updated-before:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
     comments: []
 updated-after:
@@ -495,12 +501,12 @@ updated-after:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
     comments: [c1]
 ```
 
-**Query.** `query` never mutates anything — `before` and `after` are identical copies of the matched instances. This is the same `filters` shape used as the running example in [Filter](#filter): open tasks that are either assigned to `alice` or at priority 3 or above. It matches `t1` and `t3`; `t2` (assigned to `bob`, priority 0) matches neither branch of the `or`.
+**Query.** `query` never mutates anything — `before` and `after` are identical copies of the matched instances. This is the same `filters` shape used as the running example in [Filter](#filter): open tasks that are either assigned to `p1` or at priority 3 or above. It matches `t1` and `t3`; `t2` (assigned to `p2`, priority 0) matches neither branch of the `or`.
 
 ```yaml
 kind: query
@@ -509,7 +515,7 @@ filters:
   and:
     - status: open
     - or:
-        - assignee: alice
+        - assignee: p1
         - priority:
             gte: 3
 ```
@@ -520,14 +526,14 @@ before:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
     comments: [c1]
   - id: t3
     title: Draft the command examples
     status: open
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
     comments: []
 after:
@@ -535,14 +541,14 @@ after:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
     comments: [c1]
   - id: t3
     title: Draft the command examples
     status: open
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
     comments: []
 ```
@@ -566,38 +572,38 @@ before:
     title: Design the schema processing pass
     status: open
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
   - id: t2
     title: Write the persistence interface
     status: open
     priority: 0
-    assignee: bob
+    assignee: p2
     tags: []
   - id: t3
     title: Draft the command examples
     status: open
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 after:
   - id: t1
     title: Design the schema processing pass
     status: in_progress
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
   - id: t2
     title: Write the persistence interface
     status: in_progress
     priority: 1
-    assignee: bob
+    assignee: p2
     tags: []
   - id: t3
     title: Draft the command examples
     status: in_progress
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 ```
 
@@ -618,14 +624,14 @@ before:
     title: Write the persistence interface
     status: in_progress
     priority: 1
-    assignee: bob
+    assignee: p2
     tags: []
 after:
   - id: t2
     title: Write the persistence interface
     status: done
     priority: 1
-    assignee: bob
+    assignee: p2
     tags: []
 ```
 
@@ -649,14 +655,14 @@ before:
     title: Write the persistence interface
     status: done
     priority: 1
-    assignee: bob
+    assignee: p2
     tags: []
 after:
   - id: t2
     title: Write the persistence interface contract
     status: done
     priority: 1
-    assignee: bob
+    assignee: p2
     tags: []
 ```
 
@@ -676,14 +682,14 @@ before:
     title: Draft the command examples
     status: in_progress
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 after:
   - id: t3
     title: Draft the command examples (v2)
     status: in_progress
     priority: 5
-    assignee: alice
+    assignee: p1
     tags: [docs, urgent]
 ```
 
@@ -704,19 +710,19 @@ before:
     title: Design the schema processing pass
     status: in_progress
     priority: 3
-    assignee: alice
+    assignee: p1
     tags: [design]
     comments: [c1]
 after: []
 cascade-deleted:
   - id: c1
     task: t1
-    author: bob
+    author: p2
     body: "Should this also cover scalar_type constraints?"
     created_at: "2026-08-10T09:14:02.000Z"
 ```
 
-**Script — chaining a create into a create.** `task` is keyed by a generated `id`, not a name picked at creation, so there's no way to reference the new task in a later command except by naming its result: `as: new_task`, then `${new_task.after.0.id}` in the next command's `input`. This is the case [Script](#script) contrasts with `shared_by_name` schemas like `person`, where you'd just reuse the name you chose instead of naming a result at all. The script's own result is the result of its last command — the `comment` create.
+**Script — chaining a create into a create.** `task` is keyed by a generated `id`, not a name picked at creation, so there's no way to reference the new task in a later command except by naming its result: `as: new_task`, then `${new_task.after.0.id}` in the next command's `input`. The script's own result is the result of its last command — the `comment` create.
 
 ```yaml
 commands:
@@ -725,12 +731,12 @@ commands:
     schema: task
     input:
       - title: Ship the REPL
-        assignee: alice
+        assignee: p1
   - kind: create
     schema: comment
     input:
       - task: ${new_task.after.0.id}
-        author: bob
+        author: p2
         body: "Linked to the persistence interface work."
 ```
 
@@ -739,7 +745,7 @@ before: []
 after:
   - id: c2
     task: t4
-    author: bob
+    author: p2
     body: "Linked to the persistence interface work."
     created_at: "2026-08-10T09:16:40.000Z"
 updated-before:
@@ -747,7 +753,7 @@ updated-before:
     title: Ship the REPL
     status: open
     priority: 0
-    assignee: alice
+    assignee: p1
     tags: []
     comments: []
 updated-after:
@@ -755,7 +761,7 @@ updated-after:
     title: Ship the REPL
     status: open
     priority: 0
-    assignee: alice
+    assignee: p1
     tags: []
     comments: [c2]
 ```

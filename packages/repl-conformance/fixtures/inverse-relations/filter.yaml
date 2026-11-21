@@ -12,15 +12,15 @@ seed:
     # declaring schema must be created after its target exists.
     - name: owner_box
       is_root:
-      shared_by_name:
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: thing
-      shared_by_name:
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: box
           type: owner_box
           owner:
@@ -30,15 +30,15 @@ seed:
 commands:
   - run: |
       create: owner_box
-      input: [{name: b1}, {name: b2}]
+      input: [{id: 7e83ca2a-65d6-490a-809c-8570c6c905a9, name: b1}, {id: 32f28ea0-3b1b-4012-8629-d2ca63fc6665, name: b2}]
   - run: |
       create: thing
-      input: [{name: t1, box: b1}, {name: t2, box: b2}, {name: t3, box: b1}]
+      input: [{id: e5353879-bd69-4fdd-8b46-5dad176ff52d, name: t1, box: 7e83ca2a-65d6-490a-809c-8570c6c905a9}, {id: 2a5bd027-10e9-45a7-8bb9-2da876655950, name: t2, box: 32f28ea0-3b1b-4012-8629-d2ca63fc6665}, {id: 4358694e-eb09-4c67-88ae-914a10562ce7, name: t3, box: 7e83ca2a-65d6-490a-809c-8570c6c905a9}]
   - as: found
     run: |
       query: thing
       filters:
-        box: b1
+        box: 7e83ca2a-65d6-490a-809c-8570c6c905a9
 
 expect:
   - path: found.after

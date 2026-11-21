@@ -9,15 +9,15 @@ name: removing an edge from a mandatory inverse relation (without reassigning it
 seed:
   schemas:
     - name: node
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: edge
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: predecessor
           type: node
           mandatory:
@@ -32,10 +32,10 @@ seed:
 commands:
   - run: |
       create: node
-      input: [{name: n1}, {name: n2}]
+      input: [{id: 40b3eab6-3f3f-4d4f-848e-09559401c5ed, name: n1}, {id: 40243476-fcaa-48dc-84d9-eda7fde4232c, name: n2}]
   - run: |
       create: edge
-      input: [{name: e1, predecessor: n1, successor: n2}]
+      input: [{id: 84896d3e-0678-4462-8c0f-54334b8d8409, name: e1, predecessor: 40b3eab6-3f3f-4d4f-848e-09559401c5ed, successor: 40243476-fcaa-48dc-84d9-eda7fde4232c}]
 
   # Clearing n1's outgoing_edges (rather than moving e1 to a different node)
   # would leave e1.predecessor null, which "mandatory" forbids — this must
@@ -61,4 +61,4 @@ commands:
 expect:
   # Confirms the rejected update didn't partially apply — e1 still points at n1.
   - path: e1After.after.0.predecessor
-    equals: n1
+    equals: 40b3eab6-3f3f-4d4f-848e-09559401c5ed

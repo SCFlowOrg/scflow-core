@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readModuleManifest, resolveClockPlaceholders, runProcedure } from "@scfloworg/core";
-import { createApiSession, initDataset, runCommand, queryDataset } from "@scfloworg/core/testing";
+import { initDataset, queryDataset } from "@scfloworg/core/testing";
+import { idCommands, uid } from "./ids.js";
 import type { ModuleManifest, UpgradeModuleOptions } from "@scfloworg/core";
 import type { AuthoredCommand, ProcedureHost } from "@scfloworg/core";
+
+/** The commands of the cases write the instances they designate by name: see `idCommands`. */
+const { createApiSession, runCommand } = idCommands(["site", "assignee"]);
 
 /** Runs a module upgrade through a session of its own. */
 const upgradeModule = (locator: string, manifest: ModuleManifest, options?: UpgradeModuleOptions) =>
@@ -23,11 +27,11 @@ ${migrations}
 
 const v1Schemas = `
   - name: site
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: label
         type: string
       - name: legacy
@@ -77,7 +81,7 @@ export function procedureCases(formatPrefix: string, newLocator: () => string): 
       const result = await runProcedure(procedure, { name: "paris", label: "Paris" }, host(locator));
       expect(result).toMatchObject({ name: "paris", label: "Paris", legacy: "" });
       const last = await runProcedure({ commands: [{ query: "shop.stock" }] }, {}, host(locator));
-      expect((last as Row).after).toMatchObject([{ site: "paris", count: 3 }]);
+      expect((last as Row).after).toMatchObject([{ site: uid("paris"), count: 3 }]);
     });
 
     it("skips a step whose when does not hold, loops with each, and calls actions", async () => {
@@ -162,11 +166,11 @@ export function procedureCases(formatPrefix: string, newLocator: () => string): 
   describe(`declared migration conformance — ${formatPrefix}`, () => {
     const v2Schemas = `
   - name: place
-    shared_by_name:
+    name_scope: []
     is_root:
     properties:
       - name: name
-        type: identifier
+        type: string
       - name: title
         type: string
   - name: stock
@@ -196,8 +200,8 @@ migrations:
       await runCommand(locator, { create: "shop.stock", input: [{ site: "paris", count: 2 }] });
       const v2 = readModuleManifest(shopModule("2.0.0", v2Schemas, v2Migrations));
       await upgradeModule(locator, v2);
-      expect((await runCommand(locator, { query: "shop.place" })).after).toEqual([{ name: "paris", title: "Paris" }]);
-      expect((await runCommand(locator, { query: "shop.stock" })).after).toMatchObject([{ site: "paris", count: 2, unit: "piece" }]);
+      expect((await runCommand(locator, { query: "shop.place" })).after).toEqual([{ id: uid("paris"), name: "paris", title: "Paris" }]);
+      expect((await runCommand(locator, { query: "shop.stock" })).after).toMatchObject([{ site: uid("paris"), count: 2, unit: "piece" }]);
       const info = (await queryDataset(locator)) as Row;
       expect((info.modules as Row[])[0]).toMatchObject({ module: "acme:shop", version: "2.0.0" });
     });
@@ -244,7 +248,7 @@ migrations:
       );
       const error = (await upgradeModule(locator, strict).catch((e) => e)) as { code: string; details: { violations: Row[] } };
       expect(error.code).toBe("rule_violation");
-      expect(error.details.violations.map((v) => v.key)).toEqual(["paris"]);
+      expect(error.details.violations.map((v) => v.key)).toEqual([uid("paris")]);
       expect((await runCommand(locator, { query: "shop.site" })).after).toMatchObject([{ name: "paris", label: "Paris" }]);
       expect(((await queryDataset(locator)) as Row).modules as Row[]).toMatchObject([{ version: "1.0.0" }]);
     });

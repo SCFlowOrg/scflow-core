@@ -5,15 +5,15 @@ name: a one-to-one inverse relation is readable and settable, like a regular pro
 seed:
   schemas:
     - name: wand
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
     - name: wizard
-      shared_by_name: null
+      name_scope: []
       properties:
         - name: name
-          type: identifier
+          type: string
         - name: wand
           type: wand
           inverse_name: bearer
@@ -21,10 +21,10 @@ seed:
 commands:
   - run: |
       create: wand
-      input: [{name: elder-wand}, {name: invisibility-wand}]
+      input: [{id: 77458631-da20-42e3-8694-c94947149d2b, name: elder-wand}, {id: 016dd7b6-d1ae-49a5-89e2-3ec5bc81c417, name: invisibility-wand}]
   - run: |
       create: wizard
-      input: [{name: gandalf, wand: elder-wand}]
+      input: [{id: c3f63ee7-69c8-4251-865e-45cf724f6e4e, name: gandalf, wand: 77458631-da20-42e3-8694-c94947149d2b}]
 
   # Baseline: wand.bearer is never stored (command.ts's resolveVirtualProperties
   # computes it on demand via a live join over wizard's own wand property), so
@@ -51,7 +51,7 @@ commands:
       schema: wand
       filters:
         name: invisibility-wand
-      input: [{bearer: gandalf}]
+      input: [{bearer: c3f63ee7-69c8-4251-865e-45cf724f6e4e}]
 
   - as: gandalfAfter
     run: |
@@ -69,8 +69,8 @@ commands:
 
 expect:
   - path: elderWandAfterForwardSet.after.0.bearer
-    equals: gandalf
+    equals: c3f63ee7-69c8-4251-865e-45cf724f6e4e
   - path: gandalfAfter.after.0.wand
-    equals: invisibility-wand
+    equals: 016dd7b6-d1ae-49a5-89e2-3ec5bc81c417
   - path: elderWandAfter.after.0.bearer
     equals: null

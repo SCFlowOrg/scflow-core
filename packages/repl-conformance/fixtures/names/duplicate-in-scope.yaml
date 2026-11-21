@@ -1,0 +1,43 @@
+name: two instances with the same name in one scope are refused, the same name in another scope is accepted
+
+seed:
+  schemas:
+    - name: plant
+      name_scope: []
+      properties:
+        - name: name
+          type: string
+    - name: line
+      name_scope: [plant]
+      properties:
+        - name: name
+          type: string
+        - name: plant
+          type: plant
+          mandatory:
+
+commands:
+  - run: |
+      create: plant
+      input: [{id: 00000000-0000-4000-8000-0000000000a1, name: Lyon}, {id: 00000000-0000-4000-8000-0000000000a2, name: Paris}]
+  # two plants each with a Line 1
+  - run: |
+      create: line
+      input: [{name: Line 1, plant: 00000000-0000-4000-8000-0000000000a1}, {name: Line 1, plant: 00000000-0000-4000-8000-0000000000a2}]
+  # a second Line 1 in Lyon breaks the rule, and the whole command is refused
+  - run: |
+      create: line
+      input: [{name: Line 1, plant: 00000000-0000-4000-8000-0000000000a1}]
+    expectError: rule_violation
+  # a second plant named Lyon too: its scope is the dataset
+  - run: |
+      create: plant
+      input: [{name: Lyon}]
+    expectError: rule_violation
+  - as: lines
+    run: |
+      query: line
+
+expect:
+  - path: lines.after
+    length: 2
