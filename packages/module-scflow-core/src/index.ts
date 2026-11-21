@@ -4,26 +4,26 @@ export { createActor } from "./actors.js";
 export type { CreateActorInput } from "./actors.js";
 export { createFlow, getCommonFlowDomains, setFlowItem } from "./flows.js";
 export type { CreateFlowInput, FlowEndsInput, SetFlowItemInput } from "./flows.js";
-export { addDurations, DURATION_PATTERN, leadTimeOnMode } from "./modes.js";
-export type { ModePath, StopInput } from "./modes.js";
+export { addDurations, DURATION_PATTERN, leadTimeOnRoute } from "./routes.js";
+export type { RoutePath, StopInput } from "./routes.js";
 export { ACTIONS } from "./actions/index.js";
 export type {
-  AddModeStopParams,
-  CreateModeFromFlowsParams,
+  AddRouteStopParams,
+  CreateRouteFromFlowsParams,
+  CreateRouteParams,
   CreateModeParams,
-  CreateModeTypeParams,
+  DeleteRouteParams,
   DeleteModeParams,
-  DeleteModeTypeParams,
-  InspectModeParams,
-  InspectModeResult,
-  ModeFlowLeadTime,
-  ModeStopSummary,
+  InspectRouteParams,
+  InspectRouteResult,
+  RouteFlowLeadTime,
+  RouteStopSummary,
+  RouteSummary,
   ModeSummary,
-  ModeTypeSummary,
-  RemoveModeStopParams,
-  SetFlowModeParams,
-  UpdateModeParams,
-  UpdateModeStopParams,
+  RemoveRouteStopParams,
+  SetFlowRouteParams,
+  UpdateRouteParams,
+  UpdateRouteStopParams,
   ActorSummary,
   ActorTypeSummary,
   AddNoteParams,

@@ -151,7 +151,7 @@ describe("scflow/create_flow", () => {
     expect(await query("flow")).toHaveLength(0);
   });
 
-  it("has no name: the flow is identified by its source, destination, item and mode", async () => {
+  it("has no name: the flow is identified by its source, destination, item and route", async () => {
     const { run, query } = await withActors(["physical"], ["physical"]);
 
     const flow = await run<Record<string, unknown>>("scflow/create_flow", { source: "Source", destination: "Target" });

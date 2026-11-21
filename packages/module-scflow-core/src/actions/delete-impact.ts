@@ -15,7 +15,7 @@ export interface Snapshot {
   /** The `transformation_line` instances. */
   lines: Instance[];
   conversions: Instance[];
-  /** The `mode_stop` instances. */
+  /** The `route_stop` instances. */
   stops: Instance[];
   notes: Instance[];
 }
@@ -29,7 +29,7 @@ export interface DeletionSet {
   transformations: Set<string>;
   lines: Set<string>;
   conversions: Set<string>;
-  /** The stops of modes at a deleted actor. */
+  /** The stops of routes at a deleted actor. */
   stops: Set<string>;
 }
 
@@ -47,7 +47,7 @@ export async function loadSnapshot(context: ActionAccess): Promise<Snapshot> {
     transformations: await withReferences(context, "scflow.transformation", await all("scflow.transformation")),
     lines: await all("scflow.transformation_line"),
     conversions: await all("scflow.conversion"),
-    stops: await all("scflow.mode_stop"),
+    stops: await all("scflow.route_stop"),
     notes: await all("scflow.note"),
   };
 }
@@ -90,7 +90,7 @@ export function addActorTrees(snapshot: Snapshot, set: DeletionSet, actorIds: It
  * Adds to the set everything that depends on what it already holds: the flows of its actors and
  * the flows that carry its items, what its actors and items are held as, the transformations of its
  * actors, the lines of its transformations and held items, the conversions of its actors and items,
- * and the stops of modes at its actors.
+ * and the stops of routes at its actors.
  *
  * One pass is enough: each kind depends only on the kinds computed before it.
  */

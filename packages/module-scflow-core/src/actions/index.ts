@@ -4,7 +4,7 @@ import { CONVERSION_ACTIONS } from "./conversions.js";
 import { FLOW_ACTIONS } from "./flows.js";
 import { INSPECT_ACTIONS } from "./inspect.js";
 import { ITEM_ACTIONS } from "./items.js";
-import { MODE_ACTIONS } from "./modes.js";
+import { ROUTE_ACTIONS } from "./routes.js";
 import { NOTE_ACTIONS } from "./notes.js";
 import { TAG_ACTIONS } from "./tags.js";
 import { TRANSFORMATION_ACTIONS } from "./transformations.js";
@@ -22,7 +22,7 @@ export type ScflowAction = ScflowActionDefinition<any, any>;
 export const ACTIONS: readonly ScflowAction[] = [
   ...ACTOR_ACTIONS,
   ...FLOW_ACTIONS,
-  ...MODE_ACTIONS,
+  ...ROUTE_ACTIONS,
   ...ITEM_ACTIONS,
   ...TRANSFORMATION_ACTIONS,
   ...CONVERSION_ACTIONS,
@@ -75,23 +75,23 @@ export type {
   UpdateItemParams,
 } from "./items.js";
 export type {
-  AddModeStopParams,
-  CreateModeFromFlowsParams,
+  AddRouteStopParams,
+  CreateRouteFromFlowsParams,
+  CreateRouteParams,
   CreateModeParams,
-  CreateModeTypeParams,
+  DeleteRouteParams,
   DeleteModeParams,
-  DeleteModeTypeParams,
-  InspectModeParams,
-  InspectModeResult,
-  ModeFlowLeadTime,
-  ModeStopSummary,
+  InspectRouteParams,
+  InspectRouteResult,
+  RouteFlowLeadTime,
+  RouteStopSummary,
+  RouteSummary,
   ModeSummary,
-  ModeTypeSummary,
-  RemoveModeStopParams,
-  SetFlowModeParams,
-  UpdateModeParams,
-  UpdateModeStopParams,
-} from "./modes.js";
+  RemoveRouteStopParams,
+  SetFlowRouteParams,
+  UpdateRouteParams,
+  UpdateRouteStopParams,
+} from "./routes.js";
 export type {
   AddNoteParams,
   FindNotesParams,

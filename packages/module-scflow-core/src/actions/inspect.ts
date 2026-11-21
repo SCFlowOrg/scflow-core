@@ -51,8 +51,8 @@ export interface DeleteImpactResult {
     transformations: Array<{ id: string; label: string }>;
     transformationLines: number;
     conversions: Array<{ id: string; label: string }>;
-    /** The number of stops of modes at the deleted actors. */
-    modeStops: number;
+    /** The number of stops of routes at the deleted actors. */
+    routeStops: number;
     /** The notes of the targets and of every cascaded entity. */
     notes: number;
   };
@@ -64,7 +64,7 @@ export interface DeleteImpactResult {
     transformations: number;
     transformationLines: number;
     conversions: number;
-    modeStops: number;
+    routeStops: number;
     notes: number;
     total: number;
   };
@@ -79,7 +79,7 @@ export const inspectDeleteImpactAction: ScflowActionDefinition<InspectDeleteImpa
   title: "Inspect the impact of a delete",
   description:
     "Lists what deleting the given entities with cascade true would remove besides the entities themselves: actors, flows, items, " +
-    "held items, transformations, transformation lines, conversions, stops of modes and notes, with counts. An entity reached from several targets " +
+    "held items, transformations, transformation lines, conversions, stops of routes and notes, with counts. An entity reached from several targets " +
     "is counted once. It changes nothing.",
   kind: "read",
   parameters: {
@@ -253,7 +253,7 @@ function describe(
     transformations: transformations.length,
     transformationLines,
     conversions: conversions.length,
-    modeStops: set.stops.size,
+    routeStops: set.stops.size,
     notes,
     total: 0,
   };
@@ -265,12 +265,12 @@ function describe(
     counts.transformations +
     counts.transformationLines +
     counts.conversions +
-    counts.modeStops +
+    counts.routeStops +
     counts.notes;
 
   return {
     targets,
-    cascaded: { actors, flows, items, heldItems, transformations, transformationLines, conversions, modeStops: set.stops.size, notes },
+    cascaded: { actors, flows, items, heldItems, transformations, transformationLines, conversions, routeStops: set.stops.size, notes },
     counts,
     hasSideEffects: counts.total > 0,
   };

@@ -38,15 +38,15 @@ Map the diagram to the simplest supported model:
 - A flow connects actors and carries zero or one item. It has no domain field.
   Several flows may connect the same actors; preserve distinct observed arrows.
   Do not create one flow per shared domain or invent a multi-item flow/channel.
-- A mode says how flows travel: a truck shuttle, a weekly milk run, an EDI link,
-  a payment term. `mode` is the instance; its category (road, sea, air, rail,
-  EDI, payment) is a `mode_type`, with one domain, the domain of the items its
-  flows carry. A mode has ordered stops at actors, each with the lead time from
+- A route says how flows travel: a truck shuttle, a weekly milk run, an EDI link,
+  a payment term. `route` is the instance; its category (road, sea, air, rail,
+  EDI, payment) is a `mode`, with one domain, the domain of the items its
+  flows carry. A route has ordered stops at actors, each with the lead time from
   the previous stop; a round trip repeats its start as its last stop (A, B, C,
-  A). Create a mode only when the image shows how goods or messages travel,
-  such as a vehicle, a route, a schedule or a transit time shared by flows;
-  never one per flow by default. A flow travels on at most one mode, and its
-  source and destination must be stops of it, in that order unless the mode is
+  A). Create a route only when the image shows how goods or messages travel,
+  such as a vehicle, a line, a schedule or a transit time shared by flows;
+  never one per flow by default. A flow travels on at most one route, and its
+  source and destination must be stops of it, in that order unless the route is
   bidirectional.
 - A parent/child flow, in either direction, must carry an item. The item's domain
   must be supported by both actor types. Do not propose a bare parent/child flow.
@@ -67,7 +67,7 @@ Extraction hints:
   scopes and confirm directions; do not record it.
 - Arrows and verbs of movement (ships, delivers, transfers, replenishes) signal
   flows.
-- A transit time between two actors is the lead time of a stop of a mode, an
+- A transit time between two actors is the lead time of a stop of a route, an
   ISO 8601 duration such as `P2D` or `PT4H`. Keep other information with no
   matching property, such as a stock coverage, a free label
   or an assumption, as a note on the closest entity with `scflow/add_note`, or
@@ -91,9 +91,9 @@ Typical business actions include:
 - `scflow/create_item_type`, `scflow/create_item`, `scflow/hold_item`;
 - `scflow/create_flow` with its optional `item` parameter;
 - `scflow/create_conversion`;
-- `scflow/create_mode_type`, then `scflow/create_mode_from_flows` for flows
-  that share their source and destination, or `scflow/create_mode`,
-  `scflow/add_mode_stop` and `scflow/set_flow_mode` for a round trip;
+- `scflow/create_mode`, then `scflow/create_route_from_flows` for flows
+  that share their source and destination, or `scflow/create_route`,
+  `scflow/add_route_stop` and `scflow/set_flow_route` for a round trip;
 - `scflow/create_transformation_type`, `scflow/create_transformation`,
   `scflow/connect_transformation_line`, or `scflow/define_process`.
 

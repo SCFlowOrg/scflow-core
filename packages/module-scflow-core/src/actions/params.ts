@@ -86,12 +86,12 @@ const NAMED_SCHEMAS: Readonly<Record<string, boolean>> = {
   actor: false,
   item: false,
   transformation: false,
-  mode: false,
+  route: false,
   location: false,
   actor_type: true,
   item_type: true,
   transformation_type: true,
-  mode_type: true,
+  mode: true,
   scope: true,
 };
 
