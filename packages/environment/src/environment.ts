@@ -11,6 +11,7 @@ import {
   moduleDigest,
   canonicalParameters,
   checkActionWrite,
+  createReferenceOf,
   createRefResolver,
   generatedActions,
   resolveClockPlaceholders,
@@ -244,6 +245,19 @@ export interface ActionContext extends MclAccess {
   /** Runs a script on the dataset; another locator fails with `dataset_not_found`. */
   runScript(locator: string, script: AuthoredScript): Promise<CommandResult>;
   /**
+   * Resolves a reference to the key of an instance of `schema`, for a body whose
+   * schema is known only when it runs: an id, or a name as short as it stays
+   * unambiguous (see `docs/references.md` of `@scfloworg/core`). Throws
+   * `unresolved_reference` or `ambiguous_reference`, which lists the candidates.
+   */
+  resolveReference(schema: string, text: string): Promise<string>;
+  /**
+   * The reference of an instance: its name as short as it stays unambiguous,
+   * written in the source language of the dataset. The key when the schema has
+   * no name, so a result can always show what it returns.
+   */
+  referenceOf(schema: string, key: string): Promise<string>;
+  /**
    * Runs the action `id` of the same module or of a dependency, in the same
    * transaction, its parameters checked, and returns its result. Any other id
    * fails with `unknown_action`.
@@ -435,6 +449,9 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
     const refResolverOf = (current: DatasetModel | null) =>
       current ? createRefResolver(current, (command) => session.runCommand(locator, command)) : undefined;
     let resolveRef = refResolverOf(model);
+    const referenceWriterOf = (current: DatasetModel | null) =>
+      current ? createReferenceOf(current, (command) => session.runCommand(locator, command)) : undefined;
+    let referenceOf = referenceWriterOf(model);
 
     function contextOf(trace: RunTrace): ActionContext {
       const limit = limitOf(trace.action);
@@ -465,6 +482,17 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
           const result = await session.runScript(locator, script);
           trace.command(script, result);
           return result;
+        },
+        async resolveReference(schema: string, text: string) {
+          const found = resolveRef ? await resolveRef(schema, text) : { id: null };
+          if (found.id === null)
+            throw modelError("unresolved_reference", `"${text}" designates no instance of "${schema}"`, { reference: text });
+          return found.id;
+        },
+        async referenceOf(schema: string, key: string) {
+          if (!referenceOf) return key;
+          const languages = ((await session.queryDataset(locator)) as TransientObject).languages;
+          return referenceOf(schema, key, Array.isArray(languages) ? (languages as string[]) : []);
         },
         async call(id: string, params?: unknown) {
           const callee = limits.get(id);
@@ -501,6 +529,7 @@ export function createEnvironmentWith(options: EnvironmentOptions, load: ModuleL
       model = await session.datasetModel(locator);
       ({ registry, limits } = buildRegistry(modules, states, model));
       resolveRef = refResolverOf(model);
+      referenceOf = referenceWriterOf(model);
       return added;
     }
 

@@ -5,7 +5,15 @@ import type { GeneratedActionContext } from "@scfloworg/core";
  * locator of the dataset the action runs on. An `ActionContext` of
  * `@scfloworg/environment` is one.
  */
-export type ActionAccess = GeneratedActionContext;
+/** The access to the dataset that the helpers on the model need: its commands only. */
+export type DatasetAccess = GeneratedActionContext;
+
+export type ActionAccess = GeneratedActionContext & {
+  /** Resolves a reference, an id or a name, to the key of an instance of `schema`; see `resolveReference` of `ActionContext`. */
+  resolveReference(schema: string, text: string): Promise<string>;
+  /** The reference of an instance: its name as short as it stays unambiguous; its key when the schema has no name. */
+  referenceOf(schema: string, key: string): Promise<string>;
+};
 
 /** The parameters of an action, a JSON Schema object that may use the keyword `ref`. */
 export interface ActionParameters {
@@ -68,17 +76,54 @@ export function nullableLocalizedTextParam(description: string): ParamProperty {
   return { anyOf: [...LOCALIZED, { type: "null" }], description } as unknown as ParamProperty;
 }
 
+/** JSON Schema of a plain text parameter: a non-blank string. */
+export function textParam(description: string): ParamProperty {
+  return { type: "string", pattern: TEXT.pattern, description };
+}
+
+/** The schemas referred to by name (`name_scope`), with `true` when their name is a `localized_string`. */
+const NAMED_SCHEMAS: Readonly<Record<string, boolean>> = {
+  actor: false,
+  item: false,
+  transformation: false,
+  mode: false,
+  location: false,
+  actor_type: true,
+  item_type: true,
+  transformation_type: true,
+  mode_type: true,
+  scope: true,
+};
+
 /**
- * JSON Schema of a parameter that holds the id or the display name of an
- * instance of `schema`, a short name of the module. The body receives its key.
+ * The sentence added to the description of a reference to an instance of
+ * `schema`: how to write a name. Empty for a schema that is not referred to by
+ * name, whose instances are given by id.
+ */
+export function referenceHint(schema: string): string {
+  const localized = NAMED_SCHEMAS[schema];
+  if (localized === undefined) {
+    return "";
+  }
+  return (
+    " Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; " +
+    "never give an id you were not given. An ambiguity error lists the candidates to choose from." +
+    (localized ? " A localized name may be given in any language, but it is written in the source language of the project." : "")
+  );
+}
+
+/**
+ * JSON Schema of a parameter that holds the reference of an instance of
+ * `schema`, a short name of the module: an id, or its name as short as it
+ * stays unambiguous. The body receives its key.
  */
 export function refParam(schema: string, description: string): ParamProperty {
-  return { type: "string", ref: schema, description };
+  return { type: "string", ref: schema, description: description + referenceHint(schema) };
 }
 
 /** JSON Schema of a reference parameter that also accepts `null`, to clear the relation. */
 export function nullableRefParam(schema: string, description: string): ParamProperty {
-  return { type: ["string", "null"], ref: schema, description } as unknown as ParamProperty;
+  return { type: ["string", "null"], ref: schema, description: description + referenceHint(schema) } as unknown as ParamProperty;
 }
 
 /** JSON Schema of a parameter that holds a list of tags. */

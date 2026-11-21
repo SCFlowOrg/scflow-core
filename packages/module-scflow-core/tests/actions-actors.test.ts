@@ -34,9 +34,9 @@ describe("scflow/create_scope", () => {
   it("creates a scope from a plain name and returns it", async () => {
     const { run, query } = await setup();
 
-    const scope = await run("scflow/create_scope", { display_name: "Make", description: "Production lane" });
+    const scope = await run("scflow/create_scope", { name: "Make", description: "Production lane" });
 
-    expect(scope).toMatchObject({ display_name: { en: "Make" } });
+    expect(scope).toMatchObject({ name: { en: "Make" } });
     const stored = await query("scope");
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ id: scope.id, description: { en: "Production lane" } });
@@ -45,9 +45,9 @@ describe("scflow/create_scope", () => {
   it("keeps a localized name", async () => {
     const { run } = await setup();
 
-    const scope = await run("scflow/create_scope", { display_name: { en: "Make", fr: "Fabriquer" } });
+    const scope = await run("scflow/create_scope", { name: { en: "Make", fr: "Fabriquer" } });
 
-    expect(scope.display_name).toEqual({ en: "Make", fr: "Fabriquer" });
+    expect(scope.name).toEqual({ en: "Make", fr: "Fabriquer" });
   });
 
   it("refuses a missing name and writes nothing", async () => {
@@ -63,17 +63,17 @@ describe("scflow/create_actor_type", () => {
   it("defaults the domains to physical", async () => {
     const { run } = await setup();
 
-    const type = await run("scflow/create_actor_type", { display_name: "Warehouse" });
+    const type = await run("scflow/create_actor_type", { name: "Warehouse" });
 
-    expect(type).toMatchObject({ display_name: { en: "Warehouse" }, domains: ["physical"] });
+    expect(type).toMatchObject({ name: { en: "Warehouse" }, domains: ["physical"] });
   });
 
   it("takes the given domains and a default scope given by name", async () => {
     const { run, create } = await setup();
-    const deliver = await create("scope", { display_name: { en: "Deliver" } });
+    const deliver = await create("scope", { name: { en: "Deliver" } });
 
     const type = await run("scflow/create_actor_type", {
-      display_name: "Carrier",
+      name: "Carrier",
       domains: ["physical", "information"],
       default_scope: "Deliver",
     });
@@ -85,7 +85,7 @@ describe("scflow/create_actor_type", () => {
   it("refuses an unknown domain and writes nothing", async () => {
     const { run, query } = await setup();
 
-    await expect(run("scflow/create_actor_type", { display_name: "Odd", domains: ["magic"] })).rejects.toThrow(/domains/);
+    await expect(run("scflow/create_actor_type", { name: "Odd", domains: ["magic"] })).rejects.toThrow(/domains/);
 
     expect(await query("actor_type")).toHaveLength(0);
   });
@@ -93,13 +93,13 @@ describe("scflow/create_actor_type", () => {
   it("refuses an empty list of domains", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/create_actor_type", { display_name: "Odd", domains: [] })).rejects.toThrow(/domains/);
+    await expect(run("scflow/create_actor_type", { name: "Odd", domains: [] })).rejects.toThrow(/domains/);
   });
 
   it("refuses an unknown default scope and writes nothing", async () => {
     const { run, query } = await setup();
 
-    await expect(run("scflow/create_actor_type", { display_name: "Odd", default_scope: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_actor_type", { name: "Odd", default_scope: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
 
     expect(await query("actor_type")).toHaveLength(0);
   });
@@ -108,22 +108,22 @@ describe("scflow/create_actor_type", () => {
 describe("scflow/create_actor", () => {
   it("creates an actor whose type is given by name", async () => {
     const { run, create } = await setup();
-    const type = await create("actor_type", { display_name: { en: "Warehouse" }, domains: ["physical"] });
+    const type = await create("actor_type", { name: { en: "Warehouse" }, domains: ["physical"] });
 
-    const actor = await run("scflow/create_actor", { display_name: "Main warehouse", type: "Warehouse" });
+    const actor = await run("scflow/create_actor", { name: "Main warehouse", type: "Warehouse" });
 
-    expect(actor).toMatchObject({ display_name: { en: "Main warehouse" }, type });
+    expect(actor).toMatchObject({ name: "Main warehouse", type });
     expect(typeof actor.id).toBe("string");
   });
 
   it("inherits the default scope of its type and accepts a scope given by name", async () => {
     const { run, create } = await setup();
-    const deliver = await create("scope", { display_name: { en: "Deliver" } });
-    const make = await create("scope", { display_name: { en: "Make" } });
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"], default_scope: deliver });
+    const deliver = await create("scope", { name: { en: "Deliver" } });
+    const make = await create("scope", { name: { en: "Make" } });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"], default_scope: deliver });
 
-    const inherited = await run("scflow/create_actor", { display_name: "A", type: "Site" });
-    const explicit = await run("scflow/create_actor", { display_name: "B", type: "Site", scope: "Make" });
+    const inherited = await run("scflow/create_actor", { name: "A", type: "Site" });
+    const explicit = await run("scflow/create_actor", { name: "B", type: "Site", scope: "Make" });
 
     expect(inherited.scope).toBe(deliver);
     expect(explicit.scope).toBe(make);
@@ -131,11 +131,11 @@ describe("scflow/create_actor", () => {
 
   it("sets the parent actor given by name, the description and the tags", async () => {
     const { run, create, query } = await setup();
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const parent = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const parent = await run("scflow/create_actor", { name: "Campus", type: "Site" });
 
     const child = await run("scflow/create_actor", {
-      display_name: "Dock",
+      name: "Dock",
       type: "Site",
       parent_actor: "Campus",
       description: "Loading dock",
@@ -150,11 +150,11 @@ describe("scflow/create_actor", () => {
 
   it("places the actor at a location given by name, and at none by default", async () => {
     const { run, create, query } = await setup();
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const havre = await create("location", { display_name: { en: "Le Havre" } });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const havre = await create("location", { name: "Le Havre" });
 
-    const placed = await run("scflow/create_actor", { display_name: "Terminal", type: "Site", location: "Le Havre" });
-    const bare = await run("scflow/create_actor", { display_name: "Depot", type: "Site" });
+    const placed = await run("scflow/create_actor", { name: "Terminal", type: "Site", location: "Le Havre" });
+    const bare = await run("scflow/create_actor", { name: "Depot", type: "Site" });
 
     expect(placed.location).toBe(havre);
     expect(bare).not.toHaveProperty("location");
@@ -163,23 +163,23 @@ describe("scflow/create_actor", () => {
 
   it("lets several actors share a location", async () => {
     const { run, create, query } = await setup();
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const havre = await create("location", { display_name: { en: "Le Havre" } });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const havre = await create("location", { name: "Le Havre" });
 
-    const a = await run("scflow/create_actor", { display_name: "A", type: "Site", location: havre });
-    const b = await run("scflow/create_actor", { display_name: "B", type: "Site", location: "Le Havre" });
+    const a = await run("scflow/create_actor", { name: "A", type: "Site", location: havre });
+    const b = await run("scflow/create_actor", { name: "B", type: "Site", location: "Le Havre" });
 
     expect((await query("location", { id: havre }))[0].actors.sort()).toEqual([a.id, b.id].sort());
   });
 
   it("refuses an unknown type, scope, location or parent and writes nothing", async () => {
     const { run, create, query } = await setup();
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
 
-    await expect(run("scflow/create_actor", { display_name: "X", type: "Ghost" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/create_actor", { display_name: "X", type: "Site", scope: "Ghost" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/create_actor", { display_name: "X", type: "Site", location: "Ghost" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/create_actor", { display_name: "X", type: "Site", parent_actor: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_actor", { name: "X", type: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/create_actor", { name: "X", type: "Site", scope: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/create_actor", { name: "X", type: "Site", location: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/create_actor", { name: "X", type: "Site", parent_actor: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
 
     expect(await query("actor")).toHaveLength(0);
   });
@@ -188,18 +188,18 @@ describe("scflow/create_actor", () => {
     const { run } = await setup();
 
     await expect(run("scflow/create_actor", { type: "Site" })).rejects.toThrow(/name/);
-    await expect(run("scflow/create_actor", { display_name: "X" })).rejects.toThrow(/type/);
+    await expect(run("scflow/create_actor", { name: "X" })).rejects.toThrow(/type/);
   });
 });
 
 describe("scflow/update_actor", () => {
   async function withActors() {
     const ctx = await setup();
-    await ctx.create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    await ctx.create("scope", { display_name: { en: "Make" } });
-    const campus = await ctx.run("scflow/create_actor", { display_name: "Campus", type: "Site" });
+    await ctx.create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    await ctx.create("scope", { name: { en: "Make" } });
+    const campus = await ctx.run("scflow/create_actor", { name: "Campus", type: "Site" });
     const dock = await ctx.run("scflow/create_actor", {
-      display_name: "Dock",
+      name: "Dock",
       type: "Site",
       scope: "Make",
       parent_actor: "Campus",
@@ -207,25 +207,25 @@ describe("scflow/update_actor", () => {
     return { ...ctx, campus, dock };
   }
 
-  it("renames an actor given by name and keeps the other languages", async () => {
+  it("renames an actor given by name", async () => {
     const { run, query, dock } = await withActors();
-    await run("scflow/update_actor", { id: "Dock", display_name: { fr: "Quai" } });
 
-    const updated = await run("scflow/update_actor", { id: "Dock", display_name: "Loading dock" });
+    const updated = await run("scflow/update_actor", { id: "Dock", name: "Loading dock" });
 
-    expect(updated.display_name).toEqual({ en: "Loading dock", fr: "Quai" });
-    expect((await query("actor", { id: dock.id }))[0].display_name).toEqual({ en: "Loading dock", fr: "Quai" });
+    expect(updated.name).toBe("Loading dock");
+    expect(updated.reference).toBe("Loading dock");
+    expect((await query("actor", { id: dock.id }))[0].name).toBe("Loading dock");
   });
 
   it("changes the type of an actor given by name, and refuses an unknown type", async () => {
     const { run, create, query, dock } = await withActors();
-    const warehouse = await create("actor_type", { display_name: { en: "Warehouse" }, domains: ["physical"] });
+    const warehouse = await create("actor_type", { name: { en: "Warehouse" }, domains: ["physical"] });
 
     const updated = await run("scflow/update_actor", { id: "Dock", type: "Warehouse" });
 
     expect(updated.type).toBe(warehouse);
     expect((await query("actor", { id: dock.id }))[0].type).toBe(warehouse);
-    await expect(run("scflow/update_actor", { id: "Dock", type: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_actor", { id: "Dock", type: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
     expect((await query("actor", { id: dock.id }))[0].type).toBe(warehouse);
   });
 
@@ -251,8 +251,8 @@ describe("scflow/update_actor", () => {
 
   it("changes the scope and the parent given by name", async () => {
     const { run, create, query, campus, dock } = await withActors();
-    const deliver = await create("scope", { display_name: { en: "Deliver" } });
-    const annex = await run("scflow/create_actor", { display_name: "Annex", type: "Site" });
+    const deliver = await create("scope", { name: { en: "Deliver" } });
+    const annex = await run("scflow/create_actor", { name: "Annex", type: "Site" });
 
     await run("scflow/update_actor", { id: "Dock", scope: "Deliver", parent_actor: "Annex" });
 
@@ -264,8 +264,8 @@ describe("scflow/update_actor", () => {
 
   it("sets, changes and clears the location of an actor, given by name or id", async () => {
     const { run, create, query, dock } = await withActors();
-    const havre = await create("location", { display_name: { en: "Le Havre" } });
-    const rotterdam = await create("location", { display_name: { en: "Rotterdam" } });
+    const havre = await create("location", { name: "Le Havre" });
+    const rotterdam = await create("location", { name: "Rotterdam" });
 
     const placed = await run("scflow/update_actor", { id: "Dock", location: "Le Havre" });
     expect(placed.location).toBe(havre);
@@ -282,10 +282,10 @@ describe("scflow/update_actor", () => {
 
   it("refuses an unknown location and keeps the current one", async () => {
     const { run, create, query, dock } = await withActors();
-    const havre = await create("location", { display_name: { en: "Le Havre" } });
+    const havre = await create("location", { name: "Le Havre" });
     await run("scflow/update_actor", { id: "Dock", location: "Le Havre" });
 
-    await expect(run("scflow/update_actor", { id: "Dock", location: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_actor", { id: "Dock", location: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
 
     expect((await query("actor", { id: dock.id }))[0].location).toBe(havre);
   });
@@ -297,7 +297,7 @@ describe("scflow/update_actor", () => {
 
     const stored = (await query("actor", { id: dock.id }))[0];
     expect(stored.parent_actor).toBe(campus.id);
-    expect(stored.display_name).toEqual({ en: "Dock" });
+    expect(stored.name).toBe("Dock");
   });
 
   it("refuses an actor as its own parent, directly or through its descendants", async () => {
@@ -318,10 +318,10 @@ describe("scflow/update_actor", () => {
   it("refuses an unknown actor, scope or parent and changes nothing", async () => {
     const { run, query, dock } = await withActors();
 
-    await expect(run("scflow/update_actor", { id: "Ghost", display_name: "X" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/update_actor", { id: "Dock", display_name: "X", scope: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_actor", { id: "Ghost", name: "X" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/update_actor", { id: "Dock", name: "X", scope: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
 
-    expect((await query("actor", { id: dock.id }))[0].display_name).toEqual({ en: "Dock" });
+    expect((await query("actor", { id: dock.id }))[0].name).toBe("Dock");
   });
 });
 
@@ -329,16 +329,16 @@ describe("scflow/delete_actor", () => {
   async function withNetwork() {
     const ctx = await setup();
     const { create, run } = ctx;
-    await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const a = await run("scflow/create_actor", { display_name: "A", type: "Site" });
-    const b = await run("scflow/create_actor", { display_name: "B", type: "Site" });
-    const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+    await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const a = await run("scflow/create_actor", { name: "A", type: "Site" });
+    const b = await run("scflow/create_actor", { name: "B", type: "Site" });
+    const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    const item = await create("item", { name: "Bolt", type: itemType });
     const flow = await create("flow", { source: a.id, destination: b.id });
     const held = await create("item_at_actor", { actor: a.id, item });
-    const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
+    const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
     const transformation = await create("transformation", {
-      display_name: { en: "Assemble" },
+      name: "Assemble",
       type: transformationType,
       actor: a.id,
     });
@@ -348,8 +348,8 @@ describe("scflow/delete_actor", () => {
 
   it("deletes an actor given by name that nothing references", async () => {
     const { run, query } = await setup();
-    await run("scflow/create_actor_type", { display_name: "Site" });
-    await run("scflow/create_actor", { display_name: "Lonely", type: "Site" });
+    await run("scflow/create_actor_type", { name: "Site" });
+    await run("scflow/create_actor", { name: "Lonely", type: "Site" });
 
     const result = await run("scflow/delete_actor", { id: "Lonely" });
 
@@ -368,10 +368,10 @@ describe("scflow/delete_actor", () => {
 
   it("refuses to delete an actor that holds an item, and removes nothing", async () => {
     const { run, query, create } = await setup();
-    await run("scflow/create_actor_type", { display_name: "Site" });
-    const actor = await run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-    const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+    await run("scflow/create_actor_type", { name: "Site" });
+    const actor = await run("scflow/create_actor", { name: "Depot", type: "Site" });
+    const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    const item = await create("item", { name: "Bolt", type: itemType });
     await create("item_at_actor", { actor: actor.id, item });
 
     await expect(run("scflow/delete_actor", { id: "Depot" })).rejects.toMatchObject({ code: "constraint_violation" });
@@ -382,10 +382,10 @@ describe("scflow/delete_actor", () => {
 
   it("refuses to delete an actor that runs a transformation, and removes nothing", async () => {
     const { run, query, create } = await setup();
-    await run("scflow/create_actor_type", { display_name: "Site" });
-    const actor = await run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-    const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
-    await create("transformation", { display_name: { en: "Assemble" }, type: transformationType, actor: actor.id });
+    await run("scflow/create_actor_type", { name: "Site" });
+    const actor = await run("scflow/create_actor", { name: "Plant", type: "Site" });
+    const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
+    await create("transformation", { name: "Assemble", type: transformationType, actor: actor.id });
 
     await expect(run("scflow/delete_actor", { id: "Plant" })).rejects.toMatchObject({ code: "constraint_violation" });
 
@@ -409,9 +409,9 @@ describe("scflow/delete_actor", () => {
 
   it("refuses to delete a parent actor without cascade, and removes nothing", async () => {
     const { run, query } = await setup();
-    await run("scflow/create_actor_type", { display_name: "Site" });
-    await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
-    await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
+    await run("scflow/create_actor_type", { name: "Site" });
+    await run("scflow/create_actor", { name: "Campus", type: "Site" });
+    await run("scflow/create_actor", { name: "Dock", type: "Site", parent_actor: "Campus" });
 
     await expect(run("scflow/delete_actor", { id: "Campus" })).rejects.toMatchObject({ code: "constraint_violation" });
 
@@ -422,22 +422,22 @@ describe("scflow/delete_actor", () => {
     async function withTree() {
       const ctx = await setup();
       const { create, run } = ctx;
-      await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-      const campus = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
-      const dock = await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
-      const bay = await run("scflow/create_actor", { display_name: "Bay", type: "Site", parent_actor: "Dock" });
-      const outside = await run("scflow/create_actor", { display_name: "Outside", type: "Site" });
-      const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-      const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+      await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+      const campus = await run("scflow/create_actor", { name: "Campus", type: "Site" });
+      const dock = await run("scflow/create_actor", { name: "Dock", type: "Site", parent_actor: "Campus" });
+      const bay = await run("scflow/create_actor", { name: "Bay", type: "Site", parent_actor: "Dock" });
+      const outside = await run("scflow/create_actor", { name: "Outside", type: "Site" });
+      const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+      const item = await create("item", { name: "Bolt", type: itemType });
       const heldDock = await create("item_at_actor", { actor: dock.id, item });
       const heldOutside = await create("item_at_actor", { actor: outside.id, item });
       const heldBay = await create("item_at_actor", { actor: bay.id, item });
       await create("flow", { source: outside.id, destination: bay.id, item });
       await create("flow", { source: dock.id, destination: outside.id });
       const flowOther = await create("flow", { source: outside.id, destination: outside.id });
-      const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
+      const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
       const transformation = await create("transformation", {
-        display_name: { en: "Assemble" },
+        name: "Assemble",
         type: transformationType,
         actor: bay.id,
       });
@@ -488,7 +488,7 @@ describe("scflow/delete_actor", () => {
   it("refuses an unknown actor", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_actor", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_actor", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
@@ -496,13 +496,13 @@ describe("scflow/delete_actor_type", () => {
   async function withTypes() {
     const ctx = await setup();
     const { create, run } = ctx;
-    const site = await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const carrier = await create("actor_type", { display_name: { en: "Carrier" }, domains: ["physical"] });
-    const campus = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
-    const dock = await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
-    const truck = await run("scflow/create_actor", { display_name: "Truck", type: "Carrier" });
-    const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+    const site = await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const carrier = await create("actor_type", { name: { en: "Carrier" }, domains: ["physical"] });
+    const campus = await run("scflow/create_actor", { name: "Campus", type: "Site" });
+    const dock = await run("scflow/create_actor", { name: "Dock", type: "Site", parent_actor: "Campus" });
+    const truck = await run("scflow/create_actor", { name: "Truck", type: "Carrier" });
+    const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    const item = await create("item", { name: "Bolt", type: itemType });
     await create("item_at_actor", { actor: dock.id, item });
     await create("item_at_actor", { actor: campus.id, item });
     await create("flow", { source: campus.id, destination: dock.id, item });
@@ -512,7 +512,7 @@ describe("scflow/delete_actor_type", () => {
 
   it("deletes a type that no actor uses, given by name", async () => {
     const { run, query, create } = await setup();
-    await create("actor_type", { display_name: { en: "Unused" }, domains: ["physical"] });
+    await create("actor_type", { name: { en: "Unused" }, domains: ["physical"] });
 
     const result = await run("scflow/delete_actor_type", { id: "Unused" });
 
@@ -544,7 +544,7 @@ describe("scflow/delete_actor_type", () => {
   it("refuses an unknown type", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_actor_type", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_actor_type", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
@@ -552,17 +552,17 @@ describe("scflow/delete_scope", () => {
   async function withScopes() {
     const ctx = await setup();
     const { create, run } = ctx;
-    const make = await create("scope", { display_name: { en: "Make" } });
-    const deliver = await create("scope", { display_name: { en: "Deliver" } });
+    const make = await create("scope", { name: { en: "Make" } });
+    const deliver = await create("scope", { name: { en: "Deliver" } });
     const site = await create("actor_type", {
-      display_name: { en: "Site" },
+      name: { en: "Site" },
       domains: ["physical"],
       default_scope: make,
     });
-    const plant = await run("scflow/create_actor", { display_name: "Plant", type: "Site", scope: "Make" });
-    const line = await run("scflow/create_actor", { display_name: "Line", type: "Site", scope: "Make", parent_actor: "Plant" });
-    const cell = await run("scflow/create_actor", { display_name: "Cell", type: "Site", scope: "Deliver", parent_actor: "Line" });
-    const hub = await run("scflow/create_actor", { display_name: "Hub", type: "Site", scope: "Deliver" });
+    const plant = await run("scflow/create_actor", { name: "Plant", type: "Site", scope: "Make" });
+    const line = await run("scflow/create_actor", { name: "Line", type: "Site", scope: "Make", parent_actor: "Plant" });
+    const cell = await run("scflow/create_actor", { name: "Cell", type: "Site", scope: "Deliver", parent_actor: "Line" });
+    const hub = await run("scflow/create_actor", { name: "Hub", type: "Site", scope: "Deliver" });
     await create("flow", { source: hub.id, destination: plant.id });
     await create("note", { annotated: line.id, content: { en: "Line note" } });
     return { ...ctx, make, deliver, site, plant, line, cell, hub };
@@ -570,7 +570,7 @@ describe("scflow/delete_scope", () => {
 
   it("deletes a scope that no actor uses, given by name", async () => {
     const { run, query, create } = await setup();
-    await create("scope", { display_name: { en: "Empty" } });
+    await create("scope", { name: { en: "Empty" } });
 
     await run("scflow/delete_scope", { id: "Empty" });
 
@@ -602,6 +602,6 @@ describe("scflow/delete_scope", () => {
   it("refuses an unknown scope", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_scope", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_scope", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });

@@ -9,15 +9,15 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function world() {
   const ctx = await setup();
   const { run } = ctx;
-  await run("scflow/create_actor_type", { display_name: "Site", domains: ["physical", "information"] });
-  await run("scflow/create_actor_type", { display_name: "Finance", domains: ["financial"] });
-  const depot = await run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-  const annex = await run("scflow/create_actor", { display_name: "Annex", type: "Site" });
-  const bank = await run("scflow/create_actor", { display_name: "Bank", type: "Finance" });
-  await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-  await run("scflow/create_item_type", { display_name: "Money", domain: "financial" });
-  const bolt = await run("scflow/create_item", { display_name: "Bolt", type: "Part" });
-  const euro = await run("scflow/create_item", { display_name: "Euro", type: "Money" });
+  await run("scflow/create_actor_type", { name: "Site", domains: ["physical", "information"] });
+  await run("scflow/create_actor_type", { name: "Finance", domains: ["financial"] });
+  const depot = await run("scflow/create_actor", { name: "Depot", type: "Site" });
+  const annex = await run("scflow/create_actor", { name: "Annex", type: "Site" });
+  const bank = await run("scflow/create_actor", { name: "Bank", type: "Finance" });
+  await run("scflow/create_item_type", { name: "Part", domain: "physical" });
+  await run("scflow/create_item_type", { name: "Money", domain: "financial" });
+  const bolt = await run("scflow/create_item", { name: "Bolt", type: "Part" });
+  const euro = await run("scflow/create_item", { name: "Euro", type: "Money" });
   return { ...ctx, depot, annex, bank, bolt, euro };
 }
 
@@ -43,12 +43,12 @@ describe("scflow/create_item_type", () => {
     const { run, query } = await setup();
 
     const type = await run("scflow/create_item_type", {
-      display_name: { en: "Pallet", fr: "Palette" },
+      name: { en: "Pallet", fr: "Palette" },
       domain: "physical",
       description: "A wooden pallet",
     });
 
-    expect(type).toMatchObject({ display_name: { en: "Pallet", fr: "Palette" }, domain: "physical" });
+    expect(type).toMatchObject({ name: { en: "Pallet", fr: "Palette" }, domain: "physical" });
     const stored = await query("item_type");
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ id: type.id, description: { en: "A wooden pallet" } });
@@ -57,8 +57,8 @@ describe("scflow/create_item_type", () => {
   it("refuses an unknown or missing domain and writes nothing", async () => {
     const { run, query } = await setup();
 
-    await expect(run("scflow/create_item_type", { display_name: "Odd", domain: "magic" })).rejects.toThrow(/domain/);
-    await expect(run("scflow/create_item_type", { display_name: "Odd" })).rejects.toThrow(/domain/);
+    await expect(run("scflow/create_item_type", { name: "Odd", domain: "magic" })).rejects.toThrow(/domain/);
+    await expect(run("scflow/create_item_type", { name: "Odd" })).rejects.toThrow(/domain/);
 
     expect(await query("item_type")).toHaveLength(0);
   });
@@ -73,19 +73,19 @@ describe("scflow/create_item_type", () => {
 describe("scflow/create_item", () => {
   it("creates an item whose type is given by name, with tags", async () => {
     const { run, query } = await setup();
-    const type = await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
+    const type = await run("scflow/create_item_type", { name: "Part", domain: "physical" });
 
-    const item = await run("scflow/create_item", { display_name: "Bolt", type: "Part", tags: ["small", "steel"] });
+    const item = await run("scflow/create_item", { name: "Bolt", type: "Part", tags: ["small", "steel"] });
 
-    expect(item).toMatchObject({ display_name: { en: "Bolt" }, type: type.id });
+    expect(item).toMatchObject({ name: "Bolt", type: type.id });
     expect((await query("item", { id: item.id }))[0].tags).toEqual(["small", "steel"]);
   });
 
   it("accepts the id of the type", async () => {
     const { run } = await setup();
-    const type = await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
+    const type = await run("scflow/create_item_type", { name: "Part", domain: "physical" });
 
-    const item = await run("scflow/create_item", { display_name: "Bolt", type: type.id });
+    const item = await run("scflow/create_item", { name: "Bolt", type: type.id });
 
     expect(item.type).toBe(type.id);
   });
@@ -93,7 +93,7 @@ describe("scflow/create_item", () => {
   it("refuses an unknown type and writes nothing", async () => {
     const { run, query } = await setup();
 
-    await expect(run("scflow/create_item", { display_name: "Bolt", type: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_item", { name: "Bolt", type: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
 
     expect(await query("item")).toHaveLength(0);
   });
@@ -102,7 +102,7 @@ describe("scflow/create_item", () => {
     const { run } = await setup();
 
     await expect(run("scflow/create_item", { type: "Part" })).rejects.toThrow(/name/);
-    await expect(run("scflow/create_item", { display_name: "Bolt" })).rejects.toThrow(/type/);
+    await expect(run("scflow/create_item", { name: "Bolt" })).rejects.toThrow(/type/);
   });
 });
 
@@ -111,14 +111,15 @@ describe("scflow/update_item", () => {
     expect(ACTIONS.map((action) => action.id)).toContain("scflow/update_item");
   });
 
-  it("renames an item given by name and keeps the other languages", async () => {
+  it("renames an item given by name, and the old name no longer resolves", async () => {
     const { run, query, bolt } = await world();
-    await run("scflow/update_item", { id: "Bolt", display_name: { fr: "Boulon" } });
 
-    const updated = await run("scflow/update_item", { id: "Bolt", display_name: "Screw" });
+    const updated = await run("scflow/update_item", { id: "Bolt", name: "Screw" });
 
-    expect(updated.display_name).toEqual({ en: "Screw", fr: "Boulon" });
-    expect((await query("item", { id: bolt.id }))[0].display_name).toEqual({ en: "Screw", fr: "Boulon" });
+    expect(updated.name).toBe("Screw");
+    expect((await query("item", { id: bolt.id }))[0].name).toBe("Screw");
+    await expect(run("scflow/update_item", { id: "Bolt", description: "x" })).rejects.toThrow(/designates no instance/);
+    await expect(run("scflow/update_item", { id: "Euro", name: "Screw" })).rejects.toThrow(/name_scope/);
   });
 
   it("changes the description", async () => {
@@ -131,14 +132,14 @@ describe("scflow/update_item", () => {
 
   it("changes the type of an item given by name, and refuses an unknown type", async () => {
     const { run, query, bolt } = await world();
-    await run("scflow/create_item_type", { display_name: "Tool", domain: "physical" });
+    await run("scflow/create_item_type", { name: "Tool", domain: "physical" });
 
     const updated = await run("scflow/update_item", { id: "Bolt", type: "Tool" });
 
     const stored = (await query("item", { id: bolt.id }))[0];
     expect(updated.type).toBe(stored.type);
     expect(stored.type).not.toBe(bolt.type);
-    await expect(run("scflow/update_item", { id: "Bolt", type: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_item", { id: "Bolt", type: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 
   it("refuses a change of type that a held record of the item no longer fits", async () => {
@@ -155,8 +156,8 @@ describe("scflow/update_item", () => {
     const { run } = await world();
 
     await expect(run("scflow/update_item", { id: "Bolt" })).rejects.toThrow(/must NOT have fewer/);
-    await expect(run("scflow/update_item", { id: "Ghost", display_name: "X" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/update_item", { display_name: "X" })).rejects.toThrow(/item/);
+    await expect(run("scflow/update_item", { id: "Ghost", name: "X" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/update_item", { name: "X" })).rejects.toThrow(/item/);
   });
 });
 
@@ -202,8 +203,8 @@ describe("scflow/hold_item", () => {
   it("refuses an unknown actor or item, naming the parameter", async () => {
     const { run } = await world();
 
-    await expect(run("scflow/hold_item", { actor: "Ghost", item: "Bolt" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/hold_item", { actor: "Depot", item: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/hold_item", { actor: "Ghost", item: "Bolt" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/hold_item", { actor: "Depot", item: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/hold_item", { item: "Bolt" })).rejects.toThrow(/actor/);
   });
 });
@@ -224,9 +225,9 @@ describe("scflow/release_held_item", () => {
   it("refuses while a transformation line uses the record, and removes nothing", async () => {
     const { run, query, create, depot } = await world();
     const held = await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
-    const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
+    const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
     const transformation = await create("transformation", {
-      display_name: { en: "Assemble" },
+      name: "Assemble",
       type: transformationType,
       actor: depot.id,
     });
@@ -241,8 +242,8 @@ describe("scflow/release_held_item", () => {
   it("deletes the transformation lines that use the record with cascade", async () => {
     const { run, query, create, depot, bolt } = await world();
     const held = await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
-    const type = await create("transformation_type", { display_name: { en: "Assembly" } });
-    const transformation = await create("transformation", { display_name: { en: "Assemble" }, type, actor: depot.id });
+    const type = await create("transformation_type", { name: { en: "Assembly" } });
+    const transformation = await create("transformation", { name: "Assemble", type, actor: depot.id });
     await create("transformation_line", { transformation, held_item: held.id, role: "consumed" });
 
     await expect(run("scflow/release_held_item", { id: held.id })).rejects.toMatchObject({ code: "constraint_violation" });
@@ -255,7 +256,7 @@ describe("scflow/release_held_item", () => {
   it("refuses an unknown or missing record", async () => {
     const { run } = await world();
 
-    await expect(run("scflow/release_held_item", { id: "missing" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/release_held_item", { id: "missing" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/release_held_item", {})).rejects.toThrow(/'id'/);
   });
 });
@@ -301,8 +302,8 @@ describe("scflow/set_flow_item", () => {
   it("refuses to change the item of a flow that carries another one", async () => {
     const { run, query, create, physical, bolt } = await withFlows();
     await run("scflow/set_flow_item", { id: physical.id, item: "Bolt" });
-    const type = await create("item_type", { display_name: { en: "Tool" }, domain: "physical" });
-    await create("item", { display_name: { en: "Drill" }, type });
+    const type = await create("item_type", { name: { en: "Tool" }, domain: "physical" });
+    await create("item", { name: "Drill", type });
 
     await expect(run("scflow/set_flow_item", { id: physical.id, item: "Drill" })).rejects.toMatchObject({ code: "constraint_violation" });
 
@@ -323,8 +324,8 @@ describe("scflow/set_flow_item", () => {
   it("refuses an unknown flow or item, naming the parameter", async () => {
     const { run, physical } = await withFlows();
 
-    await expect(run("scflow/set_flow_item", { id: "missing", item: "Bolt" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/set_flow_item", { id: "missing", item: "Bolt" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/set_flow_item", { id: physical.id, item: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/set_flow_item", { item: "Bolt" })).rejects.toThrow(/flow/);
   });
 });

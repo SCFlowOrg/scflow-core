@@ -9,15 +9,15 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function world() {
   const ctx = await setup();
   const { run } = ctx;
-  await run("scflow/create_actor_type", { display_name: "Site", domains: ["physical", "information"] });
-  const depot = await run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-  await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-  await run("scflow/create_item_type", { display_name: "Document", domain: "information" });
-  await run("scflow/create_item_type", { display_name: "Money", domain: "financial" });
-  const bolt = await run("scflow/create_item", { display_name: "Bolt", type: "Part" });
-  const nut = await run("scflow/create_item", { display_name: "Nut", type: "Part" });
-  const order = await run("scflow/create_item", { display_name: "Order", type: "Document" });
-  const euro = await run("scflow/create_item", { display_name: "Euro", type: "Money" });
+  await run("scflow/create_actor_type", { name: "Site", domains: ["physical", "information"] });
+  const depot = await run("scflow/create_actor", { name: "Depot", type: "Site" });
+  await run("scflow/create_item_type", { name: "Part", domain: "physical" });
+  await run("scflow/create_item_type", { name: "Document", domain: "information" });
+  await run("scflow/create_item_type", { name: "Money", domain: "financial" });
+  const bolt = await run("scflow/create_item", { name: "Bolt", type: "Part" });
+  const nut = await run("scflow/create_item", { name: "Nut", type: "Part" });
+  const order = await run("scflow/create_item", { name: "Order", type: "Document" });
+  const euro = await run("scflow/create_item", { name: "Euro", type: "Money" });
   return { ...ctx, depot, bolt, nut, order, euro };
 }
 
@@ -40,7 +40,6 @@ describe("scflow/create_conversion", () => {
       actor: "Depot",
       from_item: "Bolt",
       to_item: "Nut",
-      display_name: { en: "Machining", fr: "Usinage" },
       description: "Turns bolts into nuts",
     });
 
@@ -48,19 +47,19 @@ describe("scflow/create_conversion", () => {
       actor: depot.id,
       from_item: bolt.id,
       to_item: nut.id,
-      display_name: { en: "Machining", fr: "Usinage" },
     });
+    expect(conversion).not.toHaveProperty("name");
     const stored = await query("conversion");
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ id: conversion.id, description: { en: "Turns bolts into nuts" } });
   });
 
-  it("creates a conversion without name or description", async () => {
+  it("creates a conversion without a name or a description", async () => {
     const { run, query, depot, bolt, nut } = await world();
 
     const conversion = await run("scflow/create_conversion", { actor: depot.id, from_item: bolt.id, to_item: nut.id });
 
-    expect(conversion.display_name).toBeUndefined();
+    expect(conversion).not.toHaveProperty("name");
     expect(await query("conversion")).toHaveLength(1);
   });
 
@@ -90,10 +89,10 @@ describe("scflow/create_conversion", () => {
     await expect(run("scflow/create_conversion", { actor: "Depot", from_item: "Bolt" })).rejects.toThrow(/to_item/);
     await expect(
       run("scflow/create_conversion", { actor: "Ghost", from_item: "Bolt", to_item: "Nut" }),
-    ).rejects.toThrow(/names no instance/);
+    ).rejects.toThrow(/(designates|names) no instance/);
     await expect(
       run("scflow/create_conversion", { actor: "Depot", from_item: "Ghost", to_item: "Nut" }),
-    ).rejects.toThrow(/names no instance/);
+    ).rejects.toThrow(/(designates|names) no instance/);
 
     expect(await query("conversion")).toHaveLength(0);
   });
@@ -106,43 +105,41 @@ describe("scflow/update_conversion", () => {
       actor: "Depot",
       from_item: "Bolt",
       to_item: "Nut",
-      display_name: { en: "Machining" },
       description: { en: "Turns bolts into nuts" },
     });
     return { ...ctx, conversion };
   }
 
-  it("replaces the given languages of the name and keeps the others", async () => {
-    const { run, query, conversion } = await converted();
+  it("refuses a name: a conversion has none", async () => {
+    const { run, conversion } = await converted();
 
-    const updated = await run("scflow/update_conversion", { id: conversion.id, display_name: { fr: "Usinage" } });
-
-    expect(updated).toMatchObject({ id: conversion.id, display_name: { en: "Machining", fr: "Usinage" } });
-    expect((await query("conversion"))[0].display_name).toEqual({ en: "Machining", fr: "Usinage" });
+    await expect(run("scflow/update_conversion", { id: conversion.id, name: "Machining" })).rejects.toThrow(/additional properties/);
+    await expect(run("scflow/create_conversion", { actor: "Depot", from_item: "Bolt", to_item: "Nut", name: "Machining" })).rejects.toThrow(
+      /additional properties/,
+    );
   });
 
-  it("finds the conversion by its name and changes its description", async () => {
-    const { run, query } = await converted();
+  it("changes its description by languages, the conversion given by its id", async () => {
+    const { run, query, conversion } = await converted();
 
-    await run("scflow/update_conversion", { id: "Machining", description: { fr: "Transforme" } });
+    await run("scflow/update_conversion", { id: conversion.id, description: { fr: "Transforme" } });
 
     expect((await query("conversion"))[0].description).toEqual({ en: "Turns bolts into nuts", fr: "Transforme" });
   });
 
-  it("clears the name and the description with null", async () => {
+  it("clears the description with null", async () => {
     const { run, query, conversion } = await converted();
 
-    await run("scflow/update_conversion", { id: conversion.id, display_name: null, description: null });
+    await run("scflow/update_conversion", { id: conversion.id, description: null });
 
     const stored = (await query("conversion"))[0];
-    expect(Object.keys(stored.display_name ?? {})).toHaveLength(0);
     expect(Object.keys(stored.description ?? {})).toHaveLength(0);
   });
 
   it("keeps the actor and the two items", async () => {
     const { run, query, conversion, depot, bolt, nut } = await converted();
 
-    await run("scflow/update_conversion", { id: conversion.id, display_name: "Cutting" });
+    await run("scflow/update_conversion", { id: conversion.id, description: "Cutting" });
 
     expect((await query("conversion"))[0]).toMatchObject({ actor: depot.id, from_item: bolt.id, to_item: nut.id });
   });
@@ -151,8 +148,8 @@ describe("scflow/update_conversion", () => {
     const { run, conversion } = await converted();
 
     await expect(run("scflow/update_conversion", { id: conversion.id })).rejects.toThrow(/must NOT have fewer/);
-    await expect(run("scflow/update_conversion", { id: "missing", display_name: "X" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/update_conversion", { display_name: "X" })).rejects.toThrow(/conversion/);
+    await expect(run("scflow/update_conversion", { id: "missing", description: "X" })).rejects.toThrow(/conversion/);
+    await expect(run("scflow/update_conversion", { description: "X" })).rejects.toThrow(/conversion/);
   });
 });
 
@@ -174,7 +171,7 @@ describe("scflow/delete_conversion", () => {
   it("refuses an unknown conversion", async () => {
     const { run } = await world();
 
-    await expect(run("scflow/delete_conversion", { id: "missing" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_conversion", { id: "missing" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
@@ -200,7 +197,7 @@ describe("deletions that reach conversions", () => {
     await run("scflow/delete_item", { id: "Nut", cascade: true });
 
     expect(await query("conversion")).toHaveLength(0);
-    expect((await query("item")).map((item) => item.display_name.en).sort()).toEqual(["Bolt", "Euro", "Order"]);
+    expect((await query("item")).map((item) => item.name).sort()).toEqual(["Bolt", "Euro", "Order"]);
   });
 
   it("scflow/delete_actor is refused while the actor owns a conversion, and counts it", async () => {
@@ -304,15 +301,14 @@ describe("conversion tags", () => {
     expect((await query("conversion"))[0].tags).toEqual(["b"]);
   });
 
-  it("scflow/add_tags accepts a conversion given by its name", async () => {
+  it("scflow/add_tags accepts a conversion given by its id", async () => {
     const { run } = await world();
-    await run("scflow/create_conversion", {
+    const conversion = await run("scflow/create_conversion", {
       actor: "Depot",
       from_item: "Bolt",
       to_item: "Nut",
-      display_name: "Machining",
     });
 
-    await expect(run("scflow/add_tags", { entity: "Machining", tags: ["steel"] })).resolves.toMatchObject({ tags: ["steel"] });
+    await expect(run("scflow/add_tags", { entity: conversion.id, tags: ["steel"] })).resolves.toMatchObject({ tags: ["steel"] });
   });
 });

@@ -15,7 +15,7 @@ A type of actor, with the flow domains it belongs to.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: localized_string
 - `description`: localized_markdown
 - `domains`: physical | information | financial | service (many)
 - `default_scope`: → scope
@@ -26,7 +26,7 @@ A type of item, with the one flow domain it belongs to.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: localized_string
 - `description`: localized_markdown
 - `domain`: physical | information | financial | service
 
@@ -36,7 +36,7 @@ A place in the network where items are held, consumed, produced or queued.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: string
 - `description`: localized_markdown
 - `type`: → actor_type (required, inverse `actors`)
 - `scope`: → scope (inverse `actors`)
@@ -49,7 +49,6 @@ A connection moving one optional item from a source actor to a destination actor
 
 Extends `annotable`.
 
-- `display_name`: localized_string
 - `description`: localized_markdown
 - `source`: → actor (required, inverse `outgoing_flows`)
 - `destination`: → actor (required, inverse `incoming_flows`)
@@ -63,7 +62,7 @@ A family of things the network moves and holds.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: string
 - `description`: localized_markdown
 - `type`: → item_type (required, inverse `items`)
 
@@ -82,7 +81,7 @@ A type of transformation.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: localized_string
 - `description`: localized_markdown
 
 ### transformation
@@ -91,7 +90,7 @@ A transformation of consumed items into produced items at an actor.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: string
 - `description`: localized_markdown
 - `type`: → transformation_type (required, inverse `transformations`)
 - `actor`: → actor (owner, inverse `transformations`)
@@ -112,7 +111,6 @@ A conversion of one item into another item at an actor.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
 - `description`: localized_markdown
 - `actor`: → actor (owner, inverse `conversions`)
 - `from_item`: → item (required)
@@ -124,7 +122,7 @@ A category of mode, such as road, sea, air, EDI or payment, with the one flow do
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: localized_string
 - `description`: localized_markdown
 - `domain`: physical | information | financial | service
 
@@ -134,7 +132,7 @@ How flows travel, the instance of a mode type, such as a shuttle or a round trip
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: string
 - `description`: localized_markdown
 - `type`: → mode_type (required, inverse `modes`)
 - `schedule`: localized_string
@@ -158,7 +156,7 @@ A flat grouping of actors, a swim lane of the graph.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: localized_string
 - `description`: localized_markdown
 
 ### location
@@ -167,7 +165,7 @@ A geographic place or site where actors operate.
 
 Extends `annotable`.
 
-- `display_name`: localized_string
+- `name`: string
 - `description`: localized_markdown
 - `latitude`: latitude
 - `longitude`: longitude

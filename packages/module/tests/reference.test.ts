@@ -18,6 +18,7 @@ schemas:
   - name: customer
     description: Someone who buys
     is_root: true
+    name_scope: []
     properties:
       - name: name
         type: string
@@ -78,7 +79,7 @@ describe("generateReference", () => {
   const byId = (id: string) => topics.find((t) => t.topic.id === id)!;
 
   it("gives a concepts topic and an actions topic, generated reference with stable ids and files", () => {
-    expect(topics.map((t) => t.topic.id)).toEqual(["shop/concepts", "shop/actions"]);
+    expect(topics.map((t) => t.topic.id)).toEqual(["shop/concepts", "shop/names", "shop/actions"]);
     for (const { topic } of topics) {
       expect(topic).toMatchObject({ kind: "reference", generated: true, locale: "en" });
     }
@@ -99,11 +100,21 @@ describe("generateReference", () => {
     expect(body).not.toContain("hidden_base");
   });
 
+  it("renders a names topic from name_scope, and none when no schema declares it", () => {
+    const names = byId("shop/names");
+    expect(names.topic).toMatchObject({ audience: "user", file: "docs/reference/names.md", generated: true });
+    expect(names.body).toContain("| `customer` | plain text | the dataset | `<customer>` |");
+    expect(names.body).not.toContain("`order`");
+    expect(names.body).toContain("An ambiguity error lists the qualified names of the candidates");
+    const plain = generateReference({ ...manifest, schemas: manifest.schemas.map((schema) => ({ ...schema, name_scope: undefined })) } as typeof manifest);
+    expect(plain.map((t) => t.topic.id)).toEqual(["shop/concepts", "shop/actions"]);
+  });
+
   it("renders each action with its parameters and example calls", () => {
     const body = byId("shop/actions").body;
     expect(body).toContain("### `shop/create_order`");
     expect(body).toContain("Creates an order for a customer.");
-    expect(body).toContain("- `customer` (id or name of customer, required): Id or name of the customer.");
+    expect(body).toContain("- `customer` (reference (name or id) of customer, required): Id or name of the customer.");
     expect(body).toContain('shop/create_order {"customer":"<customer>"}');
     expect(body).toContain('shop/create_order {"customer":"<customer>","size":"small","note":"text"}');
     expect(body).toContain("shop/find_orders {}");

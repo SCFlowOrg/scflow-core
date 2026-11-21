@@ -1,5 +1,5 @@
 import { type Instance } from "./refs.js";
-import { type ScflowActionDefinition, localizedTextParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
+import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, textParam, nullableRefParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { createActor } from "../actors.js";
 import { deleteById } from "./delete-impact.js";
 import { localizedText } from "./text.js";
@@ -9,14 +9,14 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_scope`. */
 export interface CreateScopeParams {
-  display_name: Text;
+  name: Text;
   description?: Text;
   tags?: string[];
 }
 
 /** Parameters of `scflow/create_actor_type`. */
 export interface CreateActorTypeParams {
-  display_name: Text;
+  name: Text;
   domains?: string[];
   default_scope?: string;
   description?: Text;
@@ -25,7 +25,7 @@ export interface CreateActorTypeParams {
 
 /** Parameters of `scflow/create_actor`. */
 export interface CreateActorParams {
-  display_name: Text;
+  name: string;
   type: string;
   scope?: string;
   location?: string;
@@ -37,7 +37,7 @@ export interface CreateActorParams {
 /** Parameters of `scflow/update_actor`. */
 export interface UpdateActorParams {
   id: string;
-  display_name?: Text;
+  name?: string;
   description?: Text;
   type?: string;
   scope?: string | null;
@@ -67,7 +67,9 @@ export interface DeleteScopeParams {
 /** The result of an action that creates or updates an actor. */
 export interface ActorSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: string;
+  /** The name as short as it stays unambiguous, with its parents when another actor shares it; use it to refer to the actor. */
+  reference: string;
   type: string;
   scope?: string;
   location?: string;
@@ -77,13 +79,13 @@ export interface ActorSummary {
 /** The result of `scflow/create_scope`. */
 export interface ScopeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: Record<string, string>;
 }
 
 /** The result of `scflow/create_actor_type`. */
 export interface ActorTypeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: Record<string, string>;
   domains: string[];
   default_scope?: string;
 }
@@ -98,15 +100,15 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the scope, a string or a map of language to string."),
+      name: localizedTextParam("Name of the scope, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the scope."),
       tags: tagsParam("Tags of the scope."),
     },
-    required: ["display_name"],
+    required: ["name"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const input: Record<string, unknown> = { display_name: await localizedText(context, params.display_name) };
+    const input: Record<string, unknown> = { name: await localizedText(context, params.name) };
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
     }
@@ -116,7 +118,7 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
     }
     const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.scope", input });
     const scope = after[0] as unknown as Instance;
-    return { id: scope.id, display_name: scope.display_name as Record<string, string> };
+    return { id: scope.id, name: scope.name as Record<string, string> };
   },
 };
 
@@ -130,7 +132,7 @@ export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the actor type, a string or a map of language to string."),
+      name: localizedTextParam("Name of the actor type, a string or a map of language to string."),
       domains: {
         type: "array",
         items: { type: "string", enum: ["physical", "information", "financial", "service"] },
@@ -142,13 +144,13 @@ export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams
       description: localizedTextParam("Markdown description of the actor type."),
       tags: tagsParam("Tags of the actor type."),
     },
-    required: ["display_name"],
+    required: ["name"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = await localizedText(context, params.display_name);
+    const name = await localizedText(context, params.name);
     const domains = unique(params.domains) ?? ["physical"];
-    const input: Record<string, unknown> = { display_name, domains };
+    const input: Record<string, unknown> = { name, domains };
     if (params.default_scope !== undefined) {
       input.default_scope = params.default_scope;
     }
@@ -163,7 +165,7 @@ export const createActorTypeAction: ScflowActionDefinition<CreateActorTypeParams
     const type = after[0] as unknown as Instance;
     return {
       id: type.id,
-      display_name: type.display_name as Record<string, string>,
+      name: type.name as Record<string, string>,
       domains: type.domains as string[],
       ...(type.default_scope ? { default_scope: type.default_scope as string } : {}),
     };
@@ -181,7 +183,7 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the actor, a string or a map of language to string."),
+      name: textParam("Name of the actor, unique among the actors of the same parent actor or, at the root, of the same scope."),
       type: refParam("actor_type", "Id or name of the actor type."),
       scope: refParam("scope", "Id or name of the containing scope; the default scope of the type when omitted."),
       location: refParam("location", "Id or name of the location of the actor; none when omitted."),
@@ -189,12 +191,12 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
       description: localizedTextParam("Markdown description of the actor."),
       tags: tagsParam("Tags of the actor."),
     },
-    required: ["display_name", "type"],
+    required: ["name", "type"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = await localizedText(context, params.display_name);
-    const input: Parameters<typeof createActor>[2] = { display_name, type: params.type };
+    const name = params.name;
+    const input: Parameters<typeof createActor>[2] = { name, type: params.type };
     if (params.scope !== undefined) {
       input.scope = params.scope;
     }
@@ -211,7 +213,7 @@ export const createActorAction: ScflowActionDefinition<CreateActorParams, ActorS
     if (tags !== undefined) {
       input.tags = tags;
     }
-    return summarizeActor(await createActor(context, context.locator, input) as Instance);
+    return summarizeActor(context, await createActor(context, context.locator, input) as Instance);
   },
 };
 
@@ -228,8 +230,8 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
     type: "object",
     properties: {
       id: refParam("actor", "Id or name of the actor to update."),
-      display_name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
-      description: localizedTextParam("New Markdown description; same language rule as name."),
+      name: textParam("New name of the actor."),
+      description: localizedTextParam("New Markdown description; each given language replaces the same language, the others are kept."),
       type: refParam("actor_type", "Id or name of the new actor type."),
       scope: nullableRefParam("scope", "Id or name of the new scope, or null to detach the actor from its scope."),
       location: nullableRefParam("location", "Id or name of the new location, or null to remove the location of the actor."),
@@ -243,8 +245,8 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
   async run(params, context) {
     const patch: Record<string, unknown> = {};
 
-    if (params.display_name !== undefined) {
-      patch.display_name = { set: await localizedText(context, params.display_name) };
+    if (params.name !== undefined) {
+      patch.name = params.name;
     }
     if (params.description !== undefined) {
       patch.description = { set: await localizedText(context, params.description) };
@@ -272,7 +274,7 @@ export const updateActorAction: ScflowActionDefinition<UpdateActorParams, ActorS
       filters: { id: params.id },
       input: patch,
     });
-    return summarizeActor(after[0] as unknown as Instance);
+    return summarizeActor(context, after[0] as unknown as Instance);
   },
 };
 
@@ -360,10 +362,11 @@ export const ACTOR_ACTIONS = [
   createScopeAction,
 ] as const;
 
-function summarizeActor(actor: Instance): ActorSummary {
+async function summarizeActor(context: ActionAccess, actor: Instance): Promise<ActorSummary> {
   return {
     id: actor.id,
-    display_name: actor.display_name as Record<string, string>,
+    name: actor.name as string,
+    reference: await context.referenceOf("scflow.actor", actor.id),
     type: actor.type as string,
     ...(actor.scope ? { scope: actor.scope as string } : {}),
     ...(actor.location ? { location: actor.location as string } : {}),

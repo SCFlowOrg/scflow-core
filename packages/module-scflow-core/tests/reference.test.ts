@@ -34,8 +34,21 @@ describe("the reference topics of scflow:core", () => {
     for (const { topic, body } of generated) expect(text(topic.file)).toBe(body);
   });
 
+  it("name, in the names topic, every schema referred to by name with its scope", () => {
+    const names = generated.find(({ topic }) => topic.id === "scflow/names");
+    expect(names?.topic).toMatchObject({ audience: "user", file: "docs/reference/names.md" });
+    const referred = manifest.schemas.filter((schema) => Array.isArray(schema.name_scope)).map((schema) => String(schema.name));
+    expect(referred.sort()).toEqual(
+      ["actor", "actor_type", "item", "item_type", "location", "mode", "mode_type", "scope", "transformation", "transformation_type"],
+    );
+    for (const name of referred) expect(names?.body).toContain(`| \`${name}\` |`);
+    expect(names?.body).toContain("| `actor` | plain text | the first of `parent_actor`, `scope` that is set | `<parent_actor> / <actor>` |");
+    expect(names?.body).toContain("| `transformation` | plain text | the first of `actor` that is set | `<actor> / <transformation>` |");
+    for (const unnamed of ["flow", "conversion", "item_at_actor", "mode_stop"]) expect(names?.body).not.toContain(`| \`${unnamed}\` |`);
+  });
+
   it("cover every action and every non-abstract schema", () => {
-    const [concepts, actions] = generated;
+    const [concepts, , actions] = generated;
     for (const action of manifest.actions) expect(actions.body).toContain(`### \`${String(action.id)}\``);
     for (const schema of manifest.schemas)
       if (schema.abstract !== true) expect(concepts.body).toContain(`### ${String(schema.name)}\n`);

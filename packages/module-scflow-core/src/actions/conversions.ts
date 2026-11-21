@@ -11,7 +11,6 @@ export interface CreateConversionParams {
   actor: string;
   from_item: string;
   to_item: string;
-  display_name?: Text;
   description?: Text;
   tags?: string[];
 }
@@ -19,7 +18,6 @@ export interface CreateConversionParams {
 /** Parameters of `scflow/update_conversion`. */
 export interface UpdateConversionParams {
   id: string;
-  display_name?: Text | null;
   description?: Text | null;
   tags?: string[];
 }
@@ -33,8 +31,6 @@ export interface DeleteConversionParams {
 /** The result of `scflow/create_conversion` and `scflow/update_conversion`. */
 export interface ConversionSummary {
   id: string;
-  /** Absent when the conversion has no name. */
-  display_name?: Record<string, string>;
   actor: string;
   from_item: string;
   to_item: string;
@@ -47,14 +43,13 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
   title: "Create a conversion",
   description:
     "Creates a conversion, which turns one item into another item at an actor, and returns it. The two items must be in the " +
-    "same flow domain, and they cannot change afterwards. The name, the description and the tags are optional.",
+    "same flow domain, and they cannot change afterwards. A conversion has no name: its actor and its two items identify it, and the description holds what else there is to say. The description and the tags are optional.",
   parameters: {
     type: "object",
     properties: {
       actor: refParam("actor", "Id or name of the actor where the conversion takes place."),
       from_item: refParam("item", "Id or name of the item that is converted."),
       to_item: refParam("item", "Id or name of the item that results; it has the domain of from_item."),
-      display_name: localizedTextParam("Display name of the conversion, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the conversion."),
       tags: tagsParam("Tags of the conversion."),
     },
@@ -63,9 +58,6 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
   },
   async run(params, context) {
     const input: Record<string, unknown> = { actor: params.actor, from_item: params.from_item, to_item: params.to_item };
-    if (params.display_name !== undefined) {
-      input.display_name = await localizedText(context, params.display_name);
-    }
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
     }
@@ -78,24 +70,21 @@ export const createConversionAction: ScflowActionDefinition<CreateConversionPara
   },
 };
 
-/** Updates the name, the description and the tags of a conversion; see `scflow/update_conversion` in the topic `scflow/actions`. */
+/** Updates the description and the tags of a conversion; see `scflow/update_conversion` in the topic `scflow/actions`. */
 export const updateConversionAction: ScflowActionDefinition<UpdateConversionParams, ConversionSummary> = {
   id: "scflow/update_conversion",
   writes: ["conversion"],
   title: "Update a conversion",
   description:
-    "Changes the name, the description or the tags of a conversion and returns it. Only the given properties change; null clears " +
-    "a name or a description, and tags replaces the whole list. " +
+    "Changes the description or the tags of a conversion and returns it. Only the given properties change; null clears " +
+    "the description, and tags replaces the whole list. " +
     "The actor and the two items of a conversion never change: to change them, delete the conversion and create another.",
   parameters: {
     type: "object",
     properties: {
-      id: refParam("conversion", "Id or name of the conversion to update."),
-      display_name: nullableLocalizedTextParam(
-        "New display name; each given language replaces the same language, the others are kept. null removes the name.",
-      ),
+      id: refParam("conversion", "Id of the conversion to update."),
       description: nullableLocalizedTextParam(
-        "New Markdown description; same language rule as name. null removes the description.",
+        "New Markdown description; each given language replaces the same language, the others are kept. null removes the description.",
       ),
       tags: tagsParam("New tags; they replace the current ones."),
     },
@@ -106,9 +95,6 @@ export const updateConversionAction: ScflowActionDefinition<UpdateConversionPara
   async run(params, context) {
     const patch: Record<string, unknown> = {};
 
-    if (params.display_name !== undefined) {
-      patch.display_name = params.display_name === null ? null : { set: await localizedText(context, params.display_name) };
-    }
     if (params.description !== undefined) {
       patch.description = params.description === null ? null : { set: await localizedText(context, params.description) };
     }
@@ -139,7 +125,7 @@ export const deleteConversionAction: ScflowActionDefinition<DeleteConversionPara
   parameters: {
     type: "object",
     properties: {
-      id: refParam("conversion", "Id or name of the conversion to delete."),
+      id: refParam("conversion", "Id of the conversion to delete."),
       cascade: cascadeParam("Has no effect: the notes of a conversion are always deleted with it."),
     },
     required: ["id"],
@@ -161,9 +147,5 @@ function summarizeConversion(conversion: Instance): ConversionSummary {
     from_item: conversion.from_item as string,
     to_item: conversion.to_item as string,
   };
-  const name = conversion.display_name as Record<string, string> | undefined | null;
-  if (name && Object.keys(name).length > 0) {
-    summary.display_name = name;
-  }
   return summary;
 }

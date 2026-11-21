@@ -312,6 +312,8 @@ interface ActionContext extends MclAccess {
   readonly action: string;    // the id of the running action
   runCommand(locator, command): Promise<CommandResult>;
   runScript(locator, script): Promise<CommandResult>;
+  resolveReference(schema: string, text: string): Promise<string>;
+  referenceOf(schema: string, key: string): Promise<string>;
   call(id: string, params?: unknown): Promise<unknown>;
 }
 ```
@@ -319,6 +321,7 @@ interface ActionContext extends MclAccess {
 - It is an `MclAccess` (see `@scfloworg/core`'s `docs/sessions.md`) limited to
   one dataset: a command or a script on another locator fails with
   `dataset_not_found`. Its commands run in the transaction of the action.
+- `resolveReference` gives the key of the instance of `schema` that `text`, an id or a name as short as it stays unambiguous, designates, as `ref` parameters do; it throws `unresolved_reference` or `ambiguous_reference`, which lists the candidates. `referenceOf` gives the reference of an instance, written in the source language of the dataset, or its key when its schema has no `name_scope`. They serve a body whose schema is known only when it runs, and a result that names an entity.
 - `call` runs another action by id in the same transaction and returns its
   result. An action calls only the actions of its own module and of its
   dependencies; any other id fails with `unknown_action`.

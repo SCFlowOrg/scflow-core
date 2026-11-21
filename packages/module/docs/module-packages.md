@@ -143,13 +143,16 @@ of a `.md` file, which the build inlines as its text.
 
 The reference of a module is generated from its declarations, never written by
 hand (ADR-0014). `generateReference(manifest)`, exported as
-`@scfloworg/module/reference`, reads no file and returns two topics, each with
+`@scfloworg/module/reference`, reads no file and returns two or three topics, each with
 its entry for `docs` and its Markdown body:
 
 - `<namespace>/concepts`, audience `user`: the schemas that are not abstract,
   with their description, their parent, and their properties compactly (type or
   enum values, `→` for a relation, `many`, `required`, `owner`, the inverse
   name). The concepts are what a person sees in the model.
+- `<namespace>/names`, audience `user`, only when a schema declares `name_scope`: which
+  schemas are referred to by name, the type of their name, their scope, an example of a
+  qualified name, and how to write a reference that stays unambiguous.
 - `<namespace>/actions`, audience `model-dev`: each action with its flags
   (read-only, destructive, writes), its parameters and two example calls, one
   with the required parameters and one with all of them. The examples are

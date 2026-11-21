@@ -2,7 +2,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ValidateFunction } from "ajv/dist/2020.js";
 import { actionError } from "./errors.js";
 import { copyJson } from "./json.js";
-import type { ActionDefinition, JsonSchema, RefResolver } from "./types.js";
+import type { ActionDefinition, JsonSchema, RefMatches, RefResolver } from "./types.js";
 
 /** A `ref` value met by the validator: where it sits, and the schema it names. */
 interface RefSite {
@@ -124,8 +124,8 @@ export function compileParameters(id: string, schema: JsonSchema): ValidateFunct
  * `undefined` stands for no parameters, an empty object. Parameters that break
  * the schema are refused with `invalid_parameters`. A `ref` value is resolved
  * by `resolveRef` under the rule of the specification: the instance whose id
- * is the value wins; otherwise the one instance whose `display_name` is the
- * value; no instance or several are refused with `invalid_parameters`. Without
+ * is the value wins; otherwise the one instance the resolver finds by name; no
+ * instance, several, or an error of the resolver are refused with `invalid_parameters`. Without
  * `resolveRef`, a `ref` value is kept as it is.
  *
  * `validate` is the compiled validator, which a registry keeps; it is compiled
@@ -167,7 +167,13 @@ export async function validateParameters(
 }
 
 async function resolveKey(id: string, site: RefSite, resolveRef: RefResolver): Promise<string> {
-  const matches = await resolveRef(site.schema, site.value);
+  let matches: RefMatches;
+  try {
+    matches = await resolveRef(site.schema, site.value);
+  } catch (error) {
+    // A resolver that finds the reference unresolved or ambiguous says so, with the candidates.
+    throw actionError("invalid_parameters", `${id}: ${(error as Error).message}`);
+  }
   if (matches.id !== null) return matches.id;
   if (matches.names.length === 1) return matches.names[0];
   const count = matches.names.length === 0 ? "no" : "several";

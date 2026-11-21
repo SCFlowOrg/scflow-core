@@ -9,19 +9,19 @@ Create an actor. Creates an actor of a given type in the network, optionally in 
 Flags: writes `actor`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the actor, a string or a map of language to string.
-- `type` (id or name of actor_type, required): Id or name of the actor type.
-- `scope` (id or name of scope): Id or name of the containing scope; the default scope of the type when omitted.
-- `location` (id or name of location): Id or name of the location of the actor; none when omitted.
-- `parent_actor` (id or name of actor): Id or name of the parent actor, to nest the actor in a hierarchy.
+- `name` (string, required): Name of the actor, unique among the actors of the same parent actor or, at the root, of the same scope.
+- `type` (reference (name or id) of actor_type, required): Id or name of the actor type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `scope` (reference (name or id) of scope): Id or name of the containing scope; the default scope of the type when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `location` (reference (name or id) of location): Id or name of the location of the actor; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `parent_actor` (reference (name or id) of actor): Id or name of the parent actor, to nest the actor in a hierarchy. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `description` (text or map language → text): Markdown description of the actor.
 - `tags` (list of string): Tags of the actor.
 
 Examples:
 
 ```
-scflow/create_actor {"display_name":"text","type":"<actor_type>"}
-scflow/create_actor {"display_name":"text","type":"<actor_type>","scope":"<scope>","location":"<location>","parent_actor":"<actor>","description":"text","tags":["text"]}
+scflow/create_actor {"name":"text","type":"<actor_type>"}
+scflow/create_actor {"name":"text","type":"<actor_type>","scope":"<scope>","location":"<location>","parent_actor":"<actor>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_actor`
@@ -31,20 +31,20 @@ Update an actor. Changes the name, description, type, scope, location, parent or
 Flags: writes `actor`.
 
 Parameters:
-- `id` (id or name of actor, required): Id or name of the actor to update.
-- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept.
-- `description` (text or map language → text): New Markdown description; same language rule as name.
-- `type` (id or name of actor_type): Id or name of the new actor type.
-- `scope` (id or name of scope): Id or name of the new scope, or null to detach the actor from its scope.
-- `location` (id or name of location): Id or name of the new location, or null to remove the location of the actor.
-- `parent_actor` (id or name of actor): Id or name of the new parent actor, or null to move the actor to the root.
+- `id` (reference (name or id) of actor, required): Id or name of the actor to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `name` (string): New name of the actor.
+- `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept.
+- `type` (reference (name or id) of actor_type): Id or name of the new actor type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `scope` (reference (name or id) of scope): Id or name of the new scope, or null to detach the actor from its scope. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `location` (reference (name or id) of location): Id or name of the new location, or null to remove the location of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `parent_actor` (reference (name or id) of actor): Id or name of the new parent actor, or null to move the actor to the root. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `tags` (list of string): New tags; they replace the current ones.
 
 Examples:
 
 ```
 scflow/update_actor {"id":"<actor>"}
-scflow/update_actor {"id":"<actor>","display_name":"text","description":"text","type":"<actor_type>","scope":"<scope>","location":"<location>","parent_actor":"<actor>","tags":["text"]}
+scflow/update_actor {"id":"<actor>","name":"text","description":"text","type":"<actor_type>","scope":"<scope>","location":"<location>","parent_actor":"<actor>","tags":["text"]}
 ```
 
 ### `scflow/delete_actor`
@@ -54,7 +54,7 @@ Delete an actor. Deletes an actor. It is refused while child actors, flows, held
 Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`.
 
 Parameters:
-- `id` (id or name of actor, required): Id or name of the actor to delete.
+- `id` (reference (name or id) of actor, required): Id or name of the actor to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `cascade` (boolean): When true, also deletes the descendant actors, the incident flows, the held items, the transformations, the conversions and the notes.
 
 Examples:
@@ -71,7 +71,7 @@ Delete an actor type. Deletes an actor type. It is refused while actors have thi
 Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`, `actor_type`.
 
 Parameters:
-- `id` (id or name of actor_type, required): Id or name of the actor type to delete.
+- `id` (reference (name or id) of actor_type, required): Id or name of the actor type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `cascade` (boolean): When true, also deletes the actors of this type with their descendants, flows, held items, transformations and notes.
 
 Examples:
@@ -88,7 +88,7 @@ Delete a scope. Deletes a scope. It is refused while actors are assigned to it, 
 Flags: destructive; writes `actor`, `flow`, `item_at_actor`, `transformation`, `transformation_line`, `conversion`, `mode_stop`, `scope`, `actor_type`.
 
 Parameters:
-- `id` (id or name of scope, required): Id or name of the scope to delete.
+- `id` (reference (name or id) of scope, required): Id or name of the scope to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `cascade` (boolean): When true, also deletes the actors of this scope with their descendants, flows, held items, transformations and notes.
 
 Examples:
@@ -105,17 +105,17 @@ Create an actor type. Creates an actor type with the flow domains its actors can
 Flags: writes `actor_type`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the actor type, a string or a map of language to string.
+- `name` (text or map language → text, required): Name of the actor type, a string or a map of language to string.
 - `domains` (list of physical | information | financial | service): Flow domains of the type; physical when omitted.
-- `default_scope` (id or name of scope): Id or name of the scope given to the actors of this type that name no scope.
+- `default_scope` (reference (name or id) of scope): Id or name of the scope given to the actors of this type that name no scope. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `description` (text or map language → text): Markdown description of the actor type.
 - `tags` (list of string): Tags of the actor type.
 
 Examples:
 
 ```
-scflow/create_actor_type {"display_name":"text"}
-scflow/create_actor_type {"display_name":"text","domains":["physical"],"default_scope":"<scope>","description":"text","tags":["text"]}
+scflow/create_actor_type {"name":"text"}
+scflow/create_actor_type {"name":"text","domains":["physical"],"default_scope":"<scope>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/create_scope`
@@ -125,30 +125,29 @@ Create a scope. Creates a scope, a lane that groups actors (for example SOURCE, 
 Flags: writes `scope`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the scope, a string or a map of language to string.
+- `name` (text or map language → text, required): Name of the scope, a string or a map of language to string.
 - `description` (text or map language → text): Markdown description of the scope.
 - `tags` (list of string): Tags of the scope.
 
 Examples:
 
 ```
-scflow/create_scope {"display_name":"text"}
-scflow/create_scope {"display_name":"text","description":"text","tags":["text"]}
+scflow/create_scope {"name":"text"}
+scflow/create_scope {"name":"text","description":"text","tags":["text"]}
 ```
 
 ### `scflow/create_flow`
 
-Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. Give display_name to name the flow; it has no name otherwise. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a mode.
+Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. A flow has no name: its source, destination, item and mode identify it, and the description holds what else there is to say. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the flow travel on an existing mode, as scflow/set_flow_mode does; creating a flow never creates a mode.
 
 Flags: writes `flow`, `item_at_actor`.
 
 Parameters:
-- `source` (id or name of actor, required): Id or name of the actor the flow starts from.
-- `destination` (id or name of actor, required): Id or name of the actor the flow arrives at.
-- `item` (id or name of item): Id or name of the item the flow carries; required between an actor and its child.
+- `source` (reference (name or id) of actor, required): Id or name of the actor the flow starts from. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `destination` (reference (name or id) of actor, required): Id or name of the actor the flow arrives at. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `item` (reference (name or id) of item): Id or name of the item the flow carries; required between an actor and its child. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `bidirectional` (boolean): Whether the flow carries items in both directions; false when omitted.
-- `mode` (id or name of mode): Id or name of the mode the flow travels on; none when omitted.
-- `display_name` (text or map language → text): Display name of the flow, a string or a map of language to string; the flow has no name when omitted.
+- `mode` (reference (name or id) of mode): Id or name of the mode the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `description` (text or map language → text): Markdown description of the flow.
 - `tags` (list of string): Tags of the flow.
 
@@ -156,18 +155,17 @@ Examples:
 
 ```
 scflow/create_flow {"source":"<actor>","destination":"<actor>"}
-scflow/create_flow {"source":"<actor>","destination":"<actor>","item":"<item>","bidirectional":true,"mode":"<mode>","display_name":"text","description":"text","tags":["text"]}
+scflow/create_flow {"source":"<actor>","destination":"<actor>","item":"<item>","bidirectional":true,"mode":"<mode>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_flow`
 
-Update a flow. Changes the name, the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change; null removes the name. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
+Update a flow. Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
 
 Flags: writes `flow`.
 
 Parameters:
-- `id` (id or name of flow, required): Id of the flow to update.
-- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept. null removes the name.
+- `id` (id of flow, required): Id of the flow to update.
 - `bidirectional` (boolean): Whether the flow carries items in both directions.
 - `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept.
 - `tags` (list of string): New tags; they replace the current ones.
@@ -176,7 +174,7 @@ Examples:
 
 ```
 scflow/update_flow {"id":"<flow>"}
-scflow/update_flow {"id":"<flow>","display_name":"text","bidirectional":true,"description":"text","tags":["text"]}
+scflow/update_flow {"id":"<flow>","bidirectional":true,"description":"text","tags":["text"]}
 ```
 
 ### `scflow/set_flow_item`
@@ -186,8 +184,8 @@ Set the item of a flow. Sets the item carried by a flow that carries none, and r
 Flags: writes `flow`, `item_at_actor`.
 
 Parameters:
-- `id` (id or name of flow, required): Id of the flow.
-- `item` (id or name of item, required): Id or name of the item.
+- `id` (id of flow, required): Id of the flow.
+- `item` (reference (name or id) of item, required): Id or name of the item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 
 Examples:
 
@@ -202,7 +200,7 @@ Delete a flow. Deletes a flow and returns its id. The items held by its ends are
 Flags: destructive; writes `flow`.
 
 Parameters:
-- `id` (id or name of flow, required): Id of the flow to delete.
+- `id` (id of flow, required): Id of the flow to delete.
 - `cascade` (boolean): Has no effect: nothing depends on a flow but its notes, which are always deleted with it.
 
 Examples:
@@ -219,7 +217,7 @@ Create a mode type. Creates a mode type, the category of a mode such as road, se
 Flags: writes `mode_type`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the mode type, a string or a map of language to string.
+- `name` (text or map language → text, required): Name of the mode type, a string or a map of language to string.
 - `domain` (physical | information | financial | service, required): The flow domain of the modes of this type.
 - `description` (text or map language → text): Markdown description of the mode type.
 - `tags` (list of string): Tags of the mode type.
@@ -227,8 +225,8 @@ Parameters:
 Examples:
 
 ```
-scflow/create_mode_type {"display_name":"text","domain":"physical"}
-scflow/create_mode_type {"display_name":"text","domain":"physical","description":"text","tags":["text"]}
+scflow/create_mode_type {"name":"text","domain":"physical"}
+scflow/create_mode_type {"name":"text","domain":"physical","description":"text","tags":["text"]}
 ```
 
 ### `scflow/delete_mode_type`
@@ -238,7 +236,7 @@ Delete a mode type. Deletes a mode type. It is refused while modes have this typ
 Flags: destructive; writes `mode_type`, `mode`, `mode_stop`, `flow`.
 
 Parameters:
-- `id` (id or name of mode_type, required): Id or name of the mode type to delete.
+- `id` (reference (name or id) of mode_type, required): Id or name of the mode type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `cascade` (boolean): When true, also deletes the modes of this type with their stops and notes; their flows are kept.
 
 Examples:
@@ -255,8 +253,8 @@ Create a mode. Creates a mode, the instance that says how flows travel (a shuttl
 Flags: writes `mode`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the mode, a string or a map of language to string.
-- `type` (id or name of mode_type, required): Id or name of the mode type.
+- `name` (string, required): Name of the mode, unique among the modes.
+- `type` (reference (name or id) of mode_type, required): Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `description` (text or map language → text): Markdown description of the mode.
 - `schedule` (text or map language → text): Schedule of the mode as a free text, such as every Monday.
 - `bidirectional` (boolean): Whether the stops are served in both orders; false when omitted.
@@ -265,8 +263,8 @@ Parameters:
 Examples:
 
 ```
-scflow/create_mode {"display_name":"text","type":"<mode_type>"}
-scflow/create_mode {"display_name":"text","type":"<mode_type>","description":"text","schedule":"text","bidirectional":true,"tags":["text"]}
+scflow/create_mode {"name":"text","type":"<mode_type>"}
+scflow/create_mode {"name":"text","type":"<mode_type>","description":"text","schedule":"text","bidirectional":true,"tags":["text"]}
 ```
 
 ### `scflow/update_mode`
@@ -276,11 +274,11 @@ Update a mode. Changes the name, description, type, schedule, bidirectional flag
 Flags: writes `mode`.
 
 Parameters:
-- `id` (id or name of mode, required): Id or name of the mode to update.
-- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept.
-- `description` (text or map language → text): New Markdown description; same language rule as name. null removes the description.
-- `type` (id or name of mode_type): Id or name of the new mode type.
-- `schedule` (text or map language → text): New schedule; same language rule as name. null removes the schedule.
+- `id` (reference (name or id) of mode, required): Id or name of the mode to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `name` (string): New name of the mode.
+- `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept. null removes the description.
+- `type` (reference (name or id) of mode_type): Id or name of the new mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `schedule` (text or map language → text): New schedule; each given language replaces the same language, the others are kept. null removes the schedule.
 - `bidirectional` (boolean): Whether the stops are served in both orders.
 - `tags` (list of string): New tags; they replace the current ones.
 
@@ -288,7 +286,7 @@ Examples:
 
 ```
 scflow/update_mode {"id":"<mode>"}
-scflow/update_mode {"id":"<mode>","display_name":"text","description":"text","type":"<mode_type>","schedule":"text","bidirectional":true,"tags":["text"]}
+scflow/update_mode {"id":"<mode>","name":"text","description":"text","type":"<mode_type>","schedule":"text","bidirectional":true,"tags":["text"]}
 ```
 
 ### `scflow/delete_mode`
@@ -298,7 +296,7 @@ Delete a mode. Deletes a mode with its stops and notes, and returns its id. It i
 Flags: destructive; writes `mode`, `mode_stop`, `flow`.
 
 Parameters:
-- `id` (id or name of mode, required): Id or name of the mode to delete.
+- `id` (reference (name or id) of mode, required): Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `cascade` (boolean): When true, also clears the mode of the flows that travel on it; the flows are kept.
 
 Examples:
@@ -315,8 +313,8 @@ Add a stop to a mode. Adds a stop at an actor to a mode, at the position given b
 Flags: writes `mode_stop`.
 
 Parameters:
-- `mode` (id or name of mode, required): Id or name of the mode.
-- `actor` (id or name of actor, required): Id or name of the actor of the stop.
+- `mode` (reference (name or id) of mode, required): Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `actor` (reference (name or id) of actor, required): Id or name of the actor of the stop. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `sequence` (integer): Position of the stop, from 1; after the last stop when omitted.
 - `lead_time` (string): ISO 8601 duration of the leg from the previous stop to this one.
 - `reverse_lead_time` (string): ISO 8601 duration of the leg from this stop back to the previous one; lead_time when omitted.
@@ -336,7 +334,7 @@ Update a stop of a mode. Moves a stop of a mode to another position, given by se
 Flags: writes `mode_stop`.
 
 Parameters:
-- `id` (id or name of mode_stop, required): Id of the stop.
+- `id` (id of mode_stop, required): Id of the stop.
 - `sequence` (integer): New position of the stop, from 1, at most the number of stops.
 - `lead_time` (string,null): New ISO 8601 duration of the leg from the previous stop; null clears it.
 - `reverse_lead_time` (string,null): New ISO 8601 duration of the leg backwards; null clears it.
@@ -356,7 +354,7 @@ Remove a stop from a mode. Removes a stop from its mode and returns its id; the 
 Flags: destructive; writes `mode_stop`.
 
 Parameters:
-- `id` (id or name of mode_stop, required): Id of the stop to remove.
+- `id` (id of mode_stop, required): Id of the stop to remove.
 - `cascade` (boolean): Has no effect: nothing depends on a stop but its notes, which are always deleted with it.
 
 Examples:
@@ -373,8 +371,8 @@ Set the mode of a flow. Makes a flow travel on a mode, or on none with null, and
 Flags: writes `flow`.
 
 Parameters:
-- `id` (id or name of flow, required): Id of the flow.
-- `mode` (id or name of mode, required): Id or name of the mode, or null to take the flow off its mode.
+- `id` (id of flow, required): Id of the flow.
+- `mode` (reference (name or id) of mode, required): Id or name of the mode, or null to take the flow off its mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 
 Examples:
 
@@ -389,9 +387,9 @@ Create a mode from flows. Creates a mode of a given type for flows that share th
 Flags: writes `mode`, `mode_stop`, `flow`.
 
 Parameters:
-- `flows` (list of id or name of flow, required): Ids of the flows, at least one.
-- `type` (id or name of mode_type, required): Id or name of the mode type.
-- `display_name` (text or map language → text, required): Display name of the mode, a string or a map of language to string.
+- `flows` (list of id of flow, required): Ids of the flows, at least one.
+- `type` (reference (name or id) of mode_type, required): Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `name` (string, required): Name of the mode, unique among the modes.
 - `description` (text or map language → text): Markdown description of the mode.
 - `schedule` (text or map language → text): Schedule of the mode as a free text, such as every Monday.
 - `bidirectional` (boolean): Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional.
@@ -402,8 +400,8 @@ Parameters:
 Examples:
 
 ```
-scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","display_name":"text"}
-scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","display_name":"text","description":"text","schedule":"text","bidirectional":true,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
+scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","name":"text"}
+scflow/create_mode_from_flows {"flows":["<flow>"],"type":"<mode_type>","name":"text","description":"text","schedule":"text","bidirectional":true,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
 ```
 
 ### `scflow/inspect_mode`
@@ -413,7 +411,7 @@ Inspect a mode. Describes a mode: its type and domain, its stops in order with t
 Flags: read-only.
 
 Parameters:
-- `id` (id or name of mode, required): Id or name of the mode.
+- `id` (reference (name or id) of mode, required): Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 
 Examples:
 
@@ -428,7 +426,7 @@ Create an item type. Creates an item type, a category of items bound to one flow
 Flags: writes `item_type`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the item type, a string or a map of language to string.
+- `name` (text or map language → text, required): Name of the item type, a string or a map of language to string.
 - `domain` (physical | information | financial | service, required): The flow domain of the items of this type.
 - `description` (text or map language → text): Markdown description of the item type.
 - `tags` (list of string): Tags of the item type.
@@ -436,8 +434,8 @@ Parameters:
 Examples:
 
 ```
-scflow/create_item_type {"display_name":"text","domain":"physical"}
-scflow/create_item_type {"display_name":"text","domain":"physical","description":"text","tags":["text"]}
+scflow/create_item_type {"name":"text","domain":"physical"}
+scflow/create_item_type {"name":"text","domain":"physical","description":"text","tags":["text"]}
 ```
 
 ### `scflow/create_item`
@@ -447,16 +445,16 @@ Create an item. Creates an item, a family of things the network moves and holds,
 Flags: writes `item`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the item, a string or a map of language to string.
-- `type` (id or name of item_type, required): Id or name of the item type.
+- `name` (string, required): Name of the item, unique among the items; a code such as a SKU is a name, other details go in the description.
+- `type` (reference (name or id) of item_type, required): Id or name of the item type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `description` (text or map language → text): Markdown description of the item.
 - `tags` (list of string): Tags of the item.
 
 Examples:
 
 ```
-scflow/create_item {"display_name":"text","type":"<item_type>"}
-scflow/create_item {"display_name":"text","type":"<item_type>","description":"text","tags":["text"]}
+scflow/create_item {"name":"text","type":"<item_type>"}
+scflow/create_item {"name":"text","type":"<item_type>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_item`
@@ -466,17 +464,17 @@ Update an item. Changes the name, description or type of an item and returns it.
 Flags: writes `item`.
 
 Parameters:
-- `id` (id or name of item, required): Id or name of the item to update.
-- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept.
-- `description` (text or map language → text): New Markdown description; same language rule as name.
-- `type` (id or name of item_type): Id or name of the new item type.
+- `id` (reference (name or id) of item, required): Id or name of the item to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `name` (string): New name of the item.
+- `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept.
+- `type` (reference (name or id) of item_type): Id or name of the new item type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `tags` (list of string): New tags; they replace the current ones.
 
 Examples:
 
 ```
 scflow/update_item {"id":"<item>"}
-scflow/update_item {"id":"<item>","display_name":"text","description":"text","type":"<item_type>","tags":["text"]}
+scflow/update_item {"id":"<item>","name":"text","description":"text","type":"<item_type>","tags":["text"]}
 ```
 
 ### `scflow/hold_item`
@@ -486,8 +484,8 @@ Hold an item at an actor. Makes an actor hold an item (inventory, queue, cash or
 Flags: writes `item_at_actor`.
 
 Parameters:
-- `actor` (id or name of actor, required): Id or name of the actor.
-- `item` (id or name of item, required): Id or name of the item.
+- `actor` (reference (name or id) of actor, required): Id or name of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `item` (reference (name or id) of item, required): Id or name of the item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `tags` (list of string): Tags of the record, when the action creates it.
 
 Examples:
@@ -504,7 +502,7 @@ Release a held item. Removes an item from the actor that holds it, and returns t
 Flags: destructive; writes `item_at_actor`, `transformation_line`.
 
 Parameters:
-- `id` (id or name of item_at_actor, required): Id of the item-at-actor record to remove.
+- `id` (id of item_at_actor, required): Id of the item-at-actor record to remove.
 - `cascade` (boolean): When true, also deletes the transformation lines that use the record.
 
 Examples:
@@ -521,7 +519,7 @@ Delete an item. Deletes an item. It is refused while actors hold it, flows carry
 Flags: destructive; writes `item`, `flow`, `item_at_actor`, `transformation_line`, `conversion`.
 
 Parameters:
-- `id` (id or name of item, required): Id or name of the item to delete.
+- `id` (reference (name or id) of item, required): Id or name of the item to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `cascade` (boolean): When true, also deletes the held records, the flows that carry the item, the conversions, the transformation lines and the notes.
 
 Examples:
@@ -538,7 +536,7 @@ Delete an item type. Deletes an item type. It is refused while items have this t
 Flags: destructive; writes `item`, `item_type`, `flow`, `item_at_actor`, `transformation_line`, `conversion`.
 
 Parameters:
-- `id` (id or name of item_type, required): Id or name of the item type to delete.
+- `id` (reference (name or id) of item_type, required): Id or name of the item type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `cascade` (boolean): When true, also deletes the items of this type with their held records, flows, lines and notes.
 
 Examples:
@@ -555,35 +553,35 @@ Create a transformation type. Creates a transformation type, a kind of operation
 Flags: writes `transformation_type`.
 
 Parameters:
-- `display_name` (text or map language → text, required): Display name of the transformation type, a string or a map of language to string.
+- `name` (text or map language → text, required): Name of the transformation type, a string or a map of language to string.
 - `description` (text or map language → text): Markdown description of the transformation type.
 - `tags` (list of string): Tags of the transformation type.
 
 Examples:
 
 ```
-scflow/create_transformation_type {"display_name":"text"}
-scflow/create_transformation_type {"display_name":"text","description":"text","tags":["text"]}
+scflow/create_transformation_type {"name":"text"}
+scflow/create_transformation_type {"name":"text","description":"text","tags":["text"]}
 ```
 
 ### `scflow/create_transformation`
 
-Create a transformation. Creates a transformation of a given type inside an actor, with no line yet, and returns it. The transformation is named after its type when no name is given.
+Create a transformation. Creates a transformation of a given type inside an actor, with no line yet, and returns it. Its name is required and has no default; it is unique among the transformations of the actor.
 
 Flags: writes `transformation`.
 
 Parameters:
-- `actor` (id or name of actor, required): Id or name of the actor that executes the transformation.
-- `type` (id or name of transformation_type, required): Id or name of the transformation type.
-- `display_name` (text or map language → text): Display name of the transformation; the name of its type when omitted.
+- `actor` (reference (name or id) of actor, required): Id or name of the actor that executes the transformation. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `type` (reference (name or id) of transformation_type, required): Id or name of the transformation type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `name` (string, required): Name of the transformation, unique among the transformations of the actor, such as Assembly.
 - `description` (text or map language → text): Markdown description of the transformation.
 - `tags` (list of string): Tags of the transformation.
 
 Examples:
 
 ```
-scflow/create_transformation {"actor":"<actor>","type":"<transformation_type>"}
-scflow/create_transformation {"actor":"<actor>","type":"<transformation_type>","display_name":"text","description":"text","tags":["text"]}
+scflow/create_transformation {"actor":"<actor>","type":"<transformation_type>","name":"text"}
+scflow/create_transformation {"actor":"<actor>","type":"<transformation_type>","name":"text","description":"text","tags":["text"]}
 ```
 
 ### `scflow/connect_transformation_line`
@@ -593,8 +591,8 @@ Connect a transformation line. Connects an item held by the actor of a transform
 Flags: writes `transformation_line`.
 
 Parameters:
-- `transformation` (id or name of transformation, required): Id or name of the transformation.
-- `held_item` (id or name of item_at_actor, required): Id of the item-at-actor record, held by the actor of the transformation.
+- `transformation` (reference (name or id) of transformation, required): Id or name of the transformation. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `held_item` (id of item_at_actor, required): Id of the item-at-actor record, held by the actor of the transformation.
 - `role` (consumed | produced, required): Whether the transformation consumes or produces the item.
 - `tags` (list of string): Tags of the line, when the action creates it.
 
@@ -607,21 +605,22 @@ scflow/connect_transformation_line {"transformation":"<transformation>","held_it
 
 ### `scflow/define_process`
 
-Define a process. Creates a transformation of a given type at an actor, makes the actor hold the consumed and produced items that it does not hold yet, and attaches a line for each of them, in one step. Every item must be in a domain of the actor. Returns the transformation and its lines.
+Define a process. Creates a named transformation of a given type at an actor, makes the actor hold the consumed and produced items that it does not hold yet, and attaches a line for each of them, in one step. Every item must be in a domain of the actor. Returns the transformation and its lines.
 
 Flags: writes `transformation`, `item_at_actor`, `transformation_line`.
 
 Parameters:
-- `actor` (id or name of actor, required): Id or name of the actor.
-- `transformation_type` (id or name of transformation_type, required): Id or name of the transformation type.
-- `consumed_items` (list of id or name of item): Ids or names of the items consumed.
-- `produced_items` (list of id or name of item): Ids or names of the items produced.
+- `actor` (reference (name or id) of actor, required): Id or name of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `transformation_type` (reference (name or id) of transformation_type, required): Id or name of the transformation type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `name` (string, required): Name of the transformation, unique among the transformations of the actor, such as Assembly.
+- `consumed_items` (list of reference (name or id) of item): Items consumed, each an id or a name. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `produced_items` (list of reference (name or id) of item): Items produced, each an id or a name. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 
 Examples:
 
 ```
-scflow/define_process {"actor":"<actor>","transformation_type":"<transformation_type>"}
-scflow/define_process {"actor":"<actor>","transformation_type":"<transformation_type>","consumed_items":["<item>"],"produced_items":["<item>"]}
+scflow/define_process {"actor":"<actor>","transformation_type":"<transformation_type>","name":"text"}
+scflow/define_process {"actor":"<actor>","transformation_type":"<transformation_type>","name":"text","consumed_items":["<item>"],"produced_items":["<item>"]}
 ```
 
 ### `scflow/delete_transformation`
@@ -631,7 +630,7 @@ Delete a transformation. Deletes a transformation with its lines and notes, and 
 Flags: destructive; writes `transformation`, `transformation_line`.
 
 Parameters:
-- `id` (id or name of transformation, required): Id or name of the transformation to delete.
+- `id` (reference (name or id) of transformation, required): Id or name of the transformation to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `cascade` (boolean): Has no effect: the lines and the notes of a transformation are always deleted with it.
 
 Examples:
@@ -648,7 +647,7 @@ Delete a transformation type. Deletes a transformation type. It is refused while
 Flags: destructive; writes `transformation`, `transformation_line`, `transformation_type`.
 
 Parameters:
-- `id` (id or name of transformation_type, required): Id or name of the transformation type to delete.
+- `id` (reference (name or id) of transformation_type, required): Id or name of the transformation type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `cascade` (boolean): When true, also deletes the transformations of this type with their lines and notes.
 
 Examples:
@@ -660,15 +659,14 @@ scflow/delete_transformation_type {"id":"<transformation_type>","cascade":true}
 
 ### `scflow/create_conversion`
 
-Create a conversion. Creates a conversion, which turns one item into another item at an actor, and returns it. The two items must be in the same flow domain, and they cannot change afterwards. The name, the description and the tags are optional.
+Create a conversion. Creates a conversion, which turns one item into another item at an actor, and returns it. The two items must be in the same flow domain, and they cannot change afterwards. A conversion has no name: its actor and its two items identify it, and the description holds what else there is to say. The description and the tags are optional.
 
 Flags: writes `conversion`.
 
 Parameters:
-- `actor` (id or name of actor, required): Id or name of the actor where the conversion takes place.
-- `from_item` (id or name of item, required): Id or name of the item that is converted.
-- `to_item` (id or name of item, required): Id or name of the item that results; it has the domain of from_item.
-- `display_name` (text or map language → text): Display name of the conversion, a string or a map of language to string.
+- `actor` (reference (name or id) of actor, required): Id or name of the actor where the conversion takes place. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `from_item` (reference (name or id) of item, required): Id or name of the item that is converted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `to_item` (reference (name or id) of item, required): Id or name of the item that results; it has the domain of from_item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `description` (text or map language → text): Markdown description of the conversion.
 - `tags` (list of string): Tags of the conversion.
 
@@ -676,26 +674,25 @@ Examples:
 
 ```
 scflow/create_conversion {"actor":"<actor>","from_item":"<item>","to_item":"<item>"}
-scflow/create_conversion {"actor":"<actor>","from_item":"<item>","to_item":"<item>","display_name":"text","description":"text","tags":["text"]}
+scflow/create_conversion {"actor":"<actor>","from_item":"<item>","to_item":"<item>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_conversion`
 
-Update a conversion. Changes the name, the description or the tags of a conversion and returns it. Only the given properties change; null clears a name or a description, and tags replaces the whole list. The actor and the two items of a conversion never change: to change them, delete the conversion and create another.
+Update a conversion. Changes the description or the tags of a conversion and returns it. Only the given properties change; null clears the description, and tags replaces the whole list. The actor and the two items of a conversion never change: to change them, delete the conversion and create another.
 
 Flags: writes `conversion`.
 
 Parameters:
-- `id` (id or name of conversion, required): Id or name of the conversion to update.
-- `display_name` (text or map language → text): New display name; each given language replaces the same language, the others are kept. null removes the name.
-- `description` (text or map language → text): New Markdown description; same language rule as name. null removes the description.
+- `id` (id of conversion, required): Id of the conversion to update.
+- `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept. null removes the description.
 - `tags` (list of string): New tags; they replace the current ones.
 
 Examples:
 
 ```
 scflow/update_conversion {"id":"<conversion>"}
-scflow/update_conversion {"id":"<conversion>","display_name":"text","description":"text","tags":["text"]}
+scflow/update_conversion {"id":"<conversion>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/delete_conversion`
@@ -705,7 +702,7 @@ Delete a conversion. Deletes a conversion with its notes, and returns its id. Th
 Flags: destructive; writes `conversion`.
 
 Parameters:
-- `id` (id or name of conversion, required): Id or name of the conversion to delete.
+- `id` (id of conversion, required): Id of the conversion to delete.
 - `cascade` (boolean): Has no effect: the notes of a conversion are always deleted with it.
 
 Examples:
@@ -722,7 +719,7 @@ Add a note. Adds a Markdown note to an entity of the model (actor, flow, item, s
 Flags: writes `note`.
 
 Parameters:
-- `annotated` (id or name of annotable, required): Id of the entity to annotate, whatever its kind.
+- `annotated` (id of annotable, required): Id of the entity to annotate, whatever its kind.
 - `content` (text or map language → text, required): Markdown text of the note.
 
 Examples:
@@ -738,7 +735,7 @@ Update a note. Changes the content of a note and returns it. Each given language
 Flags: writes `note`.
 
 Parameters:
-- `id` (id or name of note, required): Id of the note to update.
+- `id` (id of note, required): Id of the note to update.
 - `content` (text or map language → text, required): New Markdown text; each given language replaces the same language.
 
 Examples:
@@ -754,7 +751,7 @@ Remove a note. Deletes a note and returns its id. The entity it annotated is not
 Flags: destructive; writes `note`.
 
 Parameters:
-- `id` (id or name of note, required): Id of the note to delete.
+- `id` (id of note, required): Id of the note to delete.
 - `cascade` (boolean): Has no effect: nothing depends on a note.
 
 Examples:
@@ -771,7 +768,7 @@ Find the notes of an entity. Lists the notes of an entity, given by its id: [{ i
 Flags: read-only.
 
 Parameters:
-- `entity` (id or name of annotable, required): Id of the entity, whatever its kind.
+- `entity` (id of annotable, required): Id of the entity, whatever its kind.
 
 Examples:
 
@@ -786,7 +783,7 @@ Add tags. Appends tags to an entity of the model (actor, flow, item, scope, type
 Flags: writes `annotable`.
 
 Parameters:
-- `entity` (id or name of annotable, required): Id of the entity to tag, whatever its kind.
+- `entity` (id of annotable, required): Id of the entity to tag, whatever its kind.
 - `tags` (list of string, required): Tags to add, at least one.
 
 Examples:
@@ -802,7 +799,7 @@ Remove tags. Removes the given tags from an entity of the model (actor, flow, it
 Flags: writes `annotable`.
 
 Parameters:
-- `entity` (id or name of annotable, required): Id of the entity to untag, whatever its kind.
+- `entity` (id of annotable, required): Id of the entity to untag, whatever its kind.
 - `tags` (list of string, required): Tags to remove, at least one.
 
 Examples:

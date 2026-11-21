@@ -1,5 +1,5 @@
 import type { MclAccess } from "@scfloworg/core";
-import type { ActionAccess } from "./actions/params.js";
+import type { DatasetAccess } from "./actions/params.js";
 import { holdItem } from "./actions/items.js";
 import { type Instance } from "./actions/refs.js";
 
@@ -28,8 +28,6 @@ export interface CreateFlowInput extends FlowEndsInput {
    * engine refuses a mode whose stops do not hold both ends (`mode_stops_hold_flow_ends`).
    */
   mode?: string;
-  /** Display name of the flow, one entry per language. The flow has no name when absent. */
-  display_name?: Record<string, string>;
   /** Markdown description of the flow, one entry per language. The flow has none when absent. */
   description?: Record<string, string>;
   /** Tags of the flow. */
@@ -69,8 +67,7 @@ export async function getCommonFlowDomains(
  * Creates one flow from `source` to `destination`.
  *
  * The flow takes `input.bidirectional` as its `bidirectional` flag, and
- * `input.display_name`, `input.description` and `input.tags` when they are
- * given. Flows already linking the two actors are neither reused nor reported:
+ * `input.description` and `input.tags` when they are given. Flows already linking the two actors are neither reused nor reported:
  * the flow is always created.
  *
  * When `input.item` is given, an `item_at_actor` is created for each end that
@@ -86,7 +83,7 @@ export async function createFlow(
   locator: string,
   input: CreateFlowInput,
 ): Promise<Record<string, unknown>> {
-  const { source, destination, item, bidirectional = false, mode, display_name, description, tags } = input;
+  const { source, destination, item, bidirectional = false, mode, description, tags } = input;
 
   if (item !== undefined) {
     await holdItem(onDataset(mcl, locator), source, item);
@@ -102,7 +99,6 @@ export async function createFlow(
       bidirectional,
       ...(item === undefined ? {} : { item }),
       ...(mode === undefined ? {} : { mode }),
-      ...(display_name === undefined ? {} : { display_name: { ...display_name } }),
       ...(description === undefined ? {} : { description: { ...description } }),
       ...(tags === undefined ? {} : { tags: [...tags] }),
     },
@@ -140,7 +136,7 @@ export async function setFlowItem(
 }
 
 /** The access of the actions on the dataset `locator`. */
-function onDataset(mcl: MclAccess, locator: string): ActionAccess {
+function onDataset(mcl: MclAccess, locator: string): DatasetAccess {
   return { locator, runCommand: (at, command) => mcl.runCommand(at, command), runScript: (at, script) => mcl.runScript(at, script) };
 }
 

@@ -15,8 +15,8 @@ export type { RestoreResult, CheckUpgradeResult, ApiSession, TransactionId, Data
 export type { ModelActionDefinition, ModelActionParamsSchema } from "./action.js";
 export { resolveCommandForm } from "./command.js";
 export type { BlockingReference, DeleteImpact, ImpactedInstance } from "./command.js";
-export { canonicalParameters, checkActionWrite, createRefResolver, generatedActionIds, generatedActions } from "./moduleActions.js";
-export type { EngineRefResolver, GeneratedAction, GeneratedActionContext } from "./moduleActions.js";
+export { canonicalParameters, checkActionWrite, createReferenceOf, createRefResolver, generatedActionIds, generatedActions } from "./moduleActions.js";
+export type { EngineReferenceOf, EngineRefResolver, GeneratedAction, GeneratedActionContext } from "./moduleActions.js";
 export type { ScriptSession } from "./script.js";
 export { BASE_SCALAR_TYPES, BUILTIN_SCALAR_TYPES, META_SCHEMAS, isBaseScalarType } from "./builtins.js";
 export { UUID_PATTERN, isUuid } from "./ids.js";

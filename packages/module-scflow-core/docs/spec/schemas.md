@@ -16,41 +16,40 @@ erDiagram
     }
     ACTOR_TYPE {
         string id PK
-        localized_string display_name
+        localized_string name
         localized_markdown description
         flow_domain_array domains
     }
     ITEM_TYPE {
         string id PK
-        localized_string display_name
+        localized_string name
         localized_markdown description
         flow_domain domain
     }
     TRANSFORMATION_TYPE {
         string id PK
-        localized_string display_name
+        localized_string name
         localized_markdown description
     }
     ACTOR {
         string id PK
-        localized_string display_name
+        string name
         localized_markdown description
     }
     FLOW {
         string id PK
-        localized_string display_name
         localized_markdown description
         boolean bidirectional
     }
     MODE_TYPE {
         string id PK
-        localized_string display_name
+        localized_string name
         localized_markdown description
         flow_domain domain
     }
     MODE {
         string id PK
-        localized_string display_name
+        string name
         localized_markdown description
         localized_string schedule
         boolean bidirectional
@@ -63,12 +62,12 @@ erDiagram
     }
     ITEM {
         string id PK
-        localized_string display_name
+        string name
         localized_markdown description
     }
     TRANSFORMATION {
         string id PK
-        localized_string display_name
+        string name
         localized_markdown description
     }
     TRANSFORMATION_LINE {
@@ -80,17 +79,16 @@ erDiagram
     }
     CONVERSION {
         string id PK
-        localized_string display_name
         localized_markdown description
     }
     SCOPE {
         string id PK
-        localized_string display_name
+        localized_string name
         localized_markdown description
     }
     LOCATION {
         string id PK
-        localized_string display_name
+        string name
         localized_markdown description
         latitude latitude
         longitude longitude
@@ -258,6 +256,29 @@ The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item 
 
 Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type`, the `location` of an `actor` and the `mode` of a `flow` have no `on_delete`, so they are cleared when their target is deleted: deleting a mode keeps its flows, which travel on no mode afterwards. The stops of a mode go with it silently, and the stops at an actor are confirmed with the actor.
 
+## Names
+
+*Rule.*
+
+An instance has a generated id that no interface shows; a person, a script or an assistant refers to it by its `name`. A schema opts in with the constraint `name_scope` of the [meta-model](../../../core/docs/spec/meta-model.md#names-and-references), which makes its `name` mandatory and unique among the instances that share a scope; [References by name](../../../core/docs/references.md) shows how to use it. The module `scflow:core` applies it as follows.
+
+| Schema | Type of `name` | `name_scope` (the scope of an instance) |
+| --- | --- | --- |
+| `actor` | `string` | `[parent_actor, scope]`: the parent actor, else the scope of the actor, else the dataset |
+| `transformation` | `string` | `[actor]`: the actor that executes it |
+| `item`, `mode`, `location` | `string` | `[]`: the dataset |
+| `actor_type`, `item_type`, `mode_type`, `transformation_type`, `scope` | `localized_string` | `[]`: the dataset |
+
+- **A plain `string`** is the name of an instance that is the same for every stakeholder: an actor, an item, a mode, a transformation, a location. It is also where a user puts a code, such as a site code or a SKU; what else there is to say goes in the description.
+- **A `localized_string`** is the name of a vocabulary that a reader wants in their language: the types and the scopes. An action takes a plain string, which it stores in the source language of the dataset, or a map of language to text.
+- **Descriptions** stay `localized_markdown`.
+- **The same name may repeat** where the real world repeats it: two plants each have a `Line 1`, two actors each have an `Assembly`. The qualified name is `France / Lyon / Line 1`; a reference is its shortest unambiguous end, `Line 1` or `Lyon / Line 1`. A name cannot contain `/`.
+- **A flow has no name.** Its source, destination, item and mode identify it; two flows with the same four values are two flows. What else there is to say goes in its description.
+- **A conversion has no name.** Its actor, `from_item` and `to_item` identify it, and what else there is to say goes in its description.
+- **A transformation has a name that its author writes**, with no default: two transformations of one type would otherwise share a name, and a localized text would flow into a name that is not localized.
+- **`item_at_actor`, `mode_stop`, `transformation_line` and `note`** have no name. They are reached through their owner and the properties of their `unique` group, or by id.
+- **`shared_by_name`** is used by no schema of this module: it is reserved to the meta-model.
+
 ## annotable
 
 *Schema.*
@@ -305,8 +326,9 @@ extends: annotable
 description: A type of actor, with the flow domains it belongs to
 is_root:
 has_description:
+name_scope: []
 properties:
-  - name: display_name
+  - name: name
     type: localized_string
     min_length: 1
   - name: description
@@ -331,8 +353,9 @@ extends: annotable
 description: A type of item, with the one flow domain it belongs to
 is_root:
 has_description:
+name_scope: []
 properties:
-  - name: display_name
+  - name: name
     type: localized_string
     min_length: 1
   - name: description
@@ -356,9 +379,10 @@ checks:
   - name: parent_actor_domains
     when: { parent_actor: { exists: true } }
     require: { type.domains: { subset_of: "${this.parent_actor.type.domains}" } }
+name_scope: [parent_actor, scope]
 properties:
-  - name: display_name
-    type: localized_string
+  - name: name
+    type: string
     min_length: 1
   - name: description
     type: localized_markdown
@@ -425,8 +449,6 @@ checks:
         - item: { exists: true }
     require: { item.type.domain: { eq: "${this.mode.type.domain}" } }
 properties:
-  - name: display_name
-    type: localized_string
   - name: description
     type: localized_markdown
   - name: source
@@ -456,7 +478,7 @@ properties:
     inverse_is_array:
 ```
 
-Per [Flow](flow-model.md#flow). `display_name`, `item` and `mode` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `mode` is cleared when its mode is deleted.
+Per [Flow](flow-model.md#flow). A flow has no name (see [Names](#names)); `item` and `mode` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `mode` is cleared when its mode is deleted.
 
 ## item
 
@@ -467,9 +489,10 @@ name: item
 extends: annotable
 description: A family of things the network moves and holds
 is_root:
+name_scope: []
 properties:
-  - name: display_name
-    type: localized_string
+  - name: name
+    type: string
     min_length: 1
   - name: description
     type: localized_markdown
@@ -525,8 +548,9 @@ extends: annotable
 description: A type of transformation
 is_root:
 has_description:
+name_scope: []
 properties:
-  - name: display_name
+  - name: name
     type: localized_string
     min_length: 1
   - name: description
@@ -543,10 +567,10 @@ Per [Typing](flow-model.md#typing). It has no domain: the domain of the items a 
 name: transformation
 extends: annotable
 description: A transformation of consumed items into produced items at an actor
+name_scope: [actor]
 properties:
-  - name: display_name
-    type: localized_string
-    default_value: "${this.type.display_name}"
+  - name: name
+    type: string
     min_length: 1
   - name: description
     type: localized_markdown
@@ -565,7 +589,7 @@ properties:
     inverse_is_array:
 ```
 
-Per [Transformation](flow-model.md#transformation). `lines` is generated from `transformation_line`. `type` is per [Typing](flow-model.md#typing). `display_name` defaults to the name of the `type`.
+Per [Transformation](flow-model.md#transformation). `lines` is generated from `transformation_line`. `type` is per [Typing](flow-model.md#typing). `name` is mandatory, plain text and has no default; it is unique among the transformations of one actor (see [Names](#names)).
 
 ## transformation_line
 
@@ -611,8 +635,6 @@ checks:
   - name: conversion_item_domain
     require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
 properties:
-  - name: display_name
-    type: localized_string
   - name: description
     type: localized_markdown
   - name: actor
@@ -633,7 +655,7 @@ properties:
     constant:
 ```
 
-Per [Conversion](flow-model.md#conversion). `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
+Per [Conversion](flow-model.md#conversion). A conversion has no name (see [Names](#names)). `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
 
 ## mode_type
 
@@ -645,8 +667,9 @@ extends: annotable
 description: A category of mode, such as road, sea, air, EDI or payment, with the one flow domain it belongs to
 is_root:
 has_description:
+name_scope: []
 properties:
-  - name: display_name
+  - name: name
     type: localized_string
     min_length: 1
   - name: description
@@ -666,9 +689,10 @@ name: mode
 extends: annotable
 description: How flows travel, the instance of a mode type, such as a shuttle or a round trip, with its ordered stops
 is_root:
+name_scope: []
 properties:
-  - name: display_name
-    type: localized_string
+  - name: name
+    type: string
     min_length: 1
   - name: description
     type: localized_markdown
@@ -728,8 +752,9 @@ name: scope
 extends: annotable
 description: A flat grouping of actors, a swim lane of the graph
 is_root:
+name_scope: []
 properties:
-  - name: display_name
+  - name: name
     type: localized_string
     min_length: 1
   - name: description
@@ -747,9 +772,10 @@ name: location
 extends: annotable
 description: A geographic place or site where actors operate
 is_root:
+name_scope: []
 properties:
-  - name: display_name
-    type: localized_string
+  - name: name
+    type: string
     min_length: 1
   - name: description
     type: localized_markdown
@@ -771,4 +797,4 @@ properties:
     type: string
 ```
 
-Per [Location](flow-model.md#location). Every property but `display_name` is optional: an unset number is 0 and an unset text is empty, so both coordinates at 0 mean no coordinates. A location has no owner, so a type library holds locations beside its types. `actors` is generated from `actor`'s `location` relation. `timezone` holds an IANA name; the model does not check it.
+Per [Location](flow-model.md#location). Every property but `name` is optional: an unset number is 0 and an unset text is empty, so both coordinates at 0 mean no coordinates. A location has no owner, so a type library holds locations beside its types. `actors` is generated from `actor`'s `location` relation. `timezone` holds an IANA name; the model does not check it.

@@ -7,7 +7,7 @@
 name: scflow:core
 namespace: scflow
 # always the version of package.json
-version: 1.3.0
+version: 2.0.0
 mcl: ^1.0
 title: Supply chain flow
 
@@ -80,8 +80,9 @@ schemas:
     extends: annotable
     is_root: true
     has_description: true
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: localized_string
         min_length: 1
       - name: description
@@ -101,8 +102,9 @@ schemas:
     extends: annotable
     is_root: true
     has_description: true
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: localized_string
         min_length: 1
       - name: description
@@ -122,9 +124,10 @@ schemas:
       - name: parent_actor_domains
         when: { parent_actor: { exists: true } }
         require: { type.domains: { subset_of: "${this.parent_actor.type.domains}" } }
+    name_scope: [parent_actor, scope]
     properties:
-      - name: display_name
-        type: localized_string
+      - name: name
+        type: string
         min_length: 1
       - name: description
         type: localized_markdown
@@ -187,8 +190,6 @@ schemas:
             - item: { exists: true }
         require: { item.type.domain: { eq: "${this.mode.type.domain}" } }
     properties:
-      - name: display_name
-        type: localized_string
       - name: description
         type: localized_markdown
       - name: source
@@ -226,9 +227,10 @@ schemas:
       delete: scflow/delete_item
     extends: annotable
     is_root: true
+    name_scope: []
     properties:
-      - name: display_name
-        type: localized_string
+      - name: name
+        type: string
         min_length: 1
       - name: description
         type: localized_markdown
@@ -274,8 +276,9 @@ schemas:
     extends: annotable
     is_root: true
     has_description: true
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: localized_string
         min_length: 1
       - name: description
@@ -287,10 +290,10 @@ schemas:
       create: scflow/create_transformation
       delete: scflow/delete_transformation
     extends: annotable
+    name_scope: [actor]
     properties:
-      - name: display_name
-        type: localized_string
-        default_value: "${this.type.display_name}"
+      - name: name
+        type: string
         min_length: 1
       - name: description
         type: localized_markdown
@@ -345,8 +348,6 @@ schemas:
       - name: conversion_item_domain
         require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
     properties:
-      - name: display_name
-        type: localized_string
       - name: description
         type: localized_markdown
       - name: actor
@@ -374,8 +375,9 @@ schemas:
     extends: annotable
     is_root: true
     has_description: true
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: localized_string
         min_length: 1
       - name: description
@@ -391,9 +393,10 @@ schemas:
       delete: scflow/delete_mode
     extends: annotable
     is_root: true
+    name_scope: []
     properties:
-      - name: display_name
-        type: localized_string
+      - name: name
+        type: string
         min_length: 1
       - name: description
         type: localized_markdown
@@ -444,8 +447,9 @@ schemas:
       delete: scflow/delete_scope
     extends: annotable
     is_root: true
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: localized_string
         min_length: 1
       - name: description
@@ -455,9 +459,10 @@ schemas:
     description: A geographic place or site where actors operate
     extends: annotable
     is_root: true
+    name_scope: []
     properties:
-      - name: display_name
-        type: localized_string
+      - name: name
+        type: string
         min_length: 1
       - name: description
         type: localized_markdown
@@ -491,15 +496,15 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the actor, a string or a map of language to string.'}
-        type: {type: string, ref: actor_type, description: Id or name of the actor type.}
-        scope: {type: string, ref: scope, description: Id or name of the containing scope; the default scope of the type when omitted.}
-        location: {type: string, ref: location, description: Id or name of the location of the actor; none when omitted.}
-        parent_actor: {type: string, ref: actor, description: 'Id or name of the parent actor, to nest the actor in a hierarchy.'}
+        name: {type: string, pattern: \S, description: 'Name of the actor, unique among the actors of the same parent actor or, at the root, of the same scope.'}
+        type: {type: string, ref: actor_type, description: 'Id or name of the actor type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        scope: {type: string, ref: scope, description: 'Id or name of the containing scope; the default scope of the type when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        location: {type: string, ref: location, description: 'Id or name of the location of the actor; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        parent_actor: {type: string, ref: actor, description: 'Id or name of the parent actor, to nest the actor in a hierarchy. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the actor.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the actor.}
       required:
-        - display_name
+        - name
         - type
       additionalProperties: false
   - id: scflow/update_actor
@@ -515,13 +520,13 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: actor, description: Id or name of the actor to update.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown description; same language rule as name.}
-        type: {type: string, ref: actor_type, description: Id or name of the new actor type.}
-        scope: {type: [string, 'null'], ref: scope, description: 'Id or name of the new scope, or null to detach the actor from its scope.'}
-        location: {type: [string, 'null'], ref: location, description: 'Id or name of the new location, or null to remove the location of the actor.'}
-        parent_actor: {type: [string, 'null'], ref: actor, description: 'Id or name of the new parent actor, or null to move the actor to the root.'}
+        id: {type: string, ref: actor, description: 'Id or name of the actor to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        name: {type: string, pattern: \S, description: 'New name of the actor.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New Markdown description; each given language replaces the same language, the others are kept.'}
+        type: {type: string, ref: actor_type, description: 'Id or name of the new actor type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        scope: {type: [string, 'null'], ref: scope, description: 'Id or name of the new scope, or null to detach the actor from its scope. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        location: {type: [string, 'null'], ref: location, description: 'Id or name of the new location, or null to remove the location of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        parent_actor: {type: [string, 'null'], ref: actor, description: 'Id or name of the new parent actor, or null to move the actor to the root. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
       required:
         - id
@@ -548,7 +553,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: actor, description: Id or name of the actor to delete.}
+        id: {type: string, ref: actor, description: 'Id or name of the actor to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the descendant actors, the incident flows, the held items, the transformations, the conversions and the notes.'}
       required:
         - id
@@ -572,7 +577,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: actor_type, description: Id or name of the actor type to delete.}
+        id: {type: string, ref: actor_type, description: 'Id or name of the actor type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the actors of this type with their descendants, flows, held items, transformations and notes.'}
       required:
         - id
@@ -598,7 +603,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: scope, description: Id or name of the scope to delete.}
+        id: {type: string, ref: scope, description: 'Id or name of the scope to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the actors of this scope with their descendants, flows, held items, transformations and notes.'}
       required:
         - id
@@ -614,13 +619,13 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the actor type, a string or a map of language to string.'}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the actor type, a string or a map of language to string.'}
         domains: {type: array, items: {type: string, enum: [physical, information, financial, service]}, minItems: 1, default: [physical], description: Flow domains of the type; physical when omitted.}
-        default_scope: {type: string, ref: scope, description: Id or name of the scope given to the actors of this type that name no scope.}
+        default_scope: {type: string, ref: scope, description: 'Id or name of the scope given to the actors of this type that name no scope. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the actor type.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the actor type.}
       required:
-        - display_name
+        - name
       additionalProperties: false
   - id: scflow/create_scope
     title: Create a scope
@@ -633,18 +638,19 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the scope, a string or a map of language to string.'}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the scope, a string or a map of language to string.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the scope.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the scope.}
       required:
-        - display_name
+        - name
       additionalProperties: false
   - id: scflow/create_flow
     title: Create a flow
     description: >-
       Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to
-      true so that the flow carries items in both directions; it is one-way otherwise. Give
-      display_name to name the flow; it has no name otherwise. A flow carries at most one item, given
+      true so that the flow carries items in both directions; it is one-way otherwise. A flow has
+      no name: its source, destination, item and mode identify it, and the description holds what
+      else there is to say. A flow carries at most one item, given
       by item. A flow between an actor and one of its child actors, in either direction, must carry an
       item, otherwise the action fails. The domain of the item must be among the domains of both
       actors, and the actors that do not hold the item yet hold it afterwards. Give mode to make the
@@ -657,12 +663,11 @@ actions:
     parameters:
       type: object
       properties:
-        source: {type: string, ref: actor, description: Id or name of the actor the flow starts from.}
-        destination: {type: string, ref: actor, description: Id or name of the actor the flow arrives at.}
-        item: {type: string, ref: item, description: Id or name of the item the flow carries; required between an actor and its child.}
+        source: {type: string, ref: actor, description: 'Id or name of the actor the flow starts from. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        destination: {type: string, ref: actor, description: 'Id or name of the actor the flow arrives at. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        item: {type: string, ref: item, description: 'Id or name of the item the flow carries; required between an actor and its child. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions; false when omitted.}
-        mode: {type: string, ref: mode, description: Id or name of the mode the flow travels on; none when omitted.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the flow, a string or a map of language to string; the flow has no name when omitted.'}
+        mode: {type: string, ref: mode, description: 'Id or name of the mode the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the flow.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the flow.}
       required:
@@ -672,9 +677,8 @@ actions:
   - id: scflow/update_flow
     title: Update a flow
     description: >-
-      Changes the name, the bidirectional flag, the description or the tags of a flow and returns it.
-      Only the given properties change; null removes the name. The source and the destination of a
-      flow never change: delete the flow and create it again. Making a flow bidirectional is refused
+      Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the
+      given properties change. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused
       when its mode does not serve the other direction. Its mode changes with scflow/set_flow_mode.
     kind: action
     writes:
@@ -682,8 +686,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: flow, description: Id of the flow to update.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New display name; each given language replaces the same language, the others are kept. null removes the name.'}
+        id: {type: string, ref: flow, description: 'Id of the flow to update.'}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions.}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New Markdown description; each given language replaces the same language, the others are kept.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
@@ -706,8 +709,8 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: flow, description: Id of the flow.}
-        item: {type: string, ref: item, description: Id or name of the item.}
+        id: {type: string, ref: flow, description: 'Id of the flow.'}
+        item: {type: string, ref: item, description: 'Id or name of the item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - id
         - item
@@ -724,7 +727,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: flow, description: Id of the flow to delete.}
+        id: {type: string, ref: flow, description: 'Id of the flow to delete.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a flow but its notes, which are always deleted with it.'}
       required:
         - id
@@ -741,12 +744,12 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode type, a string or a map of language to string.'}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the mode type, a string or a map of language to string.'}
         domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the modes of this type.}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode type.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode type.}
       required:
-        - display_name
+        - name
         - domain
       additionalProperties: false
   - id: scflow/delete_mode_type
@@ -765,7 +768,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_type, description: Id or name of the mode type to delete.}
+        id: {type: string, ref: mode_type, description: 'Id or name of the mode type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the modes of this type with their stops and notes; their flows are kept.'}
       required:
         - id
@@ -783,14 +786,14 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode, a string or a map of language to string.'}
-        type: {type: string, ref: mode_type, description: Id or name of the mode type.}
+        name: {type: string, pattern: \S, description: 'Name of the mode, unique among the modes.'}
+        type: {type: string, ref: mode_type, description: 'Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders; false when omitted.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
       required:
-        - display_name
+        - name
         - type
       additionalProperties: false
   - id: scflow/update_mode
@@ -806,11 +809,11 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: Id or name of the mode to update.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New Markdown description; same language rule as name. null removes the description.}
-        type: {type: string, ref: mode_type, description: Id or name of the new mode type.}
-        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New schedule; same language rule as name. null removes the schedule.}
+        id: {type: string, ref: mode, description: 'Id or name of the mode to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        name: {type: string, pattern: \S, description: 'New name of the mode.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New Markdown description; each given language replaces the same language, the others are kept. null removes the description.'}
+        type: {type: string, ref: mode_type, description: 'Id or name of the new mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New schedule; each given language replaces the same language, the others are kept. null removes the schedule.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders.}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
       required:
@@ -831,7 +834,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: Id or name of the mode to delete.}
+        id: {type: string, ref: mode, description: 'Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         cascade: {type: boolean, default: false, description: 'When true, also clears the mode of the flows that travel on it; the flows are kept.'}
       required:
         - id
@@ -851,8 +854,8 @@ actions:
     parameters:
       type: object
       properties:
-        mode: {type: string, ref: mode, description: Id or name of the mode.}
-        actor: {type: string, ref: actor, description: Id or name of the actor of the stop.}
+        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        actor: {type: string, ref: actor, description: 'Id or name of the actor of the stop. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         sequence: {type: integer, minimum: 1, description: 'Position of the stop, from 1; after the last stop when omitted.'}
         lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from the previous stop to this one.}
         reverse_lead_time: {type: string, pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: ISO 8601 duration of the leg from this stop back to the previous one; lead_time when omitted.}
@@ -874,7 +877,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_stop, description: Id of the stop.}
+        id: {type: string, ref: mode_stop, description: 'Id of the stop.'}
         sequence: {type: integer, minimum: 1, description: 'New position of the stop, from 1, at most the number of stops.'}
         lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg from the previous stop; null clears it.}
         reverse_lead_time: {type: [string, 'null'], pattern: ^P(?=.)((\d+Y)|(\d+M)|(\d+W)|(\d+D))*(T(?=.)((\d+H)|(\d+M)|(\d+(\.\d+)?S))*)?$, description: New ISO 8601 duration of the leg backwards; null clears it.}
@@ -897,7 +900,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode_stop, description: Id of the stop to remove.}
+        id: {type: string, ref: mode_stop, description: 'Id of the stop to remove.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a stop but its notes, which are always deleted with it.'}
       required:
         - id
@@ -916,8 +919,8 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: flow, description: Id of the flow.}
-        mode: {type: [string, 'null'], ref: mode, description: 'Id or name of the mode, or null to take the flow off its mode.'}
+        id: {type: string, ref: flow, description: 'Id of the flow.'}
+        mode: {type: [string, 'null'], ref: mode, description: 'Id or name of the mode, or null to take the flow off its mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - id
         - mode
@@ -939,8 +942,8 @@ actions:
       type: object
       properties:
         flows: {type: array, minItems: 1, items: {type: string, ref: flow}, description: 'Ids of the flows, at least one.'}
-        type: {type: string, ref: mode_type, description: Id or name of the mode type.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the mode, a string or a map of language to string.'}
+        type: {type: string, ref: mode_type, description: 'Id or name of the mode type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        name: {type: string, pattern: \S, description: 'Name of the mode, unique among the modes.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the mode as a free text, such as every Monday.'}
         bidirectional: {type: boolean, description: Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional.}
@@ -950,7 +953,7 @@ actions:
       required:
         - flows
         - type
-        - display_name
+        - name
       additionalProperties: false
   - id: scflow/inspect_mode
     title: Inspect a mode
@@ -966,7 +969,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: Id or name of the mode.}
+        id: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - id
       additionalProperties: false
@@ -981,12 +984,12 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the item type, a string or a map of language to string.'}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the item type, a string or a map of language to string.'}
         domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the items of this type.}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the item type.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the item type.}
       required:
-        - display_name
+        - name
         - domain
       additionalProperties: false
   - id: scflow/create_item
@@ -1000,12 +1003,12 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the item, a string or a map of language to string.'}
-        type: {type: string, ref: item_type, description: Id or name of the item type.}
+        name: {type: string, pattern: \S, description: 'Name of the item, unique among the items; a code such as a SKU is a name, other details go in the description.'}
+        type: {type: string, ref: item_type, description: 'Id or name of the item type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the item.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the item.}
       required:
-        - display_name
+        - name
         - type
       additionalProperties: false
   - id: scflow/update_item
@@ -1020,10 +1023,10 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: item, description: Id or name of the item to update.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New display name; each given language replaces the same language, the others are kept.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown description; same language rule as name.}
-        type: {type: string, ref: item_type, description: Id or name of the new item type.}
+        id: {type: string, ref: item, description: 'Id or name of the item to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        name: {type: string, pattern: \S, description: 'New name of the item.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New Markdown description; each given language replaces the same language, the others are kept.'}
+        type: {type: string, ref: item_type, description: 'Id or name of the new item type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
       required:
         - id
@@ -1041,8 +1044,8 @@ actions:
     parameters:
       type: object
       properties:
-        actor: {type: string, ref: actor, description: Id or name of the actor.}
-        item: {type: string, ref: item, description: Id or name of the item.}
+        actor: {type: string, ref: actor, description: 'Id or name of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        item: {type: string, ref: item, description: 'Id or name of the item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags of the record, when the action creates it.'}
       required:
         - actor
@@ -1062,7 +1065,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: item_at_actor, description: Id of the item-at-actor record to remove.}
+        id: {type: string, ref: item_at_actor, description: 'Id of the item-at-actor record to remove.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the transformation lines that use the record.'}
       required:
         - id
@@ -1085,7 +1088,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: item, description: Id or name of the item to delete.}
+        id: {type: string, ref: item, description: 'Id or name of the item to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the held records, the flows that carry the item, the conversions, the transformation lines and the notes.'}
       required:
         - id
@@ -1107,7 +1110,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: item_type, description: Id or name of the item type to delete.}
+        id: {type: string, ref: item_type, description: 'Id or name of the item type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the items of this type with their held records, flows, lines and notes.'}
       required:
         - id
@@ -1123,31 +1126,32 @@ actions:
     parameters:
       type: object
       properties:
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the transformation type, a string or a map of language to string.'}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the transformation type, a string or a map of language to string.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the transformation type.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the transformation type.}
       required:
-        - display_name
+        - name
       additionalProperties: false
   - id: scflow/create_transformation
     title: Create a transformation
     description: >-
       Creates a transformation of a given type inside an actor, with no line yet, and returns it.
-      The transformation is named after its type when no name is given.
+      Its name is required and has no default; it is unique among the transformations of the actor.
     kind: action
     writes:
       - transformation
     parameters:
       type: object
       properties:
-        actor: {type: string, ref: actor, description: Id or name of the actor that executes the transformation.}
-        type: {type: string, ref: transformation_type, description: Id or name of the transformation type.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Display name of the transformation; the name of its type when omitted.}
+        actor: {type: string, ref: actor, description: 'Id or name of the actor that executes the transformation. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        type: {type: string, ref: transformation_type, description: 'Id or name of the transformation type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        name: {type: string, pattern: \S, description: 'Name of the transformation, unique among the transformations of the actor, such as Assembly.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the transformation.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the transformation.}
       required:
         - actor
         - type
+        - name
       additionalProperties: false
   - id: scflow/connect_transformation_line
     title: Connect a transformation line
@@ -1161,7 +1165,7 @@ actions:
     parameters:
       type: object
       properties:
-        transformation: {type: string, ref: transformation, description: Id or name of the transformation.}
+        transformation: {type: string, ref: transformation, description: 'Id or name of the transformation. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         held_item: {type: string, ref: item_at_actor, description: 'Id of the item-at-actor record, held by the actor of the transformation.'}
         role: {type: string, enum: [consumed, produced], description: Whether the transformation consumes or produces the item.}
         tags: {type: array, items: {type: string, minLength: 1}, description: 'Tags of the line, when the action creates it.'}
@@ -1173,7 +1177,7 @@ actions:
   - id: scflow/define_process
     title: Define a process
     description: >-
-      Creates a transformation of a given type at an actor, makes the actor hold the consumed and
+      Creates a named transformation of a given type at an actor, makes the actor hold the consumed and
       produced items that it does not hold yet, and attaches a line for each of them, in one step.
       Every item must be in a domain of the actor. Returns the transformation and its lines.
     kind: action
@@ -1184,13 +1188,15 @@ actions:
     parameters:
       type: object
       properties:
-        actor: {type: string, ref: actor, description: Id or name of the actor.}
-        transformation_type: {type: string, ref: transformation_type, description: Id or name of the transformation type.}
-        consumed_items: {type: array, items: {type: string, ref: item}, description: Ids or names of the items consumed.}
-        produced_items: {type: array, items: {type: string, ref: item}, description: Ids or names of the items produced.}
+        actor: {type: string, ref: actor, description: 'Id or name of the actor. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        transformation_type: {type: string, ref: transformation_type, description: 'Id or name of the transformation type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        name: {type: string, pattern: \S, description: 'Name of the transformation, unique among the transformations of the actor, such as Assembly.'}
+        consumed_items: {type: array, items: {type: string, ref: item}, description: 'Items consumed, each an id or a name. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        produced_items: {type: array, items: {type: string, ref: item}, description: 'Items produced, each an id or a name. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
       required:
         - actor
         - transformation_type
+        - name
       additionalProperties: false
   - id: scflow/delete_transformation
     title: Delete a transformation
@@ -1206,7 +1212,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: transformation, description: Id or name of the transformation to delete.}
+        id: {type: string, ref: transformation, description: 'Id or name of the transformation to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: the lines and the notes of a transformation are always deleted with it.'}
       required:
         - id
@@ -1225,7 +1231,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: transformation_type, description: Id or name of the transformation type to delete.}
+        id: {type: string, ref: transformation_type, description: 'Id or name of the transformation type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         cascade: {type: boolean, default: false, description: 'When true, also deletes the transformations of this type with their lines and notes.'}
       required:
         - id
@@ -1234,18 +1240,18 @@ actions:
     title: Create a conversion
     description: >-
       Creates a conversion, which turns one item into another item at an actor, and returns it. The
-      two items must be in the same flow domain, and they cannot change afterwards. The name, the
-      description and the tags are optional.
+      two items must be in the same flow domain, and they cannot change afterwards. A conversion has
+      no name: its actor and its two items identify it, and the description holds what else there is
+      to say. The description and the tags are optional.
     kind: action
     writes:
       - conversion
     parameters:
       type: object
       properties:
-        actor: {type: string, ref: actor, description: Id or name of the actor where the conversion takes place.}
-        from_item: {type: string, ref: item, description: Id or name of the item that is converted.}
-        to_item: {type: string, ref: item, description: Id or name of the item that results; it has the domain of from_item.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Display name of the conversion, a string or a map of language to string.'}
+        actor: {type: string, ref: actor, description: 'Id or name of the actor where the conversion takes place. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        from_item: {type: string, ref: item, description: 'Id or name of the item that is converted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        to_item: {type: string, ref: item, description: 'Id or name of the item that results; it has the domain of from_item. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the conversion.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the conversion.}
       required:
@@ -1256,8 +1262,8 @@ actions:
   - id: scflow/update_conversion
     title: Update a conversion
     description: >-
-      Changes the name, the description or the tags of a conversion and returns it. Only the given
-      properties change; null clears a name or a description, and tags replaces the whole list. The
+      Changes the description or the tags of a conversion and returns it. Only the given properties
+      change; null clears the description, and tags replaces the whole list. The
       actor and the two items of a conversion never change: to change them, delete the conversion
       and create another.
     kind: action
@@ -1266,9 +1272,8 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: conversion, description: Id or name of the conversion to update.}
-        display_name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New display name; each given language replaces the same language, the others are kept. null removes the name.'}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: New Markdown description; same language rule as name. null removes the description.}
+        id: {type: string, ref: conversion, description: 'Id of the conversion to update.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New Markdown description; each given language replaces the same language, the others are kept. null removes the description.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
       required:
         - id
@@ -1287,7 +1292,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: conversion, description: Id or name of the conversion to delete.}
+        id: {type: string, ref: conversion, description: 'Id of the conversion to delete.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: the notes of a conversion are always deleted with it.'}
       required:
         - id
@@ -1321,7 +1326,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: note, description: Id of the note to update.}
+        id: {type: string, ref: note, description: 'Id of the note to update.'}
         content: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: New Markdown text; each given language replaces the same language.}
       required:
         - id
@@ -1339,7 +1344,7 @@ actions:
     parameters:
       type: object
       properties:
-        id: {type: string, ref: note, description: Id of the note to delete.}
+        id: {type: string, ref: note, description: 'Id of the note to delete.'}
         cascade: {type: boolean, default: false, description: 'Has no effect: nothing depends on a note.'}
       required:
         - id
@@ -1465,6 +1470,13 @@ docs:
     audience: user
     generated: true
     file: docs/reference/concepts.md
+  - id: scflow/names
+    title: 'Supply chain flow: names'
+    summary: Which entities of Supply chain flow are referred to by name, in what scope, and how to write a name that stays unambiguous, generated from the name_scope of scflow:core.
+    kind: reference
+    audience: user
+    generated: true
+    file: docs/reference/names.md
   - id: scflow/actions
     title: 'Supply chain flow: actions'
     summary: The actions of Supply chain flow with their parameters and example calls, generated from the declarations of scflow:core.
@@ -1520,7 +1532,7 @@ docs:
     file: docs/reference/actions.md
   - id: scflow/action-conventions
     title: Conventions of the actions
-    summary: References by id or name, localized texts, atomic undoable calls, the write limit, rules and the cascade of deletes, shared by every action of scflow:core.
+    summary: References by name or id, localized texts, atomic undoable calls, the write limit, rules and the cascade of deletes, shared by every action of scflow:core.
     kind: explanation
     audience: model-dev
     uses: [scflow/delete_actor, scflow/delete_flow, scflow/remove_note, scflow/release_held_item]

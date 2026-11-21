@@ -4,22 +4,22 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function withUsages() {
   const ctx = await setup();
   const { create, run } = ctx;
-  await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const a = await run("scflow/create_actor", { display_name: "A", type: "Site" });
-  const b = await run("scflow/create_actor", { display_name: "B", type: "Site" });
-  const partType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-  const toolType = await create("item_type", { display_name: { en: "Tool" }, domain: "physical" });
-  const bolt = await create("item", { display_name: { en: "Bolt" }, type: partType });
-  const nut = await create("item", { display_name: { en: "Nut" }, type: partType });
-  const drill = await create("item", { display_name: { en: "Drill" }, type: toolType });
+  await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+  const a = await run("scflow/create_actor", { name: "A", type: "Site" });
+  const b = await run("scflow/create_actor", { name: "B", type: "Site" });
+  const partType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+  const toolType = await create("item_type", { name: { en: "Tool" }, domain: "physical" });
+  const bolt = await create("item", { name: "Bolt", type: partType });
+  const nut = await create("item", { name: "Nut", type: partType });
+  const drill = await create("item", { name: "Drill", type: toolType });
   const heldBolt = await create("item_at_actor", { actor: a.id, item: bolt });
   const heldNut = await create("item_at_actor", { actor: a.id, item: nut });
   const flowBolt = await create("flow", { source: a.id, destination: a.id, item: bolt });
   const flowNut = await create("flow", { source: a.id, destination: a.id, item: nut });
   const heldDrill = await create("item_at_actor", { actor: a.id, item: drill });
-  const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
+  const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
   const transformation = await create("transformation", {
-    display_name: { en: "Assemble" },
+    name: "Assemble",
     type: transformationType,
     actor: a.id,
   });
@@ -48,8 +48,8 @@ async function withUsages() {
 describe("scflow/delete_item", () => {
   it("deletes an item given by name that nothing uses", async () => {
     const { run, query, create } = await setup();
-    const type = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    await create("item", { display_name: { en: "Spare" }, type });
+    const type = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    await create("item", { name: "Spare", type });
 
     const result = await run("scflow/delete_item", { id: "Spare" });
 
@@ -86,14 +86,14 @@ describe("scflow/delete_item", () => {
   it("refuses an unknown item", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_item", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_item", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
 describe("scflow/delete_item_type", () => {
   it("deletes an item type that no item uses, given by name", async () => {
     const { run, query, create } = await setup();
-    await create("item_type", { display_name: { en: "Unused" }, domain: "physical" });
+    await create("item_type", { name: { en: "Unused" }, domain: "physical" });
 
     await run("scflow/delete_item_type", { id: "Unused" });
 
@@ -125,6 +125,6 @@ describe("scflow/delete_item_type", () => {
   it("refuses an unknown type", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_item_type", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_item_type", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });

@@ -12,18 +12,18 @@ const refusedBy = (rule: string) => ({ code: "rule_violation", details: { rule }
 async function world() {
   const setup = await setupActions();
   const { run } = setup;
-  await run("scflow/create_actor_type", { display_name: "Site", domains: ["physical", "information"] });
-  await run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-  await run("scflow/create_item_type", { display_name: "Message", domain: "information" });
-  const plant = await run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-  const depot = await run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-  const shop = await run("scflow/create_actor", { display_name: "Shop", type: "Site" });
-  const hub = await run("scflow/create_actor", { display_name: "Hub", type: "Site" });
-  await run("scflow/create_item", { display_name: "Bolt", type: "Part" });
-  await run("scflow/create_item", { display_name: "Nut", type: "Part" });
-  await run("scflow/create_item", { display_name: "Order", type: "Message" });
-  await run("scflow/create_mode_type", { display_name: "Road", domain: "physical" });
-  await run("scflow/create_mode_type", { display_name: "EDI", domain: "information" });
+  await run("scflow/create_actor_type", { name: "Site", domains: ["physical", "information"] });
+  await run("scflow/create_item_type", { name: "Part", domain: "physical" });
+  await run("scflow/create_item_type", { name: "Message", domain: "information" });
+  const plant = await run("scflow/create_actor", { name: "Plant", type: "Site" });
+  const depot = await run("scflow/create_actor", { name: "Depot", type: "Site" });
+  const shop = await run("scflow/create_actor", { name: "Shop", type: "Site" });
+  const hub = await run("scflow/create_actor", { name: "Hub", type: "Site" });
+  await run("scflow/create_item", { name: "Bolt", type: "Part" });
+  await run("scflow/create_item", { name: "Nut", type: "Part" });
+  await run("scflow/create_item", { name: "Order", type: "Message" });
+  await run("scflow/create_mode_type", { name: "Road", domain: "physical" });
+  await run("scflow/create_mode_type", { name: "EDI", domain: "information" });
   return { ...setup, plant, depot, shop, hub };
 }
 
@@ -31,7 +31,7 @@ async function world() {
 async function roundTrip() {
   const ctx = await world();
   const { run } = ctx;
-  const mode = await run("scflow/create_mode", { display_name: "Milk run", type: "Road", schedule: "every Monday" });
+  const mode = await run("scflow/create_mode", { name: "Milk run", type: "Road", schedule: "every Monday" });
   await run("scflow/add_mode_stop", { mode: "Milk run", actor: "Plant" });
   await run("scflow/add_mode_stop", { mode: "Milk run", actor: "Depot", lead_time: "P1D" });
   await run("scflow/add_mode_stop", { mode: "Milk run", actor: "Shop", lead_time: "PT6H" });
@@ -42,13 +42,13 @@ async function roundTrip() {
 describe("mode types and modes", () => {
   it("creates a mode type with one domain, and a one-way mode of that type with no stop", async () => {
     const { run, query } = await world();
-    const type = (await query("mode_type", { "display_name.en": "Road" }))[0];
+    const type = (await query("mode_type", { "name.en": "Road" }))[0];
     expect(type).toMatchObject({ domain: "physical" });
 
-    const mode = await run("scflow/create_mode", { display_name: "Shuttle", type: "Road", schedule: "daily" });
+    const mode = await run("scflow/create_mode", { name: "Shuttle", type: "Road", schedule: "daily" });
     expect(mode).toEqual({
       id: expect.any(String),
-      display_name: { en: "Shuttle" },
+      name: "Shuttle",
       type: type.id,
       bidirectional: false,
       schedule: { en: "daily" },
@@ -59,7 +59,7 @@ describe("mode types and modes", () => {
 
   it("refuses a mode without a type", async () => {
     const { run } = await world();
-    await expect(run("scflow/create_mode", { display_name: "Shuttle" })).rejects.toThrow(/type/);
+    await expect(run("scflow/create_mode", { name: "Shuttle" })).rejects.toThrow(/type/);
   });
 
   it("orders the stops, lets an actor have several, and inserts a stop at a position", async () => {
@@ -196,7 +196,7 @@ describe("scflow/inspect_mode", () => {
 
   it("uses the reverse lead times on a bidirectional mode, and gives null when a leg has no lead time", async () => {
     const { run } = await world();
-    await run("scflow/create_mode", { display_name: "Shuttle", type: "Road", bidirectional: true });
+    await run("scflow/create_mode", { name: "Shuttle", type: "Road", bidirectional: true });
     await run("scflow/add_mode_stop", { mode: "Shuttle", actor: "Plant" });
     await run("scflow/add_mode_stop", { mode: "Shuttle", actor: "Depot", lead_time: "PT4H", reverse_lead_time: "PT5H" });
     await run("scflow/add_mode_stop", { mode: "Shuttle", actor: "Shop" });
@@ -214,8 +214,8 @@ describe("scflow/create_mode_from_flows", () => {
     const bolts = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
     const nuts = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Nut", bidirectional: true });
 
-    const mode = await run("scflow/create_mode_from_flows", { flows: [bolts.id, nuts.id], type: "Road", display_name: "Truck", lead_time: "P2D" });
-    expect(mode).toMatchObject({ display_name: { en: "Truck" }, bidirectional: true, flows: [bolts.id, nuts.id] });
+    const mode = await run("scflow/create_mode_from_flows", { flows: [bolts.id, nuts.id], type: "Road", name: "Truck", lead_time: "P2D" });
+    expect(mode).toMatchObject({ name: "Truck", bidirectional: true, flows: [bolts.id, nuts.id] });
     expect(mode.stops).toMatchObject([
       { actor: plant.id, sequence: 1 },
       { actor: depot.id, sequence: 2, lead_time: "P2D" },
@@ -226,14 +226,14 @@ describe("scflow/create_mode_from_flows", () => {
     const { run, query } = await world();
     const a = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
     const b = await run("scflow/create_flow", { source: "Depot", destination: "Plant", item: "Bolt" });
-    await expect(run("scflow/create_mode_from_flows", { flows: [a.id, b.id], type: "Road", display_name: "Truck" })).rejects.toThrow(/share/);
-    await expect(run("scflow/create_mode_from_flows", { flows: [a.id], type: "EDI", display_name: "Wire" })).rejects.toMatchObject(
+    await expect(run("scflow/create_mode_from_flows", { flows: [a.id, b.id], type: "Road", name: "Truck" })).rejects.toThrow(/share/);
+    await expect(run("scflow/create_mode_from_flows", { flows: [a.id], type: "EDI", name: "Wire" })).rejects.toMatchObject(
       refusedBy("mode_item_domain"),
     );
     expect(await query("mode")).toHaveLength(0);
 
-    await run("scflow/create_mode_from_flows", { flows: [a.id], type: "Road", display_name: "Truck" });
-    await expect(run("scflow/create_mode_from_flows", { flows: [a.id], type: "Road", display_name: "Van" })).rejects.toThrow(/already/);
+    await run("scflow/create_mode_from_flows", { flows: [a.id], type: "Road", name: "Truck" });
+    await expect(run("scflow/create_mode_from_flows", { flows: [a.id], type: "Road", name: "Van" })).rejects.toThrow(/already/);
   });
 });
 

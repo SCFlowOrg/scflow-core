@@ -8,6 +8,7 @@ import manifest from "../module.yaml";
 import actionConventions from "../docs/action-conventions.md";
 import actionsReference from "../docs/reference/actions.md";
 import conceptsReference from "../docs/reference/concepts.md";
+import namesReference from "../docs/reference/names.md";
 import imageToModel from "../skills/image-to-model.md";
 import physicalToInformationFlows from "../skills/physical-to-information-flows.md";
 import { ACTION_BODIES } from "./actions/index.js";
@@ -20,6 +21,7 @@ export default defineModule(manifest, {
   skills: { image_to_model: imageToModel, physical_to_information_flows: physicalToInformationFlows },
   docs: {
     "docs/reference/concepts.md": conceptsReference,
+    "docs/reference/names.md": namesReference,
     "docs/reference/actions.md": actionsReference,
     "docs/action-conventions.md": actionConventions,
   },

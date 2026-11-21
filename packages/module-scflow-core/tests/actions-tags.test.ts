@@ -5,12 +5,12 @@ import { setupActions as setup } from "./actions-helpers.js";
 /** Creates two actors, a flow between them, an item, a scope and the types, each actor and the item with its own tags. */
 async function withEntities() {
   const ctx = await setup();
-  await ctx.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-  await ctx.run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-  const actor = await ctx.run("scflow/create_actor", { display_name: "Plant", type: "Site", tags: ["north", "key"] });
-  await ctx.run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-  const item = await ctx.run("scflow/create_item", { display_name: "Bolt", type: "Part", tags: ["steel"] });
-  const scope = await ctx.run("scflow/create_scope", { display_name: "North" });
+  await ctx.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+  await ctx.run("scflow/create_item_type", { name: "Part", domain: "physical" });
+  const actor = await ctx.run("scflow/create_actor", { name: "Plant", type: "Site", tags: ["north", "key"] });
+  await ctx.run("scflow/create_actor", { name: "Depot", type: "Site" });
+  const item = await ctx.run("scflow/create_item", { name: "Bolt", type: "Part", tags: ["steel"] });
+  const scope = await ctx.run("scflow/create_scope", { name: "North" });
   const flow = await ctx.run<Record<string, any>>("scflow/create_flow", {
     source: "Plant",
     destination: "Depot",
@@ -87,9 +87,9 @@ describe("scflow/add_tags", () => {
   it("refuses an unknown id and a missing or empty entity", async () => {
     const { run } = await withEntities();
 
-    await expect(run("scflow/add_tags", { entity: "Ghost", tags: ["x"] })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/add_tags", { entity: "Ghost", tags: ["x"] })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/add_tags", { tags: ["x"] })).rejects.toThrow(/entity/);
-    await expect(run("scflow/add_tags", { entity: "", tags: ["x"] })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/add_tags", { entity: "", tags: ["x"] })).rejects.toThrow(/(designates|names) no instance/);
   });
 
   it("refuses a missing, empty or malformed list of tags and changes nothing", async () => {
@@ -134,7 +134,7 @@ describe("scflow/remove_tags", () => {
   it("refuses an unknown id and an empty list of tags", async () => {
     const { run, query, actor } = await withEntities();
 
-    await expect(run("scflow/remove_tags", { entity: "Ghost", tags: ["x"] })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/remove_tags", { entity: "Ghost", tags: ["x"] })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/remove_tags", { entity: actor.id, tags: [] })).rejects.toThrow(/tags/);
     await expect(run("scflow/remove_tags", { entity: actor.id })).rejects.toThrow(/tags/);
     expect((await query("actor", { id: actor.id }))[0].tags).toEqual(["north", "key"]);

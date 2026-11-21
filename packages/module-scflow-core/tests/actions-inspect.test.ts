@@ -5,15 +5,15 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function withNetwork() {
   const ctx = await setup();
   const { create, run } = ctx;
-  await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const campus = await run("scflow/create_actor", { display_name: "Campus", type: "Site" });
-  const dock = await run("scflow/create_actor", { display_name: "Dock", type: "Site", parent_actor: "Campus" });
-  const bay = await run("scflow/create_actor", { display_name: "Bay", type: "Site", parent_actor: "Dock" });
-  const outside = await run("scflow/create_actor", { display_name: "Outside", type: "Site" });
-  const hub = await run("scflow/create_actor", { display_name: "Hub", type: "Site" });
-  const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-  const bolt = await create("item", { display_name: { en: "Bolt" }, type: itemType });
-  const nut = await create("item", { display_name: { en: "Nut" }, type: itemType });
+  await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+  const campus = await run("scflow/create_actor", { name: "Campus", type: "Site" });
+  const dock = await run("scflow/create_actor", { name: "Dock", type: "Site", parent_actor: "Campus" });
+  const bay = await run("scflow/create_actor", { name: "Bay", type: "Site", parent_actor: "Dock" });
+  const outside = await run("scflow/create_actor", { name: "Outside", type: "Site" });
+  const hub = await run("scflow/create_actor", { name: "Hub", type: "Site" });
+  const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+  const bolt = await create("item", { name: "Bolt", type: itemType });
+  const nut = await create("item", { name: "Nut", type: itemType });
   const heldDock = await create("item_at_actor", { actor: dock.id, item: bolt });
   const heldBay = await create("item_at_actor", { actor: bay.id, item: bolt });
   const heldOutside = await create("item_at_actor", { actor: outside.id, item: bolt });
@@ -21,9 +21,9 @@ async function withNetwork() {
   const flowOut = await create("flow", { source: dock.id, destination: outside.id });
   await create("flow", { source: hub.id, destination: outside.id });
   const heldNut = await create("item_at_actor", { actor: outside.id, item: nut });
-  const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
-  const assemble = await create("transformation", { display_name: { en: "Assemble" }, type: transformationType, actor: bay.id });
-  await create("transformation", { display_name: { en: "Pack" }, type: transformationType, actor: dock.id });
+  const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
+  const assemble = await create("transformation", { name: "Assemble", type: transformationType, actor: bay.id });
+  await create("transformation", { name: "Pack", type: transformationType, actor: dock.id });
   const line = await create("transformation_line", { transformation: assemble, role: "consumed", held_item: heldBay });
   await create("note", { annotated: bay.id, content: { en: "Bay note" } });
   await create("note", { annotated: heldDock, content: { en: "Held note" } });
@@ -133,7 +133,7 @@ describe("scflow/inspect_delete_impact", () => {
 
   it("reports what a flow, a transformation type and a scope would remove", async () => {
     const { run, flowIn, create } = await withNetwork();
-    const scope = await create("scope", { display_name: { en: "Make" } });
+    const scope = await create("scope", { name: { en: "Make" } });
 
     const flow = await run<any>("scflow/inspect_delete_impact", { targets: [{ schema: "flow", ref: flowIn }] });
     const type = await run<any>("scflow/inspect_delete_impact", {

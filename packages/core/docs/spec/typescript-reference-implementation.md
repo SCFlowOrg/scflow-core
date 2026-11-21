@@ -211,7 +211,7 @@ The contract is stated by the doc comments of `PersistenceInterface` in `@scflow
 
 | Part | In the package | Given by the engine |
 | --- | --- | --- |
-| `ref` in `parameters` | Accepted as a keyword; applies the rule of resolution: an id wins over a name that equals it, and no instance or several are refused with `invalid_parameters` | A resolver that, for a schema and a value, gives the key of the instance whose id is the value, and the keys of the instances whose `display_name` is the value in any language |
+| `ref` in `parameters` | Accepted as a keyword; applies the rule of resolution: an id wins over a name that equals it, and no instance or several are refused with `invalid_parameters` | A resolver that, for a schema and a value, gives the key of the instance, or throws `unresolved_reference` or `ambiguous_reference`; `createRefResolver` resolves a schema with `name_scope` by `resolveReferenceIn`, and any other schema by id |
 | Body context | Records each command of a body, with its result, and each nested call, as the steps of the run entry | The context a body receives, which emits the commands |
 | Batch | Runs a batch whose steps are `call` steps with `with` and `as`, resolving `${name.path}` from the results named so far | `when`, `each` and `fail`, run by the script runner of the engine, like a command step of a procedure |
 | Transaction | Nothing: a batch is a sequence of calls | The one transaction of an action or of a batch, and its rollback when a call is refused |

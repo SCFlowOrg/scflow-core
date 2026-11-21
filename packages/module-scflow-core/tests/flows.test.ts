@@ -6,34 +6,38 @@ async function setup() {
   return setupActions();
 }
 
+let serial = 0;
+
 type Mcl = Awaited<ReturnType<typeof setup>>["mcl"];
 
 /** Creates an actor whose type belongs to the given flow domains, under `parent` when given; returns the actor id. */
 async function createActor(mcl: Mcl, locator: string, domains: string[], parent?: string): Promise<string> {
+  serial += 1;
   const type = await mcl.runCommand(locator, {
     kind: "create",
     schema: "actor_type",
-    input: { display_name: { en: "Type" }, domains },
+    input: { name: { en: `Type ${serial}` }, domains },
   });
   const actor = await mcl.runCommand(locator, {
     kind: "create",
     schema: "actor",
-    input: { display_name: { en: "Actor" }, type: type.after[0].id, ...(parent === undefined ? {} : { parent_actor: parent }) },
+    input: { name: `Actor ${serial}`, type: type.after[0].id, ...(parent === undefined ? {} : { parent_actor: parent }) },
   });
   return actor.after[0].id as string;
 }
 
 /** Creates an item whose type has the given flow domain; returns the item id. */
 async function createItem(mcl: Mcl, locator: string, domain: string, name = "Bolt"): Promise<string> {
+  serial += 1;
   const type = await mcl.runCommand(locator, {
     kind: "create",
     schema: "item_type",
-    input: { display_name: { en: `${name} type` }, domain },
+    input: { name: { en: `${name} type ${serial}` }, domain },
   });
   const item = await mcl.runCommand(locator, {
     kind: "create",
     schema: "item",
-    input: { display_name: { en: name }, type: type.after[0].id },
+    input: { name: `${name} ${serial}`, type: type.after[0].id },
   });
   return item.after[0].id as string;
 }
@@ -268,7 +272,7 @@ describe("createFlow", () => {
     expect(both.bidirectional).toBe(true);
   });
 
-  it("gives the name, the description and the tags it is given", async () => {
+  it("gives the description and the tags it is given, and has no name", async () => {
     const { mcl, locator } = await setup();
     const source = await createActor(mcl, locator, ["physical"]);
     const destination = await createActor(mcl, locator, ["physical"]);
@@ -276,16 +280,12 @@ describe("createFlow", () => {
     const flow = await createFlow(mcl, locator, {
       source,
       destination,
-      display_name: { en: "Lane", fr: "Voie" },
       description: { en: "Weekly lane" },
       tags: ["express"],
     });
 
-    expect(flow).toMatchObject({
-      display_name: { en: "Lane", fr: "Voie" },
-      description: { en: "Weekly lane" },
-      tags: ["express"],
-    });
+    expect(flow).toMatchObject({ description: { en: "Weekly lane" }, tags: ["express"] });
+    expect(flow).not.toHaveProperty("name");
   });
 
   it("does not check the flow domains of the two actors", async () => {
