@@ -1,5 +1,5 @@
 import { type Instance } from "./refs.js";
-import { type ActionAccess, type ScflowActionDefinition, localizedTextParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
+import { type ActionAccess, type DatasetAccess, type ScflowActionDefinition, localizedTextParam, textParam, cascadeParam, refParam, tagsParam, unique } from "./params.js";
 import { deleteById } from "./delete-impact.js";
 import { localizedText } from "./text.js";
 
@@ -8,7 +8,7 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_item_type`. */
 export interface CreateItemTypeParams {
-  display_name: Text;
+  name: Text;
   domain: string;
   description?: Text;
   tags?: string[];
@@ -16,7 +16,7 @@ export interface CreateItemTypeParams {
 
 /** Parameters of `scflow/create_item`. */
 export interface CreateItemParams {
-  display_name: Text;
+  name: string;
   type: string;
   description?: Text;
   tags?: string[];
@@ -25,7 +25,7 @@ export interface CreateItemParams {
 /** Parameters of `scflow/update_item`. */
 export interface UpdateItemParams {
   id: string;
-  display_name?: Text;
+  name?: string;
   description?: Text;
   type?: string;
   tags?: string[];
@@ -59,14 +59,14 @@ export interface DeleteItemTypeParams {
 /** The result of `scflow/create_item_type`. */
 export interface ItemTypeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: Record<string, string>;
   domain: string;
 }
 
 /** The result of `scflow/create_item`. */
 export interface ItemSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: string;
   type: string;
 }
 
@@ -87,7 +87,7 @@ export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, 
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the item type, a string or a map of language to string."),
+      name: localizedTextParam("Name of the item type, a string or a map of language to string."),
       domain: {
         type: "string",
         enum: ["physical", "information", "financial", "service"],
@@ -96,13 +96,13 @@ export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, 
       description: localizedTextParam("Markdown description of the item type."),
       tags: tagsParam("Tags of the item type."),
     },
-    required: ["display_name", "domain"],
+    required: ["name", "domain"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = await localizedText(context, params.display_name);
+    const name = await localizedText(context, params.name);
     const domain = params.domain;
-    const input: Record<string, unknown> = { display_name, domain };
+    const input: Record<string, unknown> = { name, domain };
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
     }
@@ -112,7 +112,7 @@ export const createItemTypeAction: ScflowActionDefinition<CreateItemTypeParams, 
     }
     const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.item_type", input });
     const type = after[0] as unknown as Instance;
-    return { id: type.id, display_name: type.display_name as Record<string, string>, domain: type.domain as string };
+    return { id: type.id, name: type.name as Record<string, string>, domain: type.domain as string };
   },
 };
 
@@ -125,17 +125,17 @@ export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSumm
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the item, a string or a map of language to string."),
+      name: textParam("Name of the item, unique among the items; a code such as a SKU is a name, other details go in the description."),
       type: refParam("item_type", "Id or name of the item type."),
       description: localizedTextParam("Markdown description of the item."),
       tags: tagsParam("Tags of the item."),
     },
-    required: ["display_name", "type"],
+    required: ["name", "type"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const display_name = await localizedText(context, params.display_name);
-    const input: Record<string, unknown> = { display_name, type: params.type };
+    const name = params.name;
+    const input: Record<string, unknown> = { name, type: params.type };
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
     }
@@ -145,7 +145,7 @@ export const createItemAction: ScflowActionDefinition<CreateItemParams, ItemSumm
     }
     const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.item", input });
     const item = after[0] as unknown as Instance;
-    return { id: item.id, display_name: item.display_name as Record<string, string>, type: item.type as string };
+    return { id: item.id, name: item.name as string, type: item.type as string };
   },
 };
 
@@ -161,8 +161,8 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
     type: "object",
     properties: {
       id: refParam("item", "Id or name of the item to update."),
-      display_name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
-      description: localizedTextParam("New Markdown description; same language rule as name."),
+      name: textParam("New name of the item."),
+      description: localizedTextParam("New Markdown description; each given language replaces the same language, the others are kept."),
       type: refParam("item_type", "Id or name of the new item type."),
       tags: tagsParam("New tags; they replace the current ones."),
     },
@@ -173,8 +173,8 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
   async run(params, context) {
     const patch: Record<string, unknown> = {};
 
-    if (params.display_name !== undefined) {
-      patch.display_name = { set: await localizedText(context, params.display_name) };
+    if (params.name !== undefined) {
+      patch.name = params.name;
     }
     if (params.description !== undefined) {
       patch.description = { set: await localizedText(context, params.description) };
@@ -196,7 +196,7 @@ export const updateItemAction: ScflowActionDefinition<UpdateItemParams, ItemSumm
     const updated = after[0] as unknown as Instance;
     return {
       id: updated.id,
-      display_name: updated.display_name as Record<string, string>,
+      name: updated.name as string,
       type: updated.type as string,
     };
   },
@@ -313,7 +313,7 @@ export const ITEM_ACTIONS = [
  * Returns the `item_at_actor` record of an actor and an item, and creates it when the
  * actor does not hold the item yet. The engine refuses a breach of the rules of the record.
  */
-export async function holdItem(context: ActionAccess, actor: string, item: string, tags?: string[]): Promise<Instance> {
+export async function holdItem(context: DatasetAccess, actor: string, item: string, tags?: string[]): Promise<Instance> {
   const existing = await context.runCommand(context.locator, {
     kind: "query",
     schema: "scflow.item_at_actor",

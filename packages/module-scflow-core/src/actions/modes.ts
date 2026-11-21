@@ -10,6 +10,7 @@ import {
   refParam,
   type ScflowActionDefinition,
   tagsParam,
+  textParam,
   unique,
 } from "./params.js";
 import { localizedText } from "./text.js";
@@ -19,7 +20,7 @@ import { type FlowSummary, summarizeFlow } from "./flows.js";
 
 /** Parameters of `scflow/create_mode_type`. */
 export interface CreateModeTypeParams {
-  display_name: string | Record<string, string>;
+  name: string | Record<string, string>;
   domain: string;
   description?: string | Record<string, string>;
   tags?: string[];
@@ -33,7 +34,7 @@ export interface DeleteModeTypeParams {
 
 /** Parameters of `scflow/create_mode`. */
 export interface CreateModeParams {
-  display_name: string | Record<string, string>;
+  name: string;
   type: string;
   description?: string | Record<string, string>;
   schedule?: string | Record<string, string>;
@@ -44,7 +45,7 @@ export interface CreateModeParams {
 /** Parameters of `scflow/update_mode`. */
 export interface UpdateModeParams {
   id: string;
-  display_name?: string | Record<string, string>;
+  name?: string;
   description?: string | Record<string, string> | null;
   type?: string;
   schedule?: string | Record<string, string> | null;
@@ -93,7 +94,7 @@ export interface SetFlowModeParams {
 export interface CreateModeFromFlowsParams {
   flows: string[];
   type: string;
-  display_name: string | Record<string, string>;
+  name: string;
   description?: string | Record<string, string>;
   schedule?: string | Record<string, string>;
   bidirectional?: boolean;
@@ -110,7 +111,7 @@ export interface InspectModeParams {
 /** A mode type as `scflow/create_mode_type` returns it. */
 export interface ModeTypeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: Record<string, string>;
   domain: string;
 }
 
@@ -127,7 +128,7 @@ export interface ModeStopSummary {
 /** A mode with its stops in order and the ids of its flows. */
 export interface ModeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: string;
   type: string;
   bidirectional: boolean;
   schedule?: Record<string, string>;
@@ -182,22 +183,22 @@ export const createModeTypeAction: ScflowActionDefinition<CreateModeTypeParams, 
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the mode type, a string or a map of language to string."),
+      name: localizedTextParam("Name of the mode type, a string or a map of language to string."),
       domain: { type: "string", enum: [...FLOW_DOMAINS], description: "The flow domain of the modes of this type." },
       description: localizedTextParam("Markdown description of the mode type."),
       tags: tagsParam("Tags of the mode type."),
     },
-    required: ["display_name", "domain"],
+    required: ["name", "domain"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const input: Record<string, unknown> = { display_name: await localizedText(context, params.display_name), domain: params.domain };
+    const input: Record<string, unknown> = { name: await localizedText(context, params.name), domain: params.domain };
     if (params.description !== undefined) input.description = await localizedText(context, params.description);
     const tags = unique(params.tags);
     if (tags !== undefined) input.tags = tags;
     const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.mode_type", input });
     const type = after[0] as unknown as Instance;
-    return { id: type.id, display_name: type.display_name as Record<string, string>, domain: type.domain as string };
+    return { id: type.id, name: type.name as Record<string, string>, domain: type.domain as string };
   },
 };
 
@@ -237,14 +238,14 @@ export const createModeAction: ScflowActionDefinition<CreateModeParams, ModeSumm
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the mode, a string or a map of language to string."),
+      name: textParam("Name of the mode, unique among the modes."),
       type: refParam("mode_type", "Id or name of the mode type."),
       description: localizedTextParam("Markdown description of the mode."),
       schedule: localizedTextParam("Schedule of the mode as a free text, such as every Monday."),
       bidirectional: { type: "boolean", description: "Whether the stops are served in both orders; false when omitted." },
       tags: tagsParam("Tags of the mode."),
     },
-    required: ["display_name", "type"],
+    required: ["name", "type"],
     additionalProperties: false,
   },
   async run(params, context) {
@@ -266,10 +267,10 @@ export const updateModeAction: ScflowActionDefinition<UpdateModeParams, ModeSumm
     type: "object",
     properties: {
       id: refParam("mode", "Id or name of the mode to update."),
-      display_name: localizedTextParam("New display name; each given language replaces the same language, the others are kept."),
-      description: nullableLocalizedTextParam("New Markdown description; same language rule as name. null removes the description."),
+      name: textParam("New name of the mode."),
+      description: nullableLocalizedTextParam("New Markdown description; each given language replaces the same language, the others are kept. null removes the description."),
       type: refParam("mode_type", "Id or name of the new mode type."),
-      schedule: nullableLocalizedTextParam("New schedule; same language rule as name. null removes the schedule."),
+      schedule: nullableLocalizedTextParam("New schedule; each given language replaces the same language, the others are kept. null removes the schedule."),
       bidirectional: { type: "boolean", description: "Whether the stops are served in both orders." },
       tags: tagsParam("New tags; they replace the current ones."),
     },
@@ -279,7 +280,7 @@ export const updateModeAction: ScflowActionDefinition<UpdateModeParams, ModeSumm
   },
   async run(params, context) {
     const patch: Record<string, unknown> = {};
-    if (params.display_name !== undefined) patch.display_name = { set: await localizedText(context, params.display_name) };
+    if (params.name !== undefined) patch.name = params.name;
     if (params.description !== undefined) {
       patch.description = params.description === null ? null : { set: await localizedText(context, params.description) };
     }
@@ -477,7 +478,7 @@ export const createModeFromFlowsAction: ScflowActionDefinition<CreateModeFromFlo
     properties: {
       flows: { type: "array", minItems: 1, items: { type: "string", ref: "flow" }, description: "Ids of the flows, at least one." } as unknown as ParamProperty,
       type: refParam("mode_type", "Id or name of the mode type."),
-      display_name: localizedTextParam("Display name of the mode, a string or a map of language to string."),
+      name: textParam("Name of the mode, unique among the modes."),
       description: localizedTextParam("Markdown description of the mode."),
       schedule: localizedTextParam("Schedule of the mode as a free text, such as every Monday."),
       bidirectional: { type: "boolean", description: "Whether the mode serves its stops in both orders; true when omitted and a flow is bidirectional." },
@@ -485,7 +486,7 @@ export const createModeFromFlowsAction: ScflowActionDefinition<CreateModeFromFlo
       reverse_lead_time: durationParam("ISO 8601 duration from the destination back to the source; lead_time when omitted."),
       tags: tagsParam("Tags of the mode."),
     },
-    required: ["flows", "type", "display_name"],
+    required: ["flows", "type", "name"],
     additionalProperties: false,
   },
   async run(params, context) {
@@ -616,7 +617,7 @@ export async function stopsOf(context: ActionAccess, modeId: string): Promise<In
 
 async function createMode(context: ActionAccess, params: CreateModeParams): Promise<Instance> {
   const input: Record<string, unknown> = {
-    display_name: await localizedText(context, params.display_name),
+    name: params.name,
     type: params.type,
     bidirectional: params.bidirectional ?? false,
   };
@@ -685,7 +686,7 @@ async function summarizeMode(context: ActionAccess, mode: Instance): Promise<Mod
   const flows = await query(context, "scflow.flow", { mode: mode.id });
   return {
     id: current.id,
-    display_name: current.display_name as Record<string, string>,
+    name: current.name as string,
     type: current.type as string,
     bidirectional: current.bidirectional === true,
     ...(schedule && Object.keys(schedule).length > 0 ? { schedule } : {}),

@@ -97,6 +97,12 @@ Typical business actions include:
 - `scflow/create_transformation_type`, `scflow/create_transformation`,
   `scflow/connect_transformation_line`, or `scflow/define_process`.
 
+Refer to an existing entity by its name, as short as it stays unambiguous (`Line 1`, or
+`Lyon / Line 1` when two plants have one), never by an id you were not given; when an action
+reports an ambiguous name, choose among the candidates it lists. A transformation always needs a
+name that you choose, and a flow or a conversion has none: its description says what else there is
+to say.
+
 Create prerequisites before dependent entities. When a batch of actions is
 offered, make the whole change as one approved batch rather than with several
 action calls in the same answer, and write its steps as its description says:

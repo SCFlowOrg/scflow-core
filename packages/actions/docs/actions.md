@@ -47,21 +47,21 @@ checked by Ajv before the body runs, so a body checks nothing by hand.
   message lists every breach.
 
 **`ref`.** The keyword `ref` names a schema of the model: the value is the id of
-an instance of it, or the exact `display_name` of one instance, in any
-language, and the body receives the key. The package reads no instance, so the
+an instance of it, or a name that the host's resolver accepts (the engine
+gives a name as short as it stays unambiguous), and the body receives the key. The package reads no instance, so the
 host gives a resolver:
 
 ```ts
 type RefResolver = (schema: string, value: string) => RefMatches | Promise<RefMatches>;
 interface RefMatches {
   id: string | null;          // the key of the instance whose id is the value
-  names: readonly string[];   // the keys of the instances whose display_name is the value
+  names: readonly string[];   // the keys of the instances the value names, when the resolver reports names itself
 }
 ```
 
 The package applies the rule: an id wins over a name that equals it, one name
 gives its key, and no instance or several are refused with
-`invalid_parameters`. A `ref` is found wherever it sits in the schema, in an
+`invalid_parameters`; an error thrown by the resolver, such as the ambiguity error of the engine that lists its candidates, is refused the same way with its message. A `ref` is found wherever it sits in the schema, in an
 array or a nested object included. Without a resolver, a `ref` value reaches
 the body as it is.
 
@@ -136,7 +136,7 @@ interface RunEntry {
 ```ts
 const { result, entries } = await runBatch(registry, {
   commands: [
-    { call: "scflow/create_actor", with: { display_name: "Plant", type: "plant" }, as: "plant" },
+    { call: "scflow/create_actor", with: { name: "Plant", type: "plant" }, as: "plant" },
     { call: "carbon/update_actor_emissions", with: { id: "${plant.id}", co2: 12 } },
   ],
   result: "${plant}",

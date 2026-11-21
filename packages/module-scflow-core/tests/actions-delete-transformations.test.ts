@@ -4,25 +4,25 @@ import { setupActions as setup } from "./actions-helpers.js";
 async function withTransformations() {
   const ctx = await setup();
   const { create, run } = ctx;
-  await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-  const plant = await run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-  const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-  const bolt = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+  await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+  const plant = await run("scflow/create_actor", { name: "Plant", type: "Site" });
+  const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+  const bolt = await create("item", { name: "Bolt", type: itemType });
   const heldBolt = await create("item_at_actor", { actor: plant.id, item: bolt });
-  const assembly = await create("transformation_type", { display_name: { en: "Assembly" } });
-  const inspection = await create("transformation_type", { display_name: { en: "Inspection" } });
+  const assembly = await create("transformation_type", { name: { en: "Assembly" } });
+  const inspection = await create("transformation_type", { name: { en: "Inspection" } });
   const assemble = await create("transformation", {
-    display_name: { en: "Assemble" },
+    name: "Assemble",
     type: assembly,
     actor: plant.id,
   });
   const assembleAgain = await create("transformation", {
-    display_name: { en: "Assemble again" },
+    name: "Assemble again",
     type: assembly,
     actor: plant.id,
   });
   const inspect = await create("transformation", {
-    display_name: { en: "Inspect" },
+    name: "Inspect",
     type: inspection,
     actor: plant.id,
   });
@@ -67,14 +67,14 @@ describe("scflow/delete_transformation", () => {
   it("refuses an unknown transformation", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_transformation", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_transformation", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
 describe("scflow/delete_transformation_type", () => {
   it("deletes a type that no transformation uses, given by name", async () => {
     const { run, query, create } = await setup();
-    await create("transformation_type", { display_name: { en: "Unused" } });
+    await create("transformation_type", { name: { en: "Unused" } });
 
     await run("scflow/delete_transformation_type", { id: "Unused" });
 
@@ -105,6 +105,6 @@ describe("scflow/delete_transformation_type", () => {
   it("refuses an unknown type", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_transformation_type", { id: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_transformation_type", { id: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });

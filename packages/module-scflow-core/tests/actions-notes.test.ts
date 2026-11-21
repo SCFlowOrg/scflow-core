@@ -5,10 +5,10 @@ import { setupActions as setup } from "./actions-helpers.js";
 /** Creates an actor type, an actor "Plant", a scope "North" and returns their ids. */
 async function withEntities() {
   const ctx = await setup();
-  await ctx.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-  const actor = await ctx.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-  const other = await ctx.run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-  const scope = await ctx.run("scflow/create_scope", { display_name: "North" });
+  await ctx.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+  const actor = await ctx.run("scflow/create_actor", { name: "Plant", type: "Site" });
+  const other = await ctx.run("scflow/create_actor", { name: "Depot", type: "Site" });
+  const scope = await ctx.run("scflow/create_scope", { name: "North" });
   const flow = await ctx.run<Record<string, any>>("scflow/create_flow", {
     source: "Plant",
     destination: "Depot",
@@ -70,7 +70,7 @@ describe("scflow/add_note", () => {
   it("refuses an unknown entity and a missing entity", async () => {
     const { run, query } = await withEntities();
 
-    await expect(run("scflow/add_note", { annotated: "no-such-id", content: "x" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/add_note", { annotated: "no-such-id", content: "x" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/add_note", { content: "x" })).rejects.toThrow(/annotated/);
     expect(await query("note")).toHaveLength(0);
   });
@@ -109,7 +109,7 @@ describe("scflow/update_note", () => {
     const { run, actor } = await withEntities();
     const note = await run("scflow/add_note", { annotated: actor.id, content: "Keep" });
 
-    await expect(run("scflow/update_note", { id: "no-such-id", content: "x" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_note", { id: "no-such-id", content: "x" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/update_note", { id: note.id, content: "" })).rejects.toThrow(/content/);
   });
 });
@@ -130,7 +130,7 @@ describe("scflow/remove_note", () => {
   it("refuses an unknown note", async () => {
     const { run } = await withEntities();
 
-    await expect(run("scflow/remove_note", { id: "no-such-id" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/remove_note", { id: "no-such-id" })).rejects.toThrow(/(designates|names) no instance/);
   });
 });
 
@@ -161,7 +161,7 @@ describe("scflow/find_notes", () => {
   it("refuses an unknown or missing entity", async () => {
     const { run } = await withEntities();
 
-    await expect(run("scflow/find_notes", { entity: "no-such-id" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/find_notes", { entity: "no-such-id" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/find_notes", {})).rejects.toThrow(/entity/);
   });
 });

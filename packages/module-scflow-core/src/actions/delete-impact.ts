@@ -1,4 +1,4 @@
-import { type Instance } from "./refs.js";
+import { type Instance, withReferences } from "./refs.js";
 import { type ActionAccess } from "./params.js";
 
 /**
@@ -40,11 +40,11 @@ export async function loadSnapshot(context: ActionAccess): Promise<Snapshot> {
     return after as unknown as Instance[];
   };
   return {
-    actors: await all("scflow.actor"),
+    actors: await withReferences(context, "scflow.actor", await all("scflow.actor")),
     flows: await all("scflow.flow"),
-    items: await all("scflow.item"),
+    items: await withReferences(context, "scflow.item", await all("scflow.item")),
     held: await all("scflow.item_at_actor"),
-    transformations: await all("scflow.transformation"),
+    transformations: await withReferences(context, "scflow.transformation", await all("scflow.transformation")),
     lines: await all("scflow.transformation_line"),
     conversions: await all("scflow.conversion"),
     stops: await all("scflow.mode_stop"),

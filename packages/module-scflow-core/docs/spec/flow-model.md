@@ -34,6 +34,7 @@ The domain of an item is the domain of its type, and is exactly one; a flow has 
 An **actor** is a place in the network where items are held, consumed, produced or queued: a customer, a supplier, a plant, a production line, a warehouse, an ERP system, a planner, a bank, a service provider.
 
 - Its `actor_type` is mandatory, can change, and gives its [domains](#flow-domain), one or more.
+- It has a name, unique among the actors that share its parent actor or, at the root, its scope: two plants each have a line called `Line 1`, and `Lyon / Line 1` refers to one of them. See [Names](schemas.md#names).
 - It owns its [items at actor](#item-at-actor) — the items it holds — and its [transformations](#transformation).
 - It can belong to one [scope](#scope), the swim lane that contains it. A new actor takes the default scope of its type when none is given, per [Actor Creation](implementation.md#actor-creation).
 - It can be at one [location](#location), through its optional `location` relation, which can change. Several actors can share a location.
@@ -51,7 +52,7 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 - The item's domain is among the domains of the source and of the destination (`carried_item_domain`).
 - Both ends hold the item through an [item at actor](#item-at-actor): what leaves the source and what reaches the destination is held there (`flow_ends_hold_item`).
 - Its `bidirectional` flag is a boolean, `false` by default. When `true`, the item may move in both directions; when `false`, only from source to destination.
-- Its `display_name` is optional. When given, it is a localized string with no uniqueness rule, so a flow is referenced by its id.
+- It has no name. Its source, destination, item and mode identify it, and what else there is to say goes in its description; see [Names](schemas.md#names).
 - Its `mode` is optional: a flow travels on at most one [mode](#mode), which says how it travels. A flow keeps its `source` and `destination` on a mode: on a round trip they say where the item is loaded and unloaded.
 
 ## Mode
@@ -61,7 +62,7 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 A **mode** says **how** flows travel, where a [flow](#flow) says **what** moves: a shuttle between two plants, a weekly round trip of a truck, an EDI link, a payment term. `mode` names the instance; its category, such as road, sea, air, rail, EDI or payment, is its `mode_type`. In everyday logistics "mode" often names the category: in SCFLOW the category is always the mode type.
 
 - Its `mode_type` is mandatory and gives its [domain](#flow-domain), exactly one, as an `item_type` does: a mode carries one domain.
-- It has a display name, a description and a `schedule`, a free text in one or more languages such as "every Monday" or "daily at 6:00". The format of a structured schedule is left open.
+- It has a name, a description and a `schedule`, a free text in one or more languages such as "every Monday" or "daily at 6:00". The format of a structured schedule is left open.
 - It owns its ordered **stops**. A stop is an [actor](#actor), a `sequence` and the `lead_time` from the previous stop, an ISO 8601 duration such as `P2D`, unknown when empty. A point-to-point mode has two stops; a round trip has more, and an actor may appear at several stops, so a round trip that returns to its start repeats it last (A, B, C, A). A stop may be the end of no flow, such as a transit hub, or a truck depot where a round trip starts and ends. Two consecutive stops make a **leg**.
 - Its `bidirectional` flag, `false` by default, says that its stops are served in both orders, such as a shuttle between two plants. Each leg then has a lead time in each direction: the reverse lead time of a stop, from it back to the previous stop, equals its lead time unless given.
 - A flow with a mode has its source and destination among the stops of the mode (`mode_stops_hold_flow_ends`).
@@ -88,7 +89,7 @@ At [scoping granularity](why-modelling-flows.md#scoping-granularity), an item is
 
 Every [actor](#actor), [item](#item), [transformation](#transformation) and [mode](#mode) has a type, instance of `actor_type`, `item_type`, `transformation_type` or `mode_type` respectively. The type is mandatory and can change.
 
-A type is data: an instance with a display name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type` and `mode_type`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A [flow](#flow) has neither a type nor a domain. A transformation has no domain either: the domain of each item it consumes or produces comes from that item.
+A type is data: an instance with a name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type` and `mode_type`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A [flow](#flow) has neither a type nor a domain. A transformation has no domain either: the domain of each item it consumes or produces comes from that item.
 
 An `actor_type` can name a `default_scope`: the [scope](#scope) given to an actor created with that type. It is optional, and an explicit scope overrides it.
 
@@ -111,6 +112,7 @@ An **item at actor** states that an [actor](#actor) holds an [item](#item): an i
 A **transformation** states that an [actor](#actor) consumes items to produce other items: components assembled into a finished product, raw material processed into an intermediate, spare parts and technician hours turned into a maintenance intervention. It is the bill of materials (BOM) of the actor, generalized to every [domain](#flow-domain). It is an entity of the network in its own right, named like actors and flows.
 
 - It is owned by its actor, where it takes place.
+- It has a name that its author writes, with no default, unique among the transformations of its actor; see [Names](schemas.md#names).
 - Its `transformation_type` is mandatory and set at creation, like the type of an actor or an item, per [Typing](#typing); it carries no domain.
 - Its lines list the consumed items and the produced items.
 - Each line references the [item at actor](#item-at-actor) it consumes or produces, held by the transformation's own actor. A transformation has at most one line for a given held item and role, per the rule `transformation_line_unique`.
@@ -127,7 +129,7 @@ A **conversion** states that an [actor](#actor) turns one [item](#item) into ano
 - It is owned by its actor, where it takes place.
 - It references a source item (`from_item`) and a target item (`to_item`); both are mandatory and set at creation, and neither changes afterwards.
 - The domain of the source item and the domain of the target item are identical.
-- It has an optional display name and an optional description, each written in one or more languages.
+- It has no name: its actor, its source item and its target item identify it. It has an optional description, written in one or more languages; see [Names](schemas.md#names).
 
 An item referenced by a conversion cannot be deleted: the relation to the item is mandatory, so its deletion is restricted.
 

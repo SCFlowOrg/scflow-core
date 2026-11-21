@@ -25,49 +25,54 @@ export async function loadInstance(context: ActionAccess, schema: string, id: un
  * Finds the instance that a reference designates, for a parameter whose schema
  * is only known when the action runs, which the keyword `ref` cannot name.
  *
- * The reference is the id of the instance, or the exact `display_name` of one
- * instance, in any language. An id wins over a name that equals it.
+ * The reference is an id, or a name as short as it stays unambiguous, resolved
+ * by the engine (see `docs/spec/schemas.md`, Names).
  *
  * @param context The access to the dataset.
  * @param schema The qualified name of the schema.
  * @param ref The id or the name given by the caller.
  * @param param The name of the parameter, quoted in the error message.
  * @returns The instance.
- * @throws When the reference matches no instance, or is a name shared by several instances (the error lists their ids).
+ * @throws When the reference matches no instance, or several: the error lists the qualified names of the candidates.
  */
 export async function resolveRef(context: ActionAccess, schema: string, ref: string, param: string): Promise<Instance> {
-  const { after } = await context.runCommand(context.locator, { kind: "query", schema });
-  const instances = after as unknown as Instance[];
-
-  const byId = instances.find((instance) => instance.id === ref);
-  if (byId) {
-    return byId;
+  let id: string;
+  try {
+    id = await context.resolveReference(schema, ref);
+  } catch (error) {
+    throw new Error(`parameter "${param}": ${(error as Error).message}`);
   }
-  const byName = instances.filter((instance) => namesOf(instance).includes(ref));
-  if (byName.length === 1) {
-    return byName[0];
-  }
-  if (byName.length === 0) {
-    throw new Error(`parameter "${param}": ${schema} "${ref}" not found`);
-  }
-  const ids = byName.map((instance) => instance.id).join(", ");
-  throw new Error(`parameter "${param}": ${schema} name "${ref}" is ambiguous, it matches ${ids}`);
+  return loadInstance(context, schema, id);
 }
 
-/** The names of an instance, one per language of its `display_name`. */
+/** The names of an instance, one per language of its `name`; one text when the name is a plain string. */
 export function namesOf(instance: Instance): string[] {
-  const displayName = instance.display_name;
-  if (typeof displayName !== "object" || displayName === null) {
+  const name = instance.name;
+  if (typeof name === "string") {
+    return [name];
+  }
+  if (typeof name !== "object" || name === null) {
     return [];
   }
-  return Object.values(displayName as Record<string, unknown>).filter(
-    (name): name is string => typeof name === "string",
-  );
+  return Object.values(name as Record<string, unknown>).filter((text): text is string => typeof text === "string");
 }
 
 /**
- * A short label of an instance for an error message: its first display name, or its id.
+ * A short label of an instance for an error message or a result: its reference
+ * when `withReferences` has set it, else its first name, or its id.
  */
 export function labelOf(instance: Instance): string {
-  return namesOf(instance)[0] ?? instance.id;
+  return typeof instance._reference === "string" ? instance._reference : (namesOf(instance)[0] ?? instance.id);
+}
+
+/**
+ * Sets on each instance its reference, the shortest name that designates it
+ * alone, which `labelOf` then gives. A name that two instances share, such as
+ * the `Line 1` of two plants, is thus qualified in what an action returns.
+ */
+export async function withReferences(context: ActionAccess, schema: string, instances: Instance[]): Promise<Instance[]> {
+  for (const instance of instances) {
+    instance._reference = await context.referenceOf(schema, instance.id);
+  }
+  return instances;
 }

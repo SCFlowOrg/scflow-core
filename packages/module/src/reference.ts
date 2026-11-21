@@ -16,10 +16,32 @@ type Node = Readonly<Record<string, unknown>>;
 const isNode = (value: unknown): value is Node => typeof value === "object" && value !== null && !Array.isArray(value);
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
-/** The reference topics of `manifest`: the concepts (audience `user`), then the actions (audience `model-dev`). */
+/**
+ * The reference topics of `manifest`: the concepts (audience `user`), the names
+ * when a schema declares `name_scope` (audience `user`), then the actions
+ * (audience `model-dev`).
+ */
 export function generateReference(manifest: ModuleManifest): GeneratedTopic[] {
   const base = { kind: "reference", locale: "en", generated: true } as const;
   const actions = manifest.actions as unknown as Node[];
+  const named = namedSchemas(manifest);
+  const names: GeneratedTopic[] = named.length
+    ? [
+        {
+          topic: {
+            ...base,
+            context: [],
+            id: `${manifest.namespace}/names`,
+            title: `${manifest.title}: names`,
+            summary: `Which entities of ${manifest.title} are referred to by name, in what scope, and how to write a name that stays unambiguous, generated from the name_scope of ${manifest.name}.`,
+            audience: "user",
+            uses: [],
+            file: "docs/reference/names.md",
+          },
+          body: renderNames(manifest, named),
+        },
+      ]
+    : [];
   return [
     {
       topic: {
@@ -34,6 +56,7 @@ export function generateReference(manifest: ModuleManifest): GeneratedTopic[] {
       },
       body: renderConcepts(manifest),
     },
+    ...names,
     {
       topic: {
         ...base,
@@ -45,9 +68,14 @@ export function generateReference(manifest: ModuleManifest): GeneratedTopic[] {
         uses: actions.map((action) => String(action.id)),
         file: "docs/reference/actions.md",
       },
-      body: renderActions(manifest, actions),
+      body: renderActions(manifest, actions, new Set(named.map((schema) => String(schema.name)))),
     },
   ];
+}
+
+/** The schemas that declare `name_scope`, in the order of the manifest. */
+function namedSchemas(manifest: ModuleManifest): Node[] {
+  return (manifest.schemas as unknown as Node[]).filter((schema) => Array.isArray(schema.name_scope));
 }
 
 const GENERATED = "<!-- Generated from module.yaml by the build of the package. Do not edit. -->";
@@ -82,7 +110,37 @@ function renderConcepts(manifest: ModuleManifest): string {
   return lines.join("\n").trimEnd() + "\n";
 }
 
-function renderActions(manifest: ModuleManifest, actions: Node[]): string {
+function renderNames(manifest: ModuleManifest, named: Node[]): string {
+  const lines = [
+    GENERATED,
+    "",
+    `# ${manifest.title}: names`,
+    "",
+    "A person, a script or an assistant designates an instance of these schemas by its **name**, never by its id.",
+    "Give the name as short as it stays unambiguous, and never an id that you were not given.",
+    "",
+    "- A name is unique among the instances that share a **scope**, whatever their schema. Two instances of different scopes may have the same name.",
+    "- The **qualified name** of an instance is the qualified name of its scope, ` / `, then its own name. The scope is the first relation of `name_scope` that the instance has set; when the list is empty, the scope is the dataset.",
+    "- A reference is a name, or the end of a qualified name: `Line 1`, or `Lyon / Line 1` when two sites have a `Line 1`. A level of the chain may not be skipped. The spaces around `/` do not matter, and a name cannot contain `/`.",
+    "- A reference that matches no instance, or several, is an error. An ambiguity error lists the qualified names of the candidates: choose one and give more of it.",
+    "- A localized name may be given in any language, and is written in the source language of the project.",
+    "",
+    "| Schema | Name | Scope | Qualified name |",
+    "| --- | --- | --- | --- |",
+  ];
+  for (const schema of named) {
+    const scope = list(schema.name_scope).map(String);
+    const property = list(schema.properties).filter(isNode).find((candidate) => candidate.name === "name");
+    const kind = property?.type === "localized_string" ? "localized" : "plain text";
+    const where = scope.length ? `the first of ${scope.map((relation) => `\`${relation}\``).join(", ")} that is set` : "the dataset";
+    const example = scope.length ? `\`<${scope[0]}> / <${schema.name}>\`` : `\`<${schema.name}>\``;
+    lines.push(`| \`${schema.name}\` | ${kind} | ${where} | ${example} |`);
+  }
+  lines.push("");
+  return lines.join("\n").trimEnd() + "\n";
+}
+
+function renderActions(manifest: ModuleManifest, actions: Node[], named: ReadonlySet<string>): string {
   const lines = [GENERATED, "", `# ${manifest.title}: actions`, ""];
   for (const action of actions) {
     const id = String(action.id);
@@ -103,7 +161,7 @@ function renderActions(manifest: ModuleManifest, actions: Node[]): string {
       for (const name of names) {
         const schema = properties[name] as Node;
         const description = typeof schema.description === "string" ? ` ${schema.description}` : "";
-        lines.push(`- \`${name}\` (${typeOf(schema)}${required.has(name) ? ", required" : ""}):${description}`);
+        lines.push(`- \`${name}\` (${typeOf(schema, named)}${required.has(name) ? ", required" : ""}):${description}`);
       }
     }
     const minimal = Object.fromEntries(names.filter((name) => required.has(name)).map((n) => [n, sample(properties[n] as Node)]));
@@ -122,13 +180,13 @@ function variants(schema: Node): Node[] {
   return [schema, ...nested];
 }
 
-function typeOf(schema: Node): string {
-  if (typeof schema.ref === "string") return `id or name of ${schema.ref}`;
+function typeOf(schema: Node, named: ReadonlySet<string>): string {
+  if (typeof schema.ref === "string") return named.has(schema.ref) ? `reference (name or id) of ${schema.ref}` : `id of ${schema.ref}`;
   if (Array.isArray(schema.enum)) return schema.enum.join(" | ");
   const parts = variants(schema);
   if (parts.some((part) => part.type === "string") && parts.some((part) => part.type === "object"))
     return "text or map language → text";
-  if (schema.type === "array") return `list of ${isNode(schema.items) ? typeOf(schema.items) : "values"}`;
+  if (schema.type === "array") return `list of ${isNode(schema.items) ? typeOf(schema.items, named) : "values"}`;
   return String(schema.type ?? "any");
 }
 

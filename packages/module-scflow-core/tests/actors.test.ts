@@ -12,7 +12,7 @@ async function createScope(mcl: Mcl, locator: string, name: string): Promise<str
   const { after } = await mcl.runCommand(locator, {
     kind: "create",
     schema: "scope",
-    input: { display_name: { en: name } },
+    input: { name: { en: name } },
   });
   return after[0].id as string;
 }
@@ -22,7 +22,7 @@ async function createActorType(mcl: Mcl, locator: string, defaultScope?: string)
     kind: "create",
     schema: "actor_type",
     input: {
-      display_name: { en: "Warehouse" },
+      name: { en: "Warehouse" },
       domains: ["physical"],
       ...(defaultScope ? { default_scope: defaultScope } : {}),
     },
@@ -36,13 +36,13 @@ describe("createActor", () => {
     const type = await createActorType(mcl, locator);
 
     const actor = await createActor(mcl, locator, {
-      display_name: { en: "Main warehouse" },
+      name: "Main warehouse",
       type,
       description: { en: "The central warehouse" },
     });
 
     expect(actor).toMatchObject({
-      display_name: { en: "Main warehouse" },
+      name: "Main warehouse",
       description: { en: "The central warehouse" },
       type,
     });
@@ -54,7 +54,7 @@ describe("createActor", () => {
     const deliver = await createScope(mcl, locator, "Deliver");
     const type = await createActorType(mcl, locator, deliver);
 
-    const actor = await createActor(mcl, locator, { display_name: { en: "Warehouse" }, type });
+    const actor = await createActor(mcl, locator, { name: "Warehouse", type });
 
     expect(actor.scope).toBe(deliver);
   });
@@ -65,7 +65,7 @@ describe("createActor", () => {
     const make = await createScope(mcl, locator, "Make");
     const type = await createActorType(mcl, locator, deliver);
 
-    const actor = await createActor(mcl, locator, { display_name: { en: "Plant" }, type, scope: make });
+    const actor = await createActor(mcl, locator, { name: "Plant", type, scope: make });
 
     expect(actor.scope).toBe(make);
   });
@@ -74,7 +74,7 @@ describe("createActor", () => {
     const { mcl, locator } = await setup();
     const type = await createActorType(mcl, locator);
 
-    const actor = await createActor(mcl, locator, { display_name: { en: "Warehouse" }, type });
+    const actor = await createActor(mcl, locator, { name: "Warehouse", type });
 
     expect(actor.scope ?? null).toBeNull();
   });
@@ -84,7 +84,7 @@ describe("createActor", () => {
     const deliver = await createScope(mcl, locator, "Deliver");
     const make = await createScope(mcl, locator, "Make");
     const type = await createActorType(mcl, locator, deliver);
-    const actor = await createActor(mcl, locator, { display_name: { en: "Warehouse" }, type });
+    const actor = await createActor(mcl, locator, { name: "Warehouse", type });
 
     await mcl.runCommand(locator, {
       kind: "update",
@@ -107,12 +107,12 @@ describe("createActor", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "location",
-      input: { display_name: { en: "Le Havre" } },
+      input: { name: "Le Havre" },
     });
     const location = after[0].id as string;
 
-    const placed = await createActor(mcl, locator, { display_name: { en: "Terminal" }, type, location });
-    const bare = await createActor(mcl, locator, { display_name: { en: "Depot" }, type });
+    const placed = await createActor(mcl, locator, { name: "Terminal", type, location });
+    const bare = await createActor(mcl, locator, { name: "Depot", type });
 
     expect(placed.location).toBe(location);
     expect(bare.location ?? null).toBeNull();
@@ -123,7 +123,7 @@ describe("createActor", () => {
     const type = await createActorType(mcl, locator);
 
     await expect(
-      createActor(mcl, locator, { display_name: { en: "Terminal" }, type, location: "missing" }),
+      createActor(mcl, locator, { name: "Terminal", type, location: "missing" }),
     ).rejects.toThrow(/location/);
 
     const { after } = await mcl.runCommand(locator, { kind: "query", schema: "actor" });
@@ -133,7 +133,7 @@ describe("createActor", () => {
   it("throws when the type does not exist", async () => {
     const { mcl, locator } = await setup();
 
-    await expect(createActor(mcl, locator, { display_name: { en: "Ghost" }, type: "missing" })).rejects.toThrow();
+    await expect(createActor(mcl, locator, { name: "Ghost", type: "missing" })).rejects.toThrow();
   });
 
   it("throws when the given scope does not exist", async () => {
@@ -141,7 +141,7 @@ describe("createActor", () => {
     const type = await createActorType(mcl, locator);
 
     await expect(
-      createActor(mcl, locator, { display_name: { en: "Warehouse" }, type, scope: "missing" }),
+      createActor(mcl, locator, { name: "Warehouse", type, scope: "missing" }),
     ).rejects.toThrow();
   });
 });

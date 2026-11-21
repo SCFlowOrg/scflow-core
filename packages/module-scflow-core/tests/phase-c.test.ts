@@ -43,8 +43,8 @@ function nextVersion(): Manifest {
   location.properties.find((property: Manifest) => property.name === "timezone").name = "time_zone";
   return {
     ...manifest,
-    version: "2.0.0",
-    migrations: [{ to: "2.0.0", rename_property: { schema: "location", from: "timezone", to: "time_zone" } }],
+    version: "3.0.0",
+    migrations: [{ to: "3.0.0", rename_property: { schema: "location", from: "timezone", to: "time_zone" } }],
   };
 }
 
@@ -68,37 +68,38 @@ describe("phase C", () => {
     await env.modules.load(root);
     const dataset = await env.datasets.create({ locator: "js:acceptance", modules: ["scflow:core"] });
 
-    await dataset.run("scflow/create_scope", { display_name: "Make" });
-    await dataset.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"], default_scope: "Make" });
-    await dataset.run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-    await dataset.run("scflow/create_transformation_type", { display_name: "Assembly" });
-    const plant = await dataset.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-    await dataset.run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-    await dataset.run("scflow/create_item", { display_name: "Bolt", type: "Part" });
-    await dataset.run("scflow/create_item", { display_name: "Frame", type: "Part" });
+    await dataset.run("scflow/create_scope", { name: "Make" });
+    await dataset.run("scflow/create_actor_type", { name: "Site", domains: ["physical"], default_scope: "Make" });
+    await dataset.run("scflow/create_item_type", { name: "Part", domain: "physical" });
+    await dataset.run("scflow/create_transformation_type", { name: "Assembly" });
+    const plant = await dataset.run("scflow/create_actor", { name: "Plant", type: "Site" });
+    await dataset.run("scflow/create_actor", { name: "Depot", type: "Site" });
+    await dataset.run("scflow/create_item", { name: "Bolt", type: "Part" });
+    await dataset.run("scflow/create_item", { name: "Frame", type: "Part" });
     const flow = await dataset.run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
     const process = await dataset.run("scflow/define_process", {
       actor: "Plant",
       transformation_type: "Assembly",
+      name: "Assemble",
       consumed_items: ["Bolt"],
       produced_items: ["Frame"],
     });
 
     expect(plant.result).toMatchObject({ scope: expect.any(String) });
     expect(flow).toMatchObject({ changed: true });
-    expect(process.result).toMatchObject({ transformation: { display_name: { en: "Assembly" } }, lines: [{ role: "consumed" }, { role: "produced" }] });
+    expect(process.result).toMatchObject({ transformation: { name: "Assemble" }, lines: [{ role: "consumed" }, { role: "produced" }] });
     expect((await dataset.query({ query: "scflow.item_at_actor" })).after).toHaveLength(3);
   });
 
   it("refuses a broken rule at prepare, and the whole action changes nothing", async () => {
     const env = environmentWith(current());
     const dataset = await env.datasets.create({ locator: "js:refused", modules: ["scflow:core"] });
-    await dataset.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-    await dataset.run("scflow/create_item_type", { display_name: "Part", domain: "physical" });
-    await dataset.run("scflow/create_item_type", { display_name: "Money", domain: "financial" });
-    await dataset.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-    await dataset.run("scflow/create_actor", { display_name: "Depot", type: "Site" });
-    await dataset.run("scflow/create_item", { display_name: "Euro", type: "Money" });
+    await dataset.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+    await dataset.run("scflow/create_item_type", { name: "Part", domain: "physical" });
+    await dataset.run("scflow/create_item_type", { name: "Money", domain: "financial" });
+    await dataset.run("scflow/create_actor", { name: "Plant", type: "Site" });
+    await dataset.run("scflow/create_actor", { name: "Depot", type: "Site" });
+    await dataset.run("scflow/create_item", { name: "Euro", type: "Money" });
 
     // The body writes the holdings and the flow: the breach is found only when the transaction prepares.
     await expect(
@@ -111,13 +112,13 @@ describe("phase C", () => {
   it("upgrades a dataset through a migration when it is opened", async () => {
     const env = environmentWith(current());
     const dataset = await env.datasets.create({ locator: "js:upgraded", modules: ["scflow:core"] });
-    await dataset.run("scflow/create_location", { display_name: { en: "Lyon" }, timezone: "Europe/Paris" });
+    await dataset.run("scflow/create_location", { name: "Lyon", timezone: "Europe/Paris" });
     const dump = await dataset.dump("json");
 
     const reopened = await environmentWith(nextVersion()).datasets.restore("js:upgraded", dump, "json");
 
-    expect(reopened.upgrades).toMatchObject([{ module: "scflow:core", to: "2.0.0" }]);
-    expect(reopened.modules).toMatchObject([{ module: "scflow:core", version: "2.0.0", state: "current" }]);
+    expect(reopened.upgrades).toMatchObject([{ module: "scflow:core", to: "3.0.0" }]);
+    expect(reopened.modules).toMatchObject([{ module: "scflow:core", version: "3.0.0", state: "current" }]);
     const [location] = (await reopened.query({ query: "scflow.location" })).after as TransientObject[];
     expect(location).toMatchObject({ time_zone: "Europe/Paris" });
     expect(location).not.toHaveProperty("timezone");
@@ -126,8 +127,8 @@ describe("phase C", () => {
   it("upgrades a valid dataset to the version with the rules, actors without a scope included", async () => {
     const env = environmentWith(withoutRules());
     const dataset = await env.datasets.create({ locator: "js:valid", modules: ["scflow:core"] });
-    await dataset.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-    await dataset.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
+    await dataset.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+    await dataset.run("scflow/create_actor", { name: "Plant", type: "Site" });
 
     const reopened = await environmentWith(current()).datasets.restore("js:valid", await dataset.dump("json"), "json");
 
@@ -138,9 +139,9 @@ describe("phase C", () => {
   it("refuses the upgrade of a dataset that breaks a rule, and lists the instance at fault", async () => {
     const env = environmentWith(withoutRules());
     const dataset = await env.datasets.create({ locator: "js:broken", modules: ["scflow:core"] });
-    await dataset.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-    await dataset.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-    await dataset.run("scflow/create_actor", { display_name: "Line", type: "Site", parent_actor: "Plant" });
+    await dataset.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+    await dataset.run("scflow/create_actor", { name: "Plant", type: "Site" });
+    await dataset.run("scflow/create_actor", { name: "Line", type: "Site", parent_actor: "Plant" });
     const flow = await dataset.run("scflow/create_flow", { source: "Line", destination: "Plant" });
     const id = (flow.result as TransientObject).id;
 

@@ -71,8 +71,8 @@ export interface Action<C = RunTrace> extends ActionDefinition {
 
 /**
  * The instances a `ref` value names, as the engine finds them: the key of the
- * instance whose id is the value, if any, and the keys of the instances whose
- * `display_name` is the value, in any language.
+ * instance whose id is the value, if any, and the keys of the instances the
+ * value names, when a resolver reports names itself.
  */
 export interface RefMatches {
   readonly id: string | null;

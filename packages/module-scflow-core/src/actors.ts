@@ -2,8 +2,8 @@ import type { MclAccess } from "@scfloworg/core";
 
 /** The properties of an actor to create. */
 export interface CreateActorInput {
-  /** Display name of the actor, per language. */
-  display_name: Record<string, string>;
+  /** Name of the actor. */
+  name: string;
   /** Id of the `actor_type` of the actor. */
   type: string;
   /** Id of the scope that contains the actor; defaults to the `default_scope` of `type`. */

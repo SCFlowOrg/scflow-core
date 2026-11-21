@@ -3,7 +3,9 @@ import type { DatasetModel } from "./datasetModules.js";
 import { modelError } from "./errors.js";
 import { facetOfProperty, facetTargetOf, namespaceOfName, qualifiedNamespacesOf } from "./facets.js";
 import type { LoadedModule } from "./modules.js";
-import { findProperty, isEmbedded, keyPropertyName } from "./schema.js";
+import { loadNamedInstances, referenceOfIn, resolveReferenceIn } from "./names.js";
+import type { Resolvers } from "./resolvers.js";
+import { findProperty, hasNameScope, isEmbedded, keyPropertyName } from "./schema.js";
 import { resolveType } from "./schemaProcessing.js";
 import type { ResolvedScalar, TypeResolutionContext } from "./schemaProcessing.js";
 import type {
@@ -12,6 +14,7 @@ import type {
   MclAccess,
   NormalizedProperty,
   NormalizedSchema,
+  PersistenceInterface,
   TransientObject,
   TransientValue,
 } from "./types.js";
@@ -367,28 +370,63 @@ export function checkActionWrite(
 export type EngineRefResolver = (schema: string, value: string) => Promise<{ id: string | null; names: string[] }>;
 
 /**
- * The resolver of `ref` values on a dataset of model `model`: the key of the
- * instance whose id is the value, and the keys of the instances whose
- * `display_name` is the value, in any language. `query` runs a command on the
+ * The resolver of `ref` values on a dataset of model `model`, by the rules of
+ * [References by name](../docs/references.md). For a schema with `name_scope`
+ * the value is an id or a name as short as it stays unambiguous, resolved by
+ * `resolveReferenceIn`: no instance or several throw `unresolved_reference` or
+ * `ambiguous_reference`, which lists the qualified names of the candidates.
+ * For any other schema the value is an id. `query` runs a command on the
  * dataset. A schema that does not resolve has no instance.
  */
 export function createRefResolver(
   model: DatasetModel,
   query: (command: AuthoredCommand) => Promise<CommandResult>,
 ): EngineRefResolver {
+  const { resolvers, impl } = namedAccess(model, query);
   return async (name, value) => {
     const schema = model.schemas.get(name);
     if (!schema) return { id: null, names: [] };
+    if (hasNameScope(schema)) {
+      const all = await loadNamedInstances(impl, "", resolvers);
+      return { id: resolveReferenceIn(all, resolvers, value, { schema: name }).key, names: [] };
+    }
     const key = keyPropertyName(schema) as string;
     let id: string | null = null;
-    const names: string[] = [];
     for (const instance of (await query({ query: name } as AuthoredCommand)).after as TransientObject[]) {
-      const instanceKey = instance[key] as string;
-      if (instanceKey === value) id = instanceKey;
-      const label = instance.display_name;
-      if (label === value || (isMapping(label) && Object.values(label).includes(value))) names.push(instanceKey);
+      if (instance[key] === value) id = value;
     }
-    return { id, names };
+    return { id, names: [] };
+  };
+}
+
+/** What reads the instances of the schemas with `name_scope` through `query`, for `loadNamedInstances`. */
+function namedAccess(model: DatasetModel, query: (command: AuthoredCommand) => Promise<CommandResult>) {
+  const resolvers = { schemas: model.schemas } as unknown as Resolvers;
+  const impl = {
+    listInstances: async (_rest: string, schemaName: string) =>
+      (await query({ query: schemaName } as AuthoredCommand)).after as TransientObject[],
+  } as unknown as PersistenceInterface;
+  return { resolvers, impl };
+}
+
+/** What gives the reference of an instance, see `createReferenceOf`. */
+export type EngineReferenceOf = (schema: string, key: string, languages?: readonly string[]) => Promise<string>;
+
+/**
+ * The writer of references on a dataset of model `model`: the shortest name
+ * that designates an instance alone now (`referenceOfIn`), written in the first
+ * of `languages` that has a text. A schema without `name_scope` has no name: its
+ * reference is its key.
+ */
+export function createReferenceOf(
+  model: DatasetModel,
+  query: (command: AuthoredCommand) => Promise<CommandResult>,
+): EngineReferenceOf {
+  const { resolvers, impl } = namedAccess(model, query);
+  return async (name, key, languages = []) => {
+    const schema = model.schemas.get(name);
+    if (!schema || !hasNameScope(schema)) return key;
+    return referenceOfIn(await loadNamedInstances(impl, "", resolvers), key, languages).reference;
   };
 }
 

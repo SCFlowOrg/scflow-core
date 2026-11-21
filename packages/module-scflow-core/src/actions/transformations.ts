@@ -1,5 +1,5 @@
 import { type Instance } from "./refs.js";
-import { cascadeParam, unique, tagsParam, type ActionAccess, type ScflowActionDefinition, localizedTextParam, refParam } from "./params.js";
+import { cascadeParam, unique, tagsParam, type ActionAccess, type ScflowActionDefinition, localizedTextParam, refParam, referenceHint, textParam } from "./params.js";
 import { deleteById } from "./delete-impact.js";
 import { holdItem } from "./items.js";
 import { localizedText } from "./text.js";
@@ -9,7 +9,7 @@ type Text = string | Record<string, string>;
 
 /** Parameters of `scflow/create_transformation_type`. */
 export interface CreateTransformationTypeParams {
-  display_name: Text;
+  name: Text;
   description?: Text;
   tags?: string[];
 }
@@ -18,7 +18,7 @@ export interface CreateTransformationTypeParams {
 export interface CreateTransformationParams {
   actor: string;
   type: string;
-  display_name?: Text;
+  name: string;
   description?: Text;
   tags?: string[];
 }
@@ -35,6 +35,7 @@ export interface ConnectTransformationLineParams {
 export interface DefineProcessParams {
   actor: string;
   transformation_type: string;
+  name: string;
   consumed_items?: string[];
   produced_items?: string[];
 }
@@ -54,13 +55,15 @@ export interface DeleteTransformationTypeParams {
 /** The result of `scflow/create_transformation_type`. */
 export interface TransformationTypeSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: Record<string, string>;
 }
 
 /** A transformation as the actions return it. */
 export interface TransformationSummary {
   id: string;
-  display_name: Record<string, string>;
+  name: string;
+  /** The name as short as it stays unambiguous, with its actor when another actor has a transformation of that name. */
+  reference: string;
   type: string;
   actor: string;
 }
@@ -92,15 +95,15 @@ export const createTransformationTypeAction: ScflowActionDefinition<
   parameters: {
     type: "object",
     properties: {
-      display_name: localizedTextParam("Display name of the transformation type, a string or a map of language to string."),
+      name: localizedTextParam("Name of the transformation type, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the transformation type."),
       tags: tagsParam("Tags of the transformation type."),
     },
-    required: ["display_name"],
+    required: ["name"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const input: Record<string, unknown> = { display_name: await localizedText(context, params.display_name) };
+    const input: Record<string, unknown> = { name: await localizedText(context, params.name) };
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
     }
@@ -110,7 +113,7 @@ export const createTransformationTypeAction: ScflowActionDefinition<
     }
     const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.transformation_type", input });
     const type = after[0] as unknown as Instance;
-    return { id: type.id, display_name: type.display_name as Record<string, string> };
+    return { id: type.id, name: type.name as Record<string, string> };
   },
 };
 
@@ -121,22 +124,22 @@ export const createTransformationAction: ScflowActionDefinition<CreateTransforma
   title: "Create a transformation",
   description:
     "Creates a transformation of a given type inside an actor, with no line yet, and returns it. " +
-    "The transformation is named after its type when no name is given.",
+    "Its name is required and has no default; it is unique among the transformations of the actor.",
   parameters: {
     type: "object",
     properties: {
       actor: refParam("actor", "Id or name of the actor that executes the transformation."),
       type: refParam("transformation_type", "Id or name of the transformation type."),
-      display_name: localizedTextParam("Display name of the transformation; the name of its type when omitted."),
+      name: textParam("Name of the transformation, unique among the transformations of the actor, such as Assembly."),
       description: localizedTextParam("Markdown description of the transformation."),
       tags: tagsParam("Tags of the transformation."),
     },
-    required: ["actor", "type"],
+    required: ["actor", "type", "name"],
     additionalProperties: false,
   },
   async run(params, context) {
     return insertTransformation(context, params.actor, params.type, {
-      ...(params.display_name === undefined ? {} : { display_name: await localizedText(context, params.display_name) }),
+      name: params.name,
       ...(params.description === undefined ? {} : { description: await localizedText(context, params.description) }),
       ...(params.tags === undefined ? {} : { tags: unique(params.tags) }),
     });
@@ -176,7 +179,7 @@ export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, De
   writes: ["transformation", "item_at_actor", "transformation_line"],
   title: "Define a process",
   description:
-    "Creates a transformation of a given type at an actor, makes the actor hold the consumed and produced items that it does not " +
+    "Creates a named transformation of a given type at an actor, makes the actor hold the consumed and produced items that it does not " +
     "hold yet, and attaches a line for each of them, in one step. Every item must be in a domain of the actor. " +
     "Returns the transformation and its lines.",
   parameters: {
@@ -184,22 +187,23 @@ export const defineProcessAction: ScflowActionDefinition<DefineProcessParams, De
     properties: {
       actor: refParam("actor", "Id or name of the actor."),
       transformation_type: refParam("transformation_type", "Id or name of the transformation type."),
+      name: textParam("Name of the transformation, unique among the transformations of the actor, such as Assembly."),
       consumed_items: {
         type: "array",
         items: { type: "string", ref: "item" },
-        description: "Ids or names of the items consumed.",
+        description: "Items consumed, each an id or a name." + referenceHint("item"),
       },
       produced_items: {
         type: "array",
         items: { type: "string", ref: "item" },
-        description: "Ids or names of the items produced.",
+        description: "Items produced, each an id or a name." + referenceHint("item"),
       },
     },
-    required: ["actor", "transformation_type"],
+    required: ["actor", "transformation_type", "name"],
     additionalProperties: false,
   },
   async run(params, context) {
-    const transformation = await insertTransformation(context, params.actor, params.transformation_type, {});
+    const transformation = await insertTransformation(context, params.actor, params.transformation_type, { name: params.name });
     const consumed = unique(params.consumed_items) ?? [];
     const produced = unique(params.produced_items) ?? [];
     const lines: TransformationLineSummary[] = [];
@@ -274,7 +278,7 @@ export const TRANSFORMATION_ACTIONS = [
   deleteTransformationTypeAction,
 ] as const;
 
-/** Creates a transformation; the schema names it after its type unless a name is given. */
+/** Creates a transformation. */
 async function insertTransformation(
   context: ActionAccess,
   actor: string,
@@ -289,7 +293,8 @@ async function insertTransformation(
   const transformation = after[0] as unknown as Instance;
   return {
     id: transformation.id,
-    display_name: transformation.display_name as Record<string, string>,
+    name: transformation.name as string,
+    reference: await context.referenceOf("scflow.transformation", transformation.id),
     type: transformation.type as string,
     actor: transformation.actor as string,
   };

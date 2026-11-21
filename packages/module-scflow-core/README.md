@@ -32,7 +32,7 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
 ## Exports
 
 - `SCHEMAS`: the scalar types and schemas, compiled from `module.yaml`.
-- `createActor(mcl, locator, { display_name, type, scope?, location?, description?, parent_actor?, tags? })`: creates an
+- `createActor(mcl, locator, { name, type, scope?, location?, description?, parent_actor?, tags? })`: creates an
   actor and returns it. The actor takes `scope` when given, otherwise the `default_scope`
   of its type, and no scope when the type has none; the default is applied at creation
   only. It is at `location` when given and at none otherwise. It throws when the type, the
@@ -40,7 +40,7 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
 - `getCommonFlowDomains(mcl, locator, { source, destination })`: read-only; returns the flow
   domains common to the two actors. An interface uses it to accept or refuse a drag and
   drop: an empty list refuses it. It throws when an actor does not exist.
-- `createFlow(mcl, locator, { source, destination, item?, bidirectional?, mode?, display_name?, description?, tags? })`:
+- `createFlow(mcl, locator, { source, destination, item?, bidirectional?, mode?, description?, tags? })`:
   creates one flow from `source` to `destination` and returns it. A flow has no domain, so
   it does not check the domains of the actors. With an `item`, the call creates the `item_at_actor`
   that the source and the destination lack. It throws when an actor or the item does not exist, or
@@ -61,9 +61,9 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
   `create_transformation`, `connect_transformation_line`, `define_process`, `create_conversion`, `update_conversion`, `add_tags`, `remove_tags`, `add_note`, `update_note`, `remove_note`,
   `find_notes`, `inspect_mode` and `inspect_delete_impact` (these three are `kind: "read"` actions), and the cascading deletes `delete_actor_type`,
   `delete_scope`, `delete_mode`, `delete_mode_type`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
-  catalogue and the parameters are generated topics, `scflow/actions` and `scflow/concepts`
+  catalogue and the parameters are generated topics, `scflow/actions`, `scflow/concepts` and `scflow/names`
   (`docs/reference/`, written by `scripts/build-docs.mjs` from `module.yaml` and committed), and the conventions
-  (ID or name references, localized text) are in [`docs/action-conventions.md`](docs/action-conventions.md).
+  (references by name, localized text) are in [`docs/action-conventions.md`](docs/action-conventions.md).
 
 ## Locations
 
@@ -74,7 +74,7 @@ empty value, so a `latitude` and a `longitude` that are both 0 mean that the loc
 coordinates, and an empty `country_code` or `un_locode` is unset. `latitude` and `longitude`
 are bounded to -90..90 and -180..180, `country_code` is two uppercase letters and `un_locode`
 five characters, such as `FRLEH`. The actions `create_actor` and `update_actor` take a `location`,
-given by id or display name; the package ships no action that creates or changes a location.
+given by its name or its id; the package ships no action that creates or changes a location.
 
 ## Modes
 
@@ -97,8 +97,9 @@ The rules of the network are declared on the schemas of `module.yaml` (`docs/spe
 Network Rules): the engine refuses a breach at the end of any transaction with `rule_violation`, and a
 body only writes what a rule cannot, such as the holdings of the ends of a flow.
 
-An action takes the id or the display name of every entity it references, and a plain string
-or a map of language to string for every text. It declares its parameters as JSON Schema, which
+An action takes the name, as short as it stays unambiguous, or the id of every entity it
+references ([Names](docs/spec/schemas.md#names)), and a plain string or a map of language to string
+for every localized text. It declares its parameters as JSON Schema, which
 the registry checks before the body runs, and the schemas it writes in `writes`. An action that
 takes the place of a CRUD operation is named by the `crud` of its schema and follows the CRUD
 parameters. It opens no transaction: the host runs it in one, so a failure leaves the dataset
@@ -109,6 +110,6 @@ const env = createEnvironment({ formats: [createJsPersistenceInterface()] });
 await env.modules.load(folderOfThePackage);
 const dataset = await env.datasets.create({ locator: "js:network", modules: ["scflow:core"] });
 
-await dataset.run("scflow/create_actor_type", { display_name: "Warehouse" });
-await dataset.run("scflow/create_actor", { display_name: "Main warehouse", type: "Warehouse" });
+await dataset.run("scflow/create_actor_type", { name: "Warehouse" });
+await dataset.run("scflow/create_actor", { name: "Main warehouse", type: "Warehouse" });
 ```

@@ -46,17 +46,17 @@ describe("phase B", () => {
     });
     expect(dataset.readOnly).toBe(false);
     expect(dataset.modules).toEqual([
-      { module: "scflow:core", version: "1.3.0", installed: "1.3.0", state: "current" },
+      { module: "scflow:core", version: "2.0.0", installed: "2.0.0", state: "current" },
       { module: "acme:carbon", version: "1.0.0", installed: "1.0.0", state: "current" },
     ]);
 
     // The actor and its type are written by the actions of scflow:core.
     const type = await dataset.run("scflow/create_actor_type", {
-      display_name: { en: "Plant" },
+      name: { en: "Plant" },
       domains: ["physical"],
     });
     const created = await dataset.run("scflow/create_actor", {
-      display_name: { en: "Lyon" },
+      name: "Lyon",
       type: "Plant",
     });
     expect(created).toMatchObject({ changed: true, result: { type: (type.result as TransientObject).id } });
@@ -94,7 +94,7 @@ describe("phase B", () => {
       co2: 12,
     });
     const { after } = await reloaded.query({ query: "scflow.actor" });
-    expect(after).toMatchObject([{ id: actor, display_name: { en: "Lyon" }, carbon: { co2: 12 } }]);
+    expect(after).toMatchObject([{ id: actor, name: "Lyon", carbon: { co2: 12 } }]);
     expect(load(await reloaded.dump("yaml"))).toEqual(saved);
 
     // The facet values stay writable after the reload.
@@ -107,8 +107,8 @@ describe("phase B", () => {
   it("reloads the dataset read only where acme:carbon is not installed, its facet values kept", async () => {
     const env = await environment(root, carbon);
     const dataset = await env.datasets.create({ locator: "js:lyon", modules: ["acme:carbon"] });
-    await dataset.run("scflow/create_actor_type", { display_name: "Plant", domains: ["physical"] });
-    const created = await dataset.run("scflow/create_actor", { display_name: "Lyon", type: "Plant" });
+    await dataset.run("scflow/create_actor_type", { name: "Plant", domains: ["physical"] });
+    const created = await dataset.run("scflow/create_actor", { name: "Lyon", type: "Plant" });
     const actor = String((created.result as TransientObject).id);
     await dataset.run("carbon/update_actor_emissions", { id: actor, co2: 12 });
 

@@ -70,8 +70,9 @@ schemas:
         type: string
   - name: site
     is_root:
+    name_scope: []
     properties:
-      - name: display_name
+      - name: name
         type: string
         mandatory:
       - name: code
@@ -134,7 +135,7 @@ actions:
       commands:
         - call: shop/create_site
           with:
-            display_name: \${params.name}
+            name: \${params.name}
           as: site
         - call: shop/update_site
           with:
@@ -147,7 +148,7 @@ actions:
       commands:
         - create: shop.site
           input:
-            - display_name: doomed
+            - name: doomed
         - fail: refused
   - id: shop/procedure_undeclared
     body:
@@ -209,7 +210,7 @@ const shopCode = {
     write_undeclared: (context: ConformanceActionContext) =>
       update(context, { create: "shop.kiosk", input: [{ label: "k" }] }),
     write_in_read: (context: ConformanceActionContext) =>
-      update(context, { create: "shop.site", input: [{ display_name: "x" }] }),
+      update(context, { create: "shop.site", input: [{ name: "x" }] }),
     write_foreign_facet: (context: ConformanceActionContext, params: { id: string }) =>
       update(context, { update: "shop.site", filters: { id: params.id }, input: { green: { co2: 1 } } }),
   },
@@ -224,7 +225,7 @@ const greenCode = {
         input: { green: { co2: params.co2 } },
       }),
     write_target: (context: ConformanceActionContext, params: { id: string }) =>
-      update(context, { update: "shop.site", filters: { id: params.id }, input: { display_name: "x" } }),
+      update(context, { update: "shop.site", filters: { id: params.id }, input: { name: "x" } }),
   },
 };
 
@@ -253,7 +254,7 @@ export function runModuleActionConformanceSuite(impl: ModuleActionImplementation
   }
 
   const created = async (ds: ConformanceDataset, name = "Paris"): Promise<string> =>
-    ((await ds.run("shop/create_site", { display_name: name })).result as Row).id as string;
+    ((await ds.run("shop/create_site", { name: name })).result as Row).id as string;
 
   const header = (extra: string) => `
 name: acme:bad
@@ -366,9 +367,9 @@ ${extra}
           parameters: { properties: Row };
         };
         expect(Object.keys(site.parameters.properties).sort()).toEqual(
-          ["code", "display_name", "note", "status"].sort(),
+          ["code", "name", "note", "status"].sort(),
         );
-        expect(await codeOf(ds.run("shop/create_site", { display_name: "x", green: { co2: 1 } }))).toBe(
+        expect(await codeOf(ds.run("shop/create_site", { name: "x", green: { co2: 1 } }))).toBe(
           "invalid_parameters",
         );
       });
@@ -376,8 +377,8 @@ ${extra}
       it("applies mandatory and default_value to the create", async () => {
         const ds = await dataset();
         expect(await codeOf(ds.run("shop/create_site", {}))).toBe("invalid_parameters");
-        const { result } = await ds.run("shop/create_site", { display_name: "x" });
-        expect(result).toMatchObject({ display_name: "x", status: "open" });
+        const { result } = await ds.run("shop/create_site", { name: "x" });
+        expect(result).toMatchObject({ name: "x", status: "open" });
       });
 
       it("leaves constant and updated_by properties out of the update", async () => {
@@ -390,7 +391,7 @@ ${extra}
         expect(result).toMatchObject({ status: "closed" });
       });
 
-      it("takes a relation and the target by id or display name", async () => {
+      it("takes a relation and the target by id or by name", async () => {
         const ds = await dataset();
         const id = await created(ds, "Lyon");
         const byName = await ds.run("shop/create_order", { site: "Lyon" });
@@ -424,7 +425,7 @@ ${extra}
         const ds = await dataset();
         const { result } = await ds.run("shop/open_and_close", { name: "Lille" });
         const { after } = await ds.query({ query: "shop.site" });
-        expect(after).toMatchObject([{ id: result, display_name: "Lille", status: "closed" }]);
+        expect(after).toMatchObject([{ id: result, name: "Lille", status: "closed" }]);
       });
 
       it("checks the parameters of a procedure", async () => {

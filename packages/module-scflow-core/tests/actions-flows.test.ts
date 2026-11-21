@@ -5,10 +5,10 @@ import { setupActions as setup } from "./actions-helpers.js";
 /** Creates two actors, "Source" and "Target", whose types have the given flow domains. */
 async function withActors(sourceDomains: string[], targetDomains: string[]) {
   const ctx = await setup();
-  await ctx.run("scflow/create_actor_type", { display_name: "From", domains: sourceDomains });
-  await ctx.run("scflow/create_actor_type", { display_name: "To", domains: targetDomains });
-  const source = await ctx.run("scflow/create_actor", { display_name: "Source", type: "From" });
-  const target = await ctx.run("scflow/create_actor", { display_name: "Target", type: "To" });
+  await ctx.run("scflow/create_actor_type", { name: "From", domains: sourceDomains });
+  await ctx.run("scflow/create_actor_type", { name: "To", domains: targetDomains });
+  const source = await ctx.run("scflow/create_actor", { name: "Source", type: "From" });
+  const target = await ctx.run("scflow/create_actor", { name: "Target", type: "To" });
   return { ...ctx, source, target };
 }
 
@@ -64,8 +64,8 @@ describe("scflow/create_flow", () => {
 
   it("carries the item given by name, makes both ends hold it, and returns it", async () => {
     const { run, query, create, source, target } = await withActors(["physical"], ["physical"]);
-    const type = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    const item = await create("item", { display_name: { en: "Bolt" }, type });
+    const type = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    const item = await create("item", { name: "Bolt", type });
 
     const flow = await run<Record<string, unknown>>("scflow/create_flow", {
       source: "Source",
@@ -88,8 +88,8 @@ describe("scflow/create_flow", () => {
 
   it("refuses an item whose domain does not fit an end, and creates nothing", async () => {
     const { run, query, create } = await withActors(["physical"], ["service"]);
-    const type = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    await create("item", { display_name: { en: "Bolt" }, type });
+    const type = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    await create("item", { name: "Bolt", type });
 
     await expect(
       run("scflow/create_flow", { source: "Source", destination: "Target", item: "Bolt" }),
@@ -101,11 +101,11 @@ describe("scflow/create_flow", () => {
 
   it("requires an item between an actor and its child, in both directions", async () => {
     const { run, query } = await setup().then(async (ctx) => {
-      await ctx.run("scflow/create_actor_type", { display_name: "Site", domains: ["physical"] });
-      await ctx.run("scflow/create_actor", { display_name: "Plant", type: "Site" });
-      await ctx.run("scflow/create_actor", { display_name: "Workshop", type: "Site", parent_actor: "Plant" });
-      const type = await ctx.create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-      await ctx.create("item", { display_name: { en: "Bolt" }, type });
+      await ctx.run("scflow/create_actor_type", { name: "Site", domains: ["physical"] });
+      await ctx.run("scflow/create_actor", { name: "Plant", type: "Site" });
+      await ctx.run("scflow/create_actor", { name: "Workshop", type: "Site", parent_actor: "Plant" });
+      const type = await ctx.create("item_type", { name: { en: "Part" }, domain: "physical" });
+      await ctx.create("item", { name: "Bolt", type });
       return ctx;
     });
 
@@ -151,42 +151,22 @@ describe("scflow/create_flow", () => {
     expect(await query("flow")).toHaveLength(0);
   });
 
-  it("gives its name to the flow, and no name when omitted", async () => {
+  it("has no name: the flow is identified by its source, destination, item and mode", async () => {
     const { run, query } = await withActors(["physical"], ["physical"]);
 
-    const unnamed = await run<Record<string, unknown>>("scflow/create_flow", {
-      source: "Source",
-      destination: "Target",
-    });
-    const named = await run<Record<string, unknown>>("scflow/create_flow", {
-      source: "Source",
-      destination: "Target",
-      display_name: { en: "Lane", fr: "Voie" },
-    });
+    const flow = await run<Record<string, unknown>>("scflow/create_flow", { source: "Source", destination: "Target" });
 
-    expect(unnamed).not.toHaveProperty("display_name");
-    expect(named.display_name).toEqual({ en: "Lane", fr: "Voie" });
-    expect((await query("flow", { id: named.id }))[0].display_name).toEqual({ en: "Lane", fr: "Voie" });
+    expect(flow).not.toHaveProperty("name");
+    expect(await query("flow", { id: flow.id })).toHaveLength(1);
+    expect((await query("flow", { id: flow.id }))[0]).not.toHaveProperty("name");
   });
 
-  it("stores a plain string name as English", async () => {
-    const { run } = await withActors(["physical"], ["physical"]);
-
-    const flow = await run<Record<string, unknown>>("scflow/create_flow", {
-      source: "Source",
-      destination: "Target",
-      display_name: "Lane",
-    });
-
-    expect(flow.display_name).toEqual({ en: "Lane" });
-  });
-
-  it("refuses a name that is neither a string nor a map and creates nothing", async () => {
+  it("refuses a name and creates nothing", async () => {
     const { run, query } = await withActors(["physical"], ["physical"]);
 
     await expect(
-      run("scflow/create_flow", { source: "Source", destination: "Target", display_name: 42 }),
-    ).rejects.toThrow(/name/);
+      run("scflow/create_flow", { source: "Source", destination: "Target", name: "Lane" }),
+    ).rejects.toThrow(/additional properties/);
     expect(await query("flow")).toHaveLength(0);
   });
 
@@ -217,8 +197,8 @@ describe("scflow/create_flow", () => {
   it("refuses an unknown or missing actor, naming the parameter", async () => {
     const { run } = await withActors(["physical"], ["physical"]);
 
-    await expect(run("scflow/create_flow", { source: "Ghost", destination: "Target" })).rejects.toThrow(/names no instance/);
-    await expect(run("scflow/create_flow", { source: "Source", destination: "Ghost" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/create_flow", { source: "Ghost", destination: "Target" })).rejects.toThrow(/(designates|names) no instance/);
+    await expect(run("scflow/create_flow", { source: "Source", destination: "Ghost" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/create_flow", { source: "Source" })).rejects.toThrow(/destination/);
   });
 });
@@ -266,25 +246,10 @@ describe("scflow/update_flow", () => {
     expect(stored.tags).toEqual(["a", "b"]);
   });
 
-  it("sets the name, merges languages and removes the name with null", async () => {
-    const { run, query, flow } = await withFlow();
-
-    const named = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: "Lane" });
-    expect(named.display_name).toEqual({ en: "Lane" });
-
-    const merged = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: { fr: "Voie" } });
-    expect(merged.display_name).toEqual({ en: "Lane", fr: "Voie" });
-    expect((await query("flow", { id: flow.id }))[0].display_name).toEqual({ en: "Lane", fr: "Voie" });
-
-    const cleared = await run<Record<string, unknown>>("scflow/update_flow", { id: flow.id, display_name: null });
-    expect(cleared).not.toHaveProperty("display_name");
-    expect((await query("flow", { id: flow.id }))[0].display_name ?? {}).toEqual({});
-  });
-
-  it("refuses a name that is neither a string, a map nor null", async () => {
+  it("refuses a name: a flow has none", async () => {
     const { run, flow } = await withFlow();
 
-    await expect(run("scflow/update_flow", { id: flow.id, display_name: 42 })).rejects.toThrow(/name/);
+    await expect(run("scflow/update_flow", { id: flow.id, name: "Lane" })).rejects.toThrow(/additional properties/);
   });
 
   it("leaves untouched what is not given", async () => {
@@ -306,7 +271,7 @@ describe("scflow/update_flow", () => {
   it("refuses an unknown or missing flow and a bidirectional that is not a boolean", async () => {
     const { run, query, flow } = await withFlow();
 
-    await expect(run("scflow/update_flow", { id: "missing", bidirectional: true })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/update_flow", { id: "missing", bidirectional: true })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/update_flow", { bidirectional: true })).rejects.toThrow(/flow/);
     await expect(run("scflow/update_flow", { id: flow.id, bidirectional: "yes" })).rejects.toThrow(
       /bidirectional/,
@@ -318,8 +283,8 @@ describe("scflow/update_flow", () => {
 describe("scflow/delete_flow", () => {
   it("deletes the flow, and keeps its item, the items held by its ends and the actors", async () => {
     const { run, query, create, source, target } = await withActors(["physical"], ["physical"]);
-    const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical" });
-    const item = await create("item", { display_name: { en: "Bolt" }, type: itemType });
+    const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical" });
+    const item = await create("item", { name: "Bolt", type: itemType });
     const flow = await run<Record<string, any>>("scflow/create_flow", {
       source: "Source",
       destination: "Target",
@@ -351,7 +316,7 @@ describe("scflow/delete_flow", () => {
   it("refuses an unknown or missing flow", async () => {
     const { run } = await setup();
 
-    await expect(run("scflow/delete_flow", { id: "missing" })).rejects.toThrow(/names no instance/);
+    await expect(run("scflow/delete_flow", { id: "missing" })).rejects.toThrow(/(designates|names) no instance/);
     await expect(run("scflow/delete_flow", {})).rejects.toThrow(/flow/);
   });
 });

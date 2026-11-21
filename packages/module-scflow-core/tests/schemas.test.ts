@@ -44,27 +44,27 @@ describe("SCFLOW schemas", () => {
     const type = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical"] },
+      input: { name: { en: "Site" }, domains: ["physical"] },
     });
     const itemType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Part" }, domain: "physical" },
+      input: { name: { en: "Part" }, domain: "physical" },
     });
     const item = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item",
-      input: { display_name: { en: "Bolt" }, type: itemType.after[0].id },
+      input: { name: "Bolt", type: itemType.after[0].id },
     });
     const a = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "A" }, type: type.after[0].id },
+      input: { name: "A", type: type.after[0].id },
     });
     const b = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "B" }, type: type.after[0].id },
+      input: { name: "B", type: type.after[0].id },
     });
 
     const without = await mcl.runCommand(locator, {
@@ -87,11 +87,43 @@ describe("SCFLOW schemas", () => {
     expect(stored.after[0].carried_on).toEqual([carrying.after[0].id]);
   });
 
-  it("keys no schema by name and gives none a name property", () => {
+  it("keys no schema by name: shared_by_name is reserved to the meta-model", () => {
     for (const schema of SCHEMAS.schemas) {
       expect(schema.shared_by_name).toBeUndefined();
-      expect((schema.properties ?? []).map((p) => p.name)).not.toContain("name");
     }
+  });
+
+  it("gives a name of the right type and a name_scope to every schema referred to by name, and a name to no other", () => {
+    type Schema = { name: string; name_scope?: string[]; properties?: { name: string; type: string; default_value?: unknown; mandatory?: boolean }[] };
+    const expected: Record<string, { type: string; scope: string[] }> = {
+      actor: { type: "string", scope: ["parent_actor", "scope"] },
+      transformation: { type: "string", scope: ["actor"] },
+      item: { type: "string", scope: [] },
+      mode: { type: "string", scope: [] },
+      location: { type: "string", scope: [] },
+      actor_type: { type: "localized_string", scope: [] },
+      item_type: { type: "localized_string", scope: [] },
+      mode_type: { type: "localized_string", scope: [] },
+      transformation_type: { type: "localized_string", scope: [] },
+      scope: { type: "localized_string", scope: [] },
+    };
+    for (const schema of SCHEMAS.schemas as unknown as Schema[]) {
+      const name = schema.properties?.find((p) => p.name === "name");
+      const want = expected[schema.name];
+      if (want === undefined) {
+        expect(name, `${schema.name} has no name`).toBeUndefined();
+        expect(schema.name_scope, `${schema.name} is not referred to by name`).toBeUndefined();
+        continue;
+      }
+      expect(name?.type, schema.name).toBe(want.type);
+      expect(name?.default_value, `${schema.name}: a name has no default`).toBeUndefined();
+      expect(schema.name_scope, schema.name).toEqual(want.scope);
+    }
+  });
+
+  it("refuses a name that contains the separator", async () => {
+    const { mcl, locator } = await setup();
+    await expect(mcl.runCommand(locator, { kind: "create", schema: "location", input: { name: "Lyon / Line 1" } })).rejects.toThrow(/\//);
   });
 
   it("creates an actor_type with one or more domains and a generated id", async () => {
@@ -99,10 +131,10 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Warehouse", fr: "Entrepôt" }, domains: ["physical", "information"] },
+      input: { name: { en: "Warehouse", fr: "Entrepôt" }, domains: ["physical", "information"] },
     });
     expect(after[0]).toMatchObject({
-      display_name: { en: "Warehouse", fr: "Entrepôt" },
+      name: { en: "Warehouse", fr: "Entrepôt" },
       domains: ["physical", "information"],
     });
     expect(typeof after[0].id).toBe("string");
@@ -115,7 +147,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor_type",
-        input: { display_name: { en: "Warehouse" }, domains: [] },
+        input: { name: { en: "Warehouse" }, domains: [] },
       }),
     ).rejects.toThrow();
   });
@@ -126,7 +158,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor_type",
-        input: { display_name: { en: "Warehouse" }, domains: ["physical", "physical"] },
+        input: { name: { en: "Warehouse" }, domains: ["physical", "physical"] },
       }),
     ).rejects.toThrow();
   });
@@ -136,18 +168,18 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Bank" }, domains: ["service", "information", "physical"] },
+      input: { name: { en: "Bank" }, domains: ["service", "information", "physical"] },
     });
     expect(after[0].domains).toEqual(["physical", "information", "service"]);
   });
 
-  it("refuses an instance without any display_name language", async () => {
+  it("refuses an instance without any name language", async () => {
     const { mcl, locator } = await setup();
     await expect(
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor_type",
-        input: { display_name: {}, domains: ["physical"] },
+        input: { name: {}, domains: ["physical"] },
       }),
     ).rejects.toThrow();
   });
@@ -158,7 +190,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "item_type",
-        input: { display_name: { en: "Pallet" }, domain: "magic" },
+        input: { name: { en: "Pallet" }, domain: "magic" },
       }),
     ).rejects.toThrow();
   });
@@ -168,23 +200,23 @@ describe("SCFLOW schemas", () => {
     const itemType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Pallet" }, domain: "physical" },
+      input: { name: { en: "Pallet" }, domain: "physical" },
     });
-    expect(itemType.after[0]).toMatchObject({ display_name: { en: "Pallet" }, domain: "physical" });
+    expect(itemType.after[0]).toMatchObject({ name: { en: "Pallet" }, domain: "physical" });
   });
 
   async function createActors(mcl: any, locator: any) {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical", "financial"] },
+      input: { name: { en: "Site" }, domains: ["physical", "financial"] },
     });
     const actors = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
       input: [
-        { display_name: { en: "A" }, type: actorType.after[0].id },
-        { display_name: { en: "B" }, type: actorType.after[0].id },
+        { name: "A", type: actorType.after[0].id },
+        { name: "B", type: actorType.after[0].id },
       ],
     });
     return { source: actors.after[0].id, destination: actors.after[1].id };
@@ -208,11 +240,18 @@ describe("SCFLOW schemas", () => {
     expect(flow.properties.map((p) => p.name)).not.toContain("domain");
   });
 
-  it("gives a flow a description and a display_name", () => {
+  it("gives a flow a description and no name", () => {
     const flow = SCHEMAS.schemas.find((s) => s.name === "flow") as { properties: { name: string }[] };
     const names = flow.properties.map((p) => p.name);
     expect(names).toContain("description");
-    expect(names).toContain("display_name");
+    expect(names).not.toContain("name");
+  });
+
+  it("gives a conversion a description and no name", () => {
+    const conversion = SCHEMAS.schemas.find((s) => s.name === "conversion") as { properties: { name: string }[] };
+    const names = conversion.properties.map((p) => p.name);
+    expect(names).toContain("description");
+    expect(names).not.toContain("name");
   });
 
   it("refuses a flow without source or destination", async () => {
@@ -232,14 +271,14 @@ describe("SCFLOW schemas", () => {
       kind: "create",
       schema: "actor_type",
       input: [
-        { display_name: { en: "Site" }, domains: ["physical"] },
-        { display_name: { en: "Depot" }, domains: ["physical"] },
+        { name: { en: "Site" }, domains: ["physical"] },
+        { name: { en: "Depot" }, domains: ["physical"] },
       ],
     });
     const actor = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "A" }, type: types.after[0].id },
+      input: { name: "A", type: types.after[0].id },
     });
     const updatedActor = await mcl.runCommand(locator, {
       kind: "update",
@@ -253,14 +292,14 @@ describe("SCFLOW schemas", () => {
       kind: "create",
       schema: "item_type",
       input: [
-        { display_name: { en: "Part" }, domain: "physical" },
-        { display_name: { en: "Tool" }, domain: "physical" },
+        { name: { en: "Part" }, domain: "physical" },
+        { name: { en: "Tool" }, domain: "physical" },
       ],
     });
     const item = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item",
-      input: { display_name: { en: "Bolt" }, type: itemTypes.after[0].id },
+      input: { name: "Bolt", type: itemTypes.after[0].id },
     });
     const updatedItem = await mcl.runCommand(locator, {
       kind: "update",
@@ -276,25 +315,25 @@ describe("SCFLOW schemas", () => {
     const created = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Pallet" }, description: { en: "A wooden pallet" }, domain: "physical" },
+      input: { name: { en: "Pallet" }, description: { en: "A wooden pallet" }, domain: "physical" },
     });
     const id = created.after[0].id;
     const updated = await mcl.runCommand(locator, {
       kind: "update",
       schema: "item_type",
       filters: { id },
-      input: { display_name: { set: { fr: "Palette" } } },
+      input: { name: { set: { fr: "Palette" } } },
     });
-    expect(updated.after[0].display_name).toEqual({ en: "Pallet", fr: "Palette" });
+    expect(updated.after[0].name).toEqual({ en: "Pallet", fr: "Palette" });
   });
 
   it("has no flow_network schema: the dataset is the network", () => {
     expect(SCHEMAS.schemas.map((s) => s.name)).not.toContain("flow_network");
   });
 
-  it("keeps a scope flat, with a display_name and a description only", () => {
+  it("keeps a scope flat, with a name and a description only", () => {
     const scope = SCHEMAS.schemas.find((s) => s.name === "scope") as { properties: { name: string }[] };
-    expect(scope.properties.map((p) => p.name)).toEqual(["display_name", "description"]);
+    expect(scope.properties.map((p) => p.name)).toEqual(["name", "description"]);
   });
 
   it("creates a scope with no owner", async () => {
@@ -302,19 +341,19 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "scope",
-      input: { display_name: { en: "Make" } },
+      input: { name: { en: "Make" } },
     });
-    expect(after[0]).toMatchObject({ display_name: { en: "Make" } });
+    expect(after[0]).toMatchObject({ name: { en: "Make" } });
     expect(typeof after[0].id).toBe("string");
   });
 
-  it("refuses a scope without any display_name language", async () => {
+  it("refuses a scope without any name language", async () => {
     const { mcl, locator } = await setup();
     await expect(
       mcl.runCommand(locator, {
         kind: "create",
         schema: "scope",
-        input: { display_name: {} },
+        input: { name: {} },
       }),
     ).rejects.toThrow();
   });
@@ -324,7 +363,7 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Warehouse" }, domains: ["physical"] },
+      input: { name: { en: "Warehouse" }, domains: ["physical"] },
     });
     expect(after[0].default_scope ?? null).toBeNull();
   });
@@ -334,12 +373,12 @@ describe("SCFLOW schemas", () => {
     const scope = await mcl.runCommand(locator, {
       kind: "create",
       schema: "scope",
-      input: { display_name: { en: "Deliver" } },
+      input: { name: { en: "Deliver" } },
     });
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Warehouse" }, domains: ["physical"], default_scope: scope.after[0].id },
+      input: { name: { en: "Warehouse" }, domains: ["physical"], default_scope: scope.after[0].id },
     });
     expect(after[0].default_scope).toBe(scope.after[0].id);
   });
@@ -350,7 +389,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor_type",
-        input: { display_name: { en: "Warehouse" }, domains: ["physical"], default_scope: "missing" },
+        input: { name: { en: "Warehouse" }, domains: ["physical"], default_scope: "missing" },
       }),
     ).rejects.toThrow();
   });
@@ -360,22 +399,22 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Warehouse" }, domains: ["physical"] },
+      input: { name: { en: "Warehouse" }, domains: ["physical"] },
     });
     const itemType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Pallet" }, domain: "physical" },
+      input: { name: { en: "Pallet" }, domain: "physical" },
     });
     const actor = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "A" }, type: actorType.after[0].id },
+      input: { name: "A", type: actorType.after[0].id },
     });
     const item = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item",
-      input: { display_name: { en: "Pallet" }, type: itemType.after[0].id },
+      input: { name: "Pallet", type: itemType.after[0].id },
     });
     const held = await mcl.runCommand(locator, {
       kind: "create",
@@ -398,22 +437,22 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Warehouse" }, domains: ["physical"] },
+      input: { name: { en: "Warehouse" }, domains: ["physical"] },
     });
     const itemType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Pallet" }, domain: "physical" },
+      input: { name: { en: "Pallet" }, domain: "physical" },
     });
     const actor = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "A" }, type: actorType.after[0].id },
+      input: { name: "A", type: actorType.after[0].id },
     });
     const item = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item",
-      input: { display_name: { en: "Pallet" }, type: itemType.after[0].id },
+      input: { name: "Pallet", type: itemType.after[0].id },
     });
     await mcl.runCommand(locator, {
       kind: "create",
@@ -432,29 +471,29 @@ describe("SCFLOW schemas", () => {
     const scope = await mcl.runCommand(locator, {
       kind: "create",
       schema: "scope",
-      input: { display_name: { en: "Source" } },
+      input: { name: { en: "Source" } },
     });
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Supplier" }, domains: ["physical"] },
+      input: { name: { en: "Supplier" }, domains: ["physical"] },
     });
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "A" }, type: actorType.after[0].id, scope: scope.after[0].id },
+      input: { name: "A", type: actorType.after[0].id, scope: scope.after[0].id },
     });
     expect(after[0].scope).toBe(scope.after[0].id);
   });
 
-  it("declares a location with only a mandatory display_name, and no relation to actors", () => {
+  it("declares a location with only a mandatory name, and no relation to actors", () => {
     const location = SCHEMAS.schemas.find((s) => s.name === "location") as {
       is_root?: boolean;
       properties: { name: string; type: string; mandatory?: boolean }[];
     };
     expect(location.is_root).toBe(true);
     expect(location.properties.map((p) => [p.name, p.type])).toEqual([
-      ["display_name", "localized_string"],
+      ["name", "string"],
       ["description", "localized_markdown"],
       ["latitude", "latitude"],
       ["longitude", "longitude"],
@@ -471,7 +510,7 @@ describe("SCFLOW schemas", () => {
   it("creates a location with every property", async () => {
     const { mcl, locator } = await setup();
     const input = {
-      display_name: { en: "Port of Le Havre", fr: "Port du Havre" },
+      name: "Port of Le Havre",
       description: { en: "Main seaport" },
       latitude: 49.4944,
       longitude: 0.1079,
@@ -487,12 +526,12 @@ describe("SCFLOW schemas", () => {
     expect(after[0].tags).toEqual([]);
   });
 
-  it("creates a location with a display_name alone: unset numbers are 0 and unset texts are empty", async () => {
+  it("creates a location with a name alone: unset numbers are 0 and unset texts are empty", async () => {
     const { mcl, locator } = await setup();
     const created = await mcl.runCommand(locator, {
       kind: "create",
       schema: "location",
-      input: { display_name: { en: "Plant site" } },
+      input: { name: "Plant site" },
     });
     expect(created.after[0]).toMatchObject({
       latitude: 0,
@@ -514,17 +553,17 @@ describe("SCFLOW schemas", () => {
     expect(geocoded.after[0]).toMatchObject({ latitude: 48.8566, longitude: 2.3522 });
   });
 
-  it("refuses a location without any display_name language", async () => {
+  it("refuses a location without any name language", async () => {
     const { mcl, locator } = await setup();
     await expect(
-      mcl.runCommand(locator, { kind: "create", schema: "location", input: { display_name: {} } }),
+      mcl.runCommand(locator, { kind: "create", schema: "location", input: { name: {} } }),
     ).rejects.toThrow();
   });
 
   it("refuses a latitude or a longitude out of range, and accepts the bounds", async () => {
     const { mcl, locator } = await setup();
     const create = (input: Record<string, unknown>) =>
-      mcl.runCommand(locator, { kind: "create", schema: "location", input: { display_name: { en: "P" }, ...input } });
+      mcl.runCommand(locator, { kind: "create", schema: "location", input: { name: "P", ...input } });
     await expect(create({ latitude: 90.1 })).rejects.toThrow();
     await expect(create({ latitude: -90.1 })).rejects.toThrow();
     await expect(create({ longitude: 180.1 })).rejects.toThrow();
@@ -536,7 +575,7 @@ describe("SCFLOW schemas", () => {
   it("refuses a country_code and a un_locode of the wrong format", async () => {
     const { mcl, locator } = await setup();
     const create = (input: Record<string, unknown>) =>
-      mcl.runCommand(locator, { kind: "create", schema: "location", input: { display_name: { en: "P" }, ...input } });
+      mcl.runCommand(locator, { kind: "create", schema: "location", input: { name: "P", ...input } });
     for (const country_code of ["fr", "FRA", "F", " FR"]) {
       await expect(create({ country_code })).rejects.toThrow();
     }
@@ -553,7 +592,7 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Plant" }, type },
+      input: { name: "Plant", type },
     });
     expect(after[0].location ?? null).toBeNull();
   });
@@ -564,15 +603,15 @@ describe("SCFLOW schemas", () => {
     const locations = await mcl.runCommand(locator, {
       kind: "create",
       schema: "location",
-      input: [{ display_name: { en: "Le Havre" } }, { display_name: { en: "Rotterdam" } }],
+      input: [{ name: "Le Havre" }, { name: "Rotterdam" }],
     });
     const [havre, rotterdam] = [locations.after[0].id, locations.after[1].id];
     const actors = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
       input: [
-        { display_name: { en: "Warehouse" }, type, location: havre },
-        { display_name: { en: "Terminal" }, type, location: havre },
+        { name: "Warehouse", type, location: havre },
+        { name: "Terminal", type, location: havre },
       ],
     });
     const [warehouse, terminal] = [actors.after[0].id, actors.after[1].id];
@@ -607,7 +646,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor",
-        input: { display_name: { en: "Plant" }, type, location: "missing" },
+        input: { name: "Plant", type, location: "missing" },
       }),
     ).rejects.toThrow();
   });
@@ -616,13 +655,13 @@ describe("SCFLOW schemas", () => {
     const { mcl, locator } = await setup();
     const type = await createSiteType(mcl, locator);
     const location = (
-      await mcl.runCommand(locator, { kind: "create", schema: "location", input: { display_name: { en: "Le Havre" } } })
+      await mcl.runCommand(locator, { kind: "create", schema: "location", input: { name: "Le Havre" } })
     ).after[0].id;
     const actor = (
       await mcl.runCommand(locator, {
         kind: "create",
         schema: "actor",
-        input: { display_name: { en: "Warehouse" }, type, location },
+        input: { name: "Warehouse", type, location },
       })
     ).after[0].id;
 
@@ -671,24 +710,24 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical"] },
+      input: { name: { en: "Site" }, domains: ["physical"] },
     });
     const itemType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item_type",
-      input: { display_name: { en: "Pallet" }, domain: "physical" },
+      input: { name: { en: "Pallet" }, domain: "physical" },
     });
     const bare = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Bare" }, type: actorType.after[0].id },
+      input: { name: "Bare", type: actorType.after[0].id },
     });
     expect(bare.after[0].tags).toEqual([]);
 
     const tagged = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Tagged" }, type: actorType.after[0].id, tags: ["north", "key account"] },
+      input: { name: "Tagged", type: actorType.after[0].id, tags: ["north", "key account"] },
     });
     expect(tagged.after[0].tags).toEqual(["north", "key account"]);
 
@@ -702,7 +741,7 @@ describe("SCFLOW schemas", () => {
     const item = await mcl.runCommand(locator, {
       kind: "create",
       schema: "item",
-      input: { display_name: { en: "Pallet" }, type: itemType.after[0].id, tags: ["fragile"] },
+      input: { name: "Pallet", type: itemType.after[0].id, tags: ["fragile"] },
     });
     expect(item.after[0].tags).toEqual(["fragile"]);
 
@@ -720,13 +759,13 @@ describe("SCFLOW schemas", () => {
     const create = async (schema: string, input: Record<string, unknown>) =>
       (await mcl.runCommand(locator, { kind: "create", schema, input })).after[0];
 
-    const plain = await create("scope", { display_name: { en: "Plain" } });
+    const plain = await create("scope", { name: { en: "Plain" } });
     expect(plain.tags).toEqual([]);
 
-    const scope = await create("scope", { display_name: { en: "North" }, tags: ["region"] });
-    const actorType = await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"], tags: ["site"] });
-    const itemType = await create("item_type", { display_name: { en: "Part" }, domain: "physical", tags: ["part"] });
-    const transformationType = await create("transformation_type", { display_name: { en: "Assembly" }, tags: ["make"] });
+    const scope = await create("scope", { name: { en: "North" }, tags: ["region"] });
+    const actorType = await create("actor_type", { name: { en: "Site" }, domains: ["physical"], tags: ["site"] });
+    const itemType = await create("item_type", { name: { en: "Part" }, domain: "physical", tags: ["part"] });
+    const transformationType = await create("transformation_type", { name: { en: "Assembly" }, tags: ["make"] });
 
     expect([scope.tags, actorType.tags, itemType.tags, transformationType.tags]).toEqual([
       ["region"],
@@ -743,24 +782,15 @@ describe("SCFLOW schemas", () => {
     expect(schema.properties.find((p) => p.name === "bidirectional")).toMatchObject({ type: "boolean" });
   });
 
-  it("declares display_name as an optional localized string on flow", () => {
-    const schema = SCHEMAS.schemas.find((s) => s.name === "flow") as {
-      properties: { name: string; type: string; mandatory?: boolean }[];
-    };
-    const property = schema.properties.find((p) => p.name === "display_name");
-    expect(property).toMatchObject({ type: "localized_string" });
-    expect(property?.mandatory).toBeFalsy();
-  });
-
-  it("holds a flow with no display_name and a flow with one", async () => {
+  it("holds two flows with the same source, destination, item and mode: they are not merged by the model", async () => {
     const { mcl, locator } = await setup();
     const type = await createSiteType(mcl, locator);
     const actors = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
       input: [
-        { display_name: { en: "A" }, type },
-        { display_name: { en: "B" }, type },
+        { name: "A", type },
+        { name: "B", type },
       ],
     });
     const [a, b] = actors.after.map((actor) => actor.id);
@@ -770,14 +800,14 @@ describe("SCFLOW schemas", () => {
       schema: "flow",
       input: { source: a, destination: b },
     });
-    expect(plain.after[0].display_name ?? {}).toEqual({});
+    expect(plain.after[0]).not.toHaveProperty("name");
 
-    const named = await mcl.runCommand(locator, {
+    const second = await mcl.runCommand(locator, {
       kind: "create",
       schema: "flow",
-      input: { source: a, destination: b, display_name: { en: "Lane", fr: "Voie" } },
+      input: { source: a, destination: b },
     });
-    expect(named.after[0].display_name).toEqual({ en: "Lane", fr: "Voie" });
+    expect(second.after[0].id).not.toBe(plain.after[0].id);
   });
 
   it("holds a flow that is not bidirectional by default and can be made bidirectional", async () => {
@@ -785,14 +815,14 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical"] },
+      input: { name: { en: "Site" }, domains: ["physical"] },
     });
     const actors = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
       input: [
-        { display_name: { en: "A" }, type: actorType.after[0].id },
-        { display_name: { en: "B" }, type: actorType.after[0].id },
+        { name: "A", type: actorType.after[0].id },
+        { name: "B", type: actorType.after[0].id },
       ],
     });
     const [a, b] = actors.after.map((actor) => actor.id);
@@ -824,7 +854,7 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical"] },
+      input: { name: { en: "Site" }, domains: ["physical"] },
     });
     return actorType.after[0].id;
   }
@@ -835,7 +865,7 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Plant" }, type },
+      input: { name: "Plant", type },
     });
     expect(after[0].parent_actor ?? null).toBeNull();
   });
@@ -847,15 +877,15 @@ describe("SCFLOW schemas", () => {
       kind: "create",
       schema: "actor",
       input: [
-        { display_name: { en: "Plant A" }, type },
-        { display_name: { en: "Plant B" }, type },
+        { name: "Plant A", type },
+        { name: "Plant B", type },
       ],
     });
     const [plantA, plantB] = [plants.after[0].id, plants.after[1].id];
     const workshop = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Workshop" }, type, parent_actor: plantA },
+      input: { name: "Workshop", type, parent_actor: plantA },
     });
     const workshopId = workshop.after[0].id;
     expect(workshop.after[0].parent_actor).toBe(plantA);
@@ -887,7 +917,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor",
-        input: { display_name: { en: "Workshop" }, type, parent_actor: "missing" },
+        input: { name: "Workshop", type, parent_actor: "missing" },
       }),
     ).rejects.toThrow();
   });
@@ -902,9 +932,9 @@ describe("SCFLOW schemas", () => {
     expect(parent?.constant).toBeUndefined();
   });
 
-  it("keeps a transformation_type to a display_name and a description, with no domain", () => {
+  it("keeps a transformation_type to a name and a description, with no domain", () => {
     const type = SCHEMAS.schemas.find((s) => s.name === "transformation_type") as { properties: { name: string }[] };
-    expect(type.properties.map((p) => p.name)).toEqual(["display_name", "description"]);
+    expect(type.properties.map((p) => p.name)).toEqual(["name", "description"]);
   });
 
   it("creates a transformation_type with a generated id", async () => {
@@ -912,17 +942,17 @@ describe("SCFLOW schemas", () => {
     const { after } = await mcl.runCommand(locator, {
       kind: "create",
       schema: "transformation_type",
-      input: { display_name: { en: "Assembly", fr: "Assemblage" } },
+      input: { name: { en: "Assembly", fr: "Assemblage" } },
     });
-    expect(after[0]).toMatchObject({ display_name: { en: "Assembly", fr: "Assemblage" } });
+    expect(after[0]).toMatchObject({ name: { en: "Assembly", fr: "Assemblage" } });
     expect(typeof after[0].id).toBe("string");
     expect(after[0].id).not.toBe("");
   });
 
-  it("refuses a transformation_type without any display_name language", async () => {
+  it("refuses a transformation_type without any name language", async () => {
     const { mcl, locator } = await setup();
     await expect(
-      mcl.runCommand(locator, { kind: "create", schema: "transformation_type", input: { display_name: {} } }),
+      mcl.runCommand(locator, { kind: "create", schema: "transformation_type", input: { name: {} } }),
     ).rejects.toThrow();
   });
 
@@ -932,12 +962,12 @@ describe("SCFLOW schemas", () => {
     const actor = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "Plant" }, type: siteType },
+      input: { name: "Plant", type: siteType },
     });
     const types = await mcl.runCommand(locator, {
       kind: "create",
       schema: "transformation_type",
-      input: [{ display_name: { en: "Assembly" } }, { display_name: { en: "Repair" } }],
+      input: [{ name: { en: "Assembly" } }, { name: { en: "Repair" } }],
     });
     const [assembly, repair] = [types.after[0].id, types.after[1].id];
 
@@ -945,21 +975,21 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "transformation",
-        input: { display_name: { en: "Build" }, actor: actor.after[0].id },
+        input: { name: "Build", actor: actor.after[0].id },
       }),
     ).rejects.toThrow();
     await expect(
       mcl.runCommand(locator, {
         kind: "create",
         schema: "transformation",
-        input: { display_name: { en: "Build" }, actor: actor.after[0].id, type: "missing" },
+        input: { name: "Build", actor: actor.after[0].id, type: "missing" },
       }),
     ).rejects.toThrow();
 
     const created = await mcl.runCommand(locator, {
       kind: "create",
       schema: "transformation",
-      input: { display_name: { en: "Build" }, actor: actor.after[0].id, type: assembly },
+      input: { name: "Build", actor: actor.after[0].id, type: assembly },
     });
     expect(created.after[0].type).toBe(assembly);
 
@@ -1014,10 +1044,10 @@ describe("SCFLOW schemas", () => {
     const { mcl, locator } = await setup();
     const type = await createSiteType(mcl, locator);
     const actor = (
-      await mcl.runCommand(locator, { kind: "create", schema: "actor", input: { display_name: { en: "Plant" }, type } })
+      await mcl.runCommand(locator, { kind: "create", schema: "actor", input: { name: "Plant", type } })
     ).after[0].id;
     const scope = (
-      await mcl.runCommand(locator, { kind: "create", schema: "scope", input: { display_name: { en: "Make" } } })
+      await mcl.runCommand(locator, { kind: "create", schema: "scope", input: { name: { en: "Make" } } })
     ).after[0].id;
     // an inverse with no referrer reads as absent or empty
     expect(
@@ -1046,7 +1076,7 @@ describe("SCFLOW schemas", () => {
   it("refuses a note without any content language", async () => {
     const { mcl, locator } = await setup();
     const scope = (
-      await mcl.runCommand(locator, { kind: "create", schema: "scope", input: { display_name: { en: "Make" } } })
+      await mcl.runCommand(locator, { kind: "create", schema: "scope", input: { name: { en: "Make" } } })
     ).after[0].id;
     await expect(
       mcl.runCommand(locator, { kind: "create", schema: "note", input: { annotated: scope, content: {} } }),
@@ -1057,13 +1087,13 @@ describe("SCFLOW schemas", () => {
     const { mcl, locator } = await setup();
     const create = async (schema: string, input: Record<string, unknown>): Promise<string> =>
       (await mcl.runCommand(locator, { kind: "create", schema, input })).after[0].id as string;
-    const actorType = await create("actor_type", { display_name: { en: "Site" }, domains: ["physical"] });
-    const itemType = await create("item_type", { display_name: { en: "Pallet" }, domain: "physical" });
-    const transformationType = await create("transformation_type", { display_name: { en: "Assembly" } });
-    const actor = await create("actor", { display_name: { en: "Plant" }, type: actorType });
-    const item = await create("item", { display_name: { en: "Pallet" }, type: itemType });
+    const actorType = await create("actor_type", { name: { en: "Site" }, domains: ["physical"] });
+    const itemType = await create("item_type", { name: { en: "Pallet" }, domain: "physical" });
+    const transformationType = await create("transformation_type", { name: { en: "Assembly" } });
+    const actor = await create("actor", { name: "Plant", type: actorType });
+    const item = await create("item", { name: "Pallet", type: itemType });
     const held = await create("item_at_actor", { actor, item });
-    const transformation = await create("transformation", { display_name: { en: "Build" }, actor, type: transformationType });
+    const transformation = await create("transformation", { name: "Build", actor, type: transformationType });
     const line = await create("transformation_line", { transformation, held_item: held, role: "consumed" });
     const addNote = (annotated: string) => create("note", { annotated, content: { en: "n" } });
     const kept = await addNote(item);
@@ -1083,20 +1113,20 @@ describe("SCFLOW schemas", () => {
     const actorType = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor_type",
-      input: { display_name: { en: "Site" }, domains: ["physical"] },
+      input: { name: { en: "Site" }, domains: ["physical"] },
     });
     await expect(
       mcl.runCommand(locator, {
         kind: "create",
         schema: "actor",
-        input: { display_name: { en: "A" }, type: actorType.after[0].id, tags: ["x", "x"] },
+        input: { name: "A", type: actorType.after[0].id, tags: ["x", "x"] },
       }),
     ).rejects.toThrow(/more than once/);
 
     const actor = await mcl.runCommand(locator, {
       kind: "create",
       schema: "actor",
-      input: { display_name: { en: "B" }, type: actorType.after[0].id, tags: ["x", "y"] },
+      input: { name: "B", type: actorType.after[0].id, tags: ["x", "y"] },
     });
     await expect(
       mcl.runCommand(locator, {
@@ -1117,7 +1147,7 @@ describe("SCFLOW schemas", () => {
       mcl.runCommand(locator, {
         kind: "create",
         schema: "scope",
-        input: { display_name: { en: "North" }, tags: ["a", "b", "a"] },
+        input: { name: { en: "North" }, tags: ["a", "b", "a"] },
       }),
     ).rejects.toThrow(/more than once/);
   });
