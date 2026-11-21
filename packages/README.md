@@ -28,3 +28,19 @@ Rules:
 - Packages must never import from `src/`, which holds the UI harness.
 - Packages must not be refactored as part of changes to the UI harness.
 - All packages are released under the MIT license (see the root `LICENSE` file); set `"license": "MIT"` in each package's own `package.json`.
+
+## Releasing and installing a pre-release
+
+A release is one tag `v*` on a commit of `main`; the workflow `.github/workflows/release.yml` builds and tests the repository, then publishes, in dependency order, every public package whose version is not on npmjs.org yet. The tag is therefore one for the whole repository (for example `v0.2.0-next.1`), and it publishes only the packages whose version changed.
+
+A version with a `-` suffix (`0.2.0-next.1`) is a pre-release: the workflow publishes it under the dist-tag `next`, so `latest` stays on the last stable version. Packages that depend on a pre-release of a sibling must list it in their range (`^0.2.0-next.1`), since a range such as `^0.2.0` does not match a pre-release; when a package changes, bump the packages that depend on it in the same release, so that one installation never holds two copies of `core`.
+
+The `version` of the manifest `module.yaml` of a module package is `major.minor.patch` with no suffix: the package `@scfloworg/module-scflow-core@2.0.0-next.1` is a pre-release of the module version `2.0.0`.
+
+To install a pre-release, give its exact version, since a range does not select the `next` tag by itself:
+
+```bash
+bun add @scfloworg/core@0.2.0-next.1
+```
+
+Bun refuses a package version younger than 24 hours (`minimumReleaseAge` in `bunfig.toml`). For a package published less than a day ago, add its name to `minimumReleaseAgeExcludes` in the `bunfig.toml` of the project that installs it, and remove it once the version is a day old.

@@ -29,8 +29,10 @@ describe("the module scflow:core", () => {
     expect(basename(root)).toBe(`module-${publisher}-${name}`);
   });
 
-  it("has the version of the package", () => {
-    expect(manifest.version).toBe(packageJson.version);
+  it("has the version of the package, without its pre-release suffix", () => {
+    // A manifest version is `major.minor.patch`: the package `2.0.0-next.1` is a
+    // pre-release of the module version `2.0.0`.
+    expect(manifest.version).toBe(packageJson.version.replace(/-.*$/, ""));
   });
 
   it("processes in a module set, every name resolved", () => {
