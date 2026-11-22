@@ -114,6 +114,30 @@ describe("the rules on the structure", () => {
     await expect(run("scflow/update_actor", { id: "Plant", parent_actor: "Plant" })).rejects.toMatchObject(refusedBy("parent_actor"));
   });
 
+  it("refuses a second flow with the same source, destination, item and route, when the item and the route are set", async () => {
+    const { run, query } = await world();
+    await run("scflow/hold_item", { actor: "Plant", item: "Bolt" });
+    await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
+    await run("scflow/create_mode", { name: "Road", domain: "physical" });
+    await run("scflow/create_route", { name: "Shuttle", mode: "Road" });
+    await run("scflow/add_route_stop", { route: "Shuttle", actor: "Plant" });
+    await run("scflow/add_route_stop", { route: "Shuttle", actor: "Depot", lead_time: "P1D" });
+    const first = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
+    const second = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" }); // no route yet: the group does not count
+    await run("scflow/set_flow_route", { id: first.id, route: "Shuttle" });
+    await expect(run("scflow/set_flow_route", { id: second.id, route: "Shuttle" })).rejects.toMatchObject(refusedBy("flow_unique"));
+    expect(await query("flow")).toHaveLength(2);
+  });
+
+  it("refuses a second conversion of an actor from the same item to the same item", async () => {
+    const { run, query } = await world();
+    await run("scflow/create_item", { name: "Nut", type: "Part" });
+    await run("scflow/create_conversion", { actor: "Plant", from_item: "Bolt", to_item: "Nut" });
+    await expect(run("scflow/create_conversion", { actor: "Plant", from_item: "Bolt", to_item: "Nut" })).rejects.toMatchObject(refusedBy("conversion_unique"));
+    await expect(run("scflow/create_conversion", { actor: "Depot", from_item: "Bolt", to_item: "Nut" })).resolves.toBeDefined();
+    expect(await query("conversion")).toHaveLength(2);
+  });
+
   it("refuses a second record of a held item, written below the actions", async () => {
     const { run, create, plant, bolt } = await world();
     await run("scflow/hold_item", { actor: "Plant", item: "Bolt" });

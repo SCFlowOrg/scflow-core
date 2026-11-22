@@ -35,12 +35,13 @@ A type library is a dataset holding `actor_type`, `item_type`, `transformation_t
 
 *Feature.*
 
-A flow network satisfies these thirteen rules. Each is declared on the schema named in the table, as a [rule](../../../core/docs/spec/meta-model.md#rules) of the module, in [the schemas](schemas.md):
+A flow network satisfies these fifteen rules. Each is declared on the schema named in the table, as a [rule](../../../core/docs/spec/meta-model.md#rules) of the module, in [the schemas](schemas.md):
 
 | Rule | Statement | Declaration | Stated in |
 | --- | --- | --- | --- |
 | `held_item_domain` | An item at actor's item domain is among the actor's domains | `checks` of `item_at_actor` | [Item At Actor](flow-model.md#item-at-actor) |
 | `held_item_unique` | An actor holds a given item at most once | `unique` of `item_at_actor` | [Item At Actor](flow-model.md#item-at-actor) |
+| `flow_unique` | Two flows never share their source, destination, item and route, when the item and the route are set | `unique` of `flow` | [Flow](flow-model.md#flow) |
 | `carried_item_domain` | The domain of the item of a flow is among the domains of the flow's source and of its destination | `checks` of `flow` | [Flow](flow-model.md#flow) |
 | `flow_ends_hold_item` | The source and the destination of a flow hold the item it carries | `checks` of `flow`, with `exists` | [Flow](flow-model.md#flow) |
 | `internal_flow_item` | A flow between an actor and one of its child actors carries an item | `checks` of `flow` | [Flow](flow-model.md#flow) |
@@ -48,6 +49,7 @@ A flow network satisfies these thirteen rules. Each is declared on the schema na
 | `transformation_line_unique` | A transformation has at most one line for a given held item and role | `unique` of `transformation_line` | [Transformation](flow-model.md#transformation) |
 | `parent_actor_acyclic` | The parents of an actor never lead back to the actor | `acyclic` on `parent_actor` of `actor` | [Actor](flow-model.md#actor) |
 | `parent_actor_domains` | An actor's domains are among the domains of its parent | `checks` of `actor` | [Actor](flow-model.md#actor) |
+| `conversion_unique` | An actor has at most one conversion from an item to another | `unique` of `conversion` | [Conversion](flow-model.md#conversion) |
 | `conversion_item_domain` | The two items of a conversion have the same domain | `checks` of `conversion` | [Conversion](flow-model.md#conversion) |
 | `route_stops_hold_flow_ends` | The source and the destination of a flow with a route are stops of that route | `checks` of `flow`, with `exists` | [Route](flow-model.md#route) |
 | `route_item_domain` | The domain of the item of a flow with a route is the domain of the mode | `checks` of `flow` | [Route](flow-model.md#route) |

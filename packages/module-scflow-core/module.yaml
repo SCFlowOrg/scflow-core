@@ -189,6 +189,9 @@ schemas:
             - route: { exists: true }
             - item: { exists: true }
         require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
+    unique:
+      - name: flow_unique
+        properties: [source, destination, item, route]
     properties:
       - name: description
         type: localized_markdown
@@ -347,6 +350,9 @@ schemas:
     checks:
       - name: conversion_item_domain
         require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
+    unique:
+      - name: conversion_unique
+        properties: [actor, from_item, to_item]
     properties:
       - name: description
         type: localized_markdown

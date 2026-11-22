@@ -273,10 +273,11 @@ An instance has a generated id that no interface shows; a person, a script or an
 - **A `localized_string`** is the name of a vocabulary that a reader wants in their language: the types and the scopes. An action takes a plain string, which it stores in the source language of the dataset, or a map of language to text.
 - **Descriptions** stay `localized_markdown`.
 - **The same name may repeat** where the real world repeats it: two plants each have a `Line 1`, two actors each have an `Assembly`. The qualified name is `France / Lyon / Line 1`; a reference is its shortest unambiguous end, `Line 1` or `Lyon / Line 1`. A name cannot contain `/`.
-- **A flow has no name.** Its source, destination, item and route identify it; two flows with the same four values are two flows. What else there is to say goes in its description.
-- **A conversion has no name.** Its actor, `from_item` and `to_item` identify it, and what else there is to say goes in its description.
+- **A flow has no name.** Its source, destination, item and route identify it, through the `unique` group `flow_unique`: a group with an empty relation does not count, so the rule refuses a second flow with the same four values only when the item and the route are set. What else there is to say goes in its description.
+- **A conversion has no name.** Its actor, `from_item` and `to_item` identify it, through the `unique` group `conversion_unique`, and what else there is to say goes in its description.
 - **A transformation has a name that its author writes**, with no default: two transformations of one type would otherwise share a name, and a localized text would flow into a name that is not localized.
-- **`item_at_actor`, `route_stop`, `transformation_line` and `note`** have no name. They are reached through their owner and the properties of their `unique` group, or by id.
+- **`item_at_actor`, `route_stop`, `transformation_line` and `note`** have no name. They are reached through their owner and the properties of their `unique` group, or by id. A note has no `unique` group: its annotated entity and its content are what tell two notes apart.
+- **A schema without a name is identified by its `unique` group**: `flow_unique`, `conversion_unique`, `held_item_unique`, `transformation_line_unique` and `route_stop_sequence_unique`. A tool that reads or writes the whole dataset, such as a spreadsheet, finds an instance of these schemas by the values of that group.
 - **`shared_by_name`** is used by no schema of this module: it is reserved to the meta-model.
 
 ## annotable
@@ -448,6 +449,9 @@ checks:
         - route: { exists: true }
         - item: { exists: true }
     require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
+unique:
+  - name: flow_unique
+    properties: [source, destination, item, route]
 properties:
   - name: description
     type: localized_markdown
@@ -478,7 +482,7 @@ properties:
     inverse_is_array:
 ```
 
-Per [Flow](flow-model.md#flow). A flow has no name (see [Names](#names)); `item` and `route` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `route` is cleared when its route is deleted.
+Per [Flow](flow-model.md#flow). A flow has no name (see [Names](#names)); `flow_unique` identifies it, and being a rule of the network it is stated in [Network Rules](implementation.md#network-rules). `item` and `route` are optional. `item` is `set_once` and not `constant`, which would forbid setting it after creation. The five `checks` are the [network rules](implementation.md#network-rules) of a flow. `route` is cleared when its route is deleted.
 
 ## item
 
@@ -634,6 +638,9 @@ description: A conversion of one item into another item at an actor
 checks:
   - name: conversion_item_domain
     require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
+unique:
+  - name: conversion_unique
+    properties: [actor, from_item, to_item]
 properties:
   - name: description
     type: localized_markdown
@@ -655,7 +662,7 @@ properties:
     constant:
 ```
 
-Per [Conversion](flow-model.md#conversion). A conversion has no name (see [Names](#names)). `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
+Per [Conversion](flow-model.md#conversion). A conversion has no name (see [Names](#names)); `conversion_unique` identifies it. `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
 
 ## mode
 

@@ -101,3 +101,5 @@ referenceOfIn(all, lyonLineId);  // { reference: "Lyon / Line 1", full: "France 
 A localized name is written in the first of the given `languages` that has a text.
 Any language is accepted back. A file written earlier fails with the candidates when
 the dataset has since gained a duplicate; resolution never guesses.
+
+The package `@scfloworg/spreadsheet` applies these rules to rows of sheets: it exports every reference as the shortest name and reads them back, see its [documentation](../../spreadsheet/docs/spreadsheet.md).

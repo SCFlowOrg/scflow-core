@@ -181,6 +181,7 @@
         "@scfloworg/environment": "^0.2.0-next.1",
         "@scfloworg/format-js": "^0.2.0-next.1",
         "@scfloworg/module": "^0.2.0-next.1",
+        "@scfloworg/spreadsheet": "^0.2.0-next.1",
         "@types/node": "^22.10.0",
         "js-yaml": "^5.4.2",
         "typescript": "^5.7.0",
@@ -209,6 +210,23 @@
         "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.10.2",
         "typescript": "^5.6.3",
+      },
+    },
+    "packages/spreadsheet": {
+      "name": "@scfloworg/spreadsheet",
+      "version": "0.2.0-next.1",
+      "dependencies": {
+        "@scfloworg/core": "^0.2.0-next.1",
+      },
+      "devDependencies": {
+        "@scfloworg/environment": "^0.2.0-next.1",
+        "@scfloworg/format-js": "^0.2.0-next.1",
+        "@scfloworg/module": "^0.2.0-next.1",
+        "@types/js-yaml": "^4.0.9",
+        "@types/node": "^22.10.0",
+        "js-yaml": "^4.1.0",
+        "typescript": "^5.6.3",
+        "vitest": "^4.1.10",
       },
     },
     "packages/workspace": {
@@ -308,6 +326,8 @@
     "@scfloworg/project-file": ["@scfloworg/project-file@workspace:packages/project-file"],
 
     "@scfloworg/repl-conformance": ["@scfloworg/repl-conformance@workspace:packages/repl-conformance"],
+
+    "@scfloworg/spreadsheet": ["@scfloworg/spreadsheet@workspace:packages/spreadsheet"],
 
     "@scfloworg/workspace": ["@scfloworg/workspace@workspace:packages/workspace"],
 
