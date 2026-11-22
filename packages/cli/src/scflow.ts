@@ -9,6 +9,7 @@ import { createProjectHost, type ProjectHost } from "@scfloworg/workspace/host";
 import type { AiFetch } from "@scfloworg/ai";
 import { ask, askSettings } from "./scflowAsk.js";
 import { DOCS_COMMANDS, DocsUsageError, runDocs } from "./scflowDocs.js";
+import { csvFilesOf, exportCsv, importCsv, type CsvOptions } from "./scflowSheets.js";
 
 /** Where the command reads and writes. */
 export interface ScflowIo {
@@ -30,6 +31,8 @@ const USAGE = `usage:
   scflow <project> actions [--modules <folder>]
   scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
   scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
+  scflow <project> export <folder> [--schema <name>]... [--separator <c>] [--list-separator <s>] [--modules <folder>]
+  scflow <project> import <folder|file.csv>... [--dry-run] [--separator <c>] [--list-separator <s>] [--modules <folder>]
   scflow <project> shell [--modules <folder>]
   scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]
   scflow docs list [--audience <audience>]... [--locale <code>] [--modules <folder>]
@@ -38,7 +41,7 @@ const USAGE = `usage:
   scflow docs show <id> [--audience <audience>]... [--locale <code>] [--modules <folder>]`;
 
 /** Options that take no value. */
-const FLAGS = new Set(["yes"]);
+const FLAGS = new Set(["yes", "dry-run"]);
 
 interface ParsedArgs {
   positional: string[];
@@ -80,6 +83,34 @@ function required(parsed: ParsedArgs, name: string): string[] {
   return values;
 }
 
+/** The separators of the CSV files: the comma by default, one character that is not a quote or a line break. The text \t stands for a tab. */
+function csvOptions(parsed: ParsedArgs): CsvOptions {
+  const given = parsed.options.get("separator")?.at(-1);
+  const separator = given === "\t" ? "\t" : (given ?? ",");
+  if (separator.length !== 1 || separator === '"' || separator === "\n" || separator === "\r") {
+    throw new UsageError("--separator needs one character, which is not a quote or a line break");
+  }
+  const listSeparator = parsed.options.get("list-separator")?.at(-1);
+  if (listSeparator === "") throw new UsageError("--list-separator needs at least one character");
+  return { separator, listSeparator };
+}
+
+/** `export <folder>`: the folder and the options, checked before the project is opened. */
+function exportRequest(folders: string[], parsed: ParsedArgs) {
+  const [folder, ...more] = folders;
+  if (folder === undefined) throw new UsageError("export needs a folder");
+  if (more.length > 0) throw new UsageError("export takes one folder");
+  return { folder, options: { ...csvOptions(parsed), schemas: parsed.options.get("schema") ?? [] } };
+}
+
+/** `import <folder|file.csv>...`: the files and the options, checked before the project is opened. */
+async function importRequest(inputs: string[], parsed: ParsedArgs) {
+  if (inputs.length === 0) throw new UsageError("import needs a folder or a .csv file");
+  const files = await csvFilesOf(inputs);
+  if (files === undefined) throw new UsageError("a folder given to import holds no .csv file");
+  return { files, options: { ...csvOptions(parsed), dryRun: parsed.options.has("dry-run") } };
+}
+
 function describeActions(doc: Document): unknown[] {
   return doc.dataset.actions().map((action) => ({
     id: action.id,
@@ -110,6 +141,12 @@ async function runQuery(doc: Document, schema: string, filters: unknown): Promis
 function printError(io: ScflowIo, error: unknown): void {
   const { code, message } = error as { code?: string; message?: string };
   io.err(JSON.stringify({ error: { code: code ?? "error", message: message ?? String(error) } }));
+}
+
+/** The words after the command of a line of the shell, as the positional arguments and the options. */
+function shellArguments(line: string): [string[], ParsedArgs] {
+  const parsed = parseArgs(line.trim().split(/\s+/).slice(1));
+  return [parsed.positional, parsed];
 }
 
 /** Runs the commands of the standard input. The changes stay in memory until `save`. */
@@ -144,6 +181,19 @@ async function shell(doc: Document, io: ScflowIo): Promise<void> {
         const { changed } = await doc.setLanguages(parseLanguages(parseJson([argument, rest].filter((part) => part !== undefined).join(" "))));
         unsaved ||= changed;
         print({ languages: await readLanguages(doc), changed });
+        return true;
+      }
+      case "export": {
+        const { folder, options } = exportRequest(...shellArguments(line));
+        print(await exportCsv(doc, folder, options));
+        return true;
+      }
+      case "import": {
+        const [inputs, parsed] = shellArguments(line);
+        const { files, options } = await importRequest(inputs, parsed);
+        const report = await importCsv(doc, files, options);
+        unsaved ||= report.applied;
+        print(report);
         return true;
       }
       case "undo":
@@ -256,6 +306,20 @@ async function dispatch(args: string[], io: ScflowIo): Promise<number> {
       const written = outcome.changed ? (await doc.save()).written : [];
       print({ result: outcome.result, changed: outcome.changed, written });
       return 0;
+    }
+    case "export": {
+      const { folder, options } = exportRequest(parsed.positional.slice(2), parsed);
+      const doc = await (await host()).workspace.open(project, { readOnly: true });
+      print(await exportCsv(doc, folder, options));
+      return 0;
+    }
+    case "import": {
+      const { files, options } = await importRequest(parsed.positional.slice(2), parsed);
+      const doc = await (await host()).workspace.open(project);
+      const report = await importCsv(doc, files, options);
+      const written = report.applied ? (await doc.save()).written : [];
+      print({ ...report, written });
+      return report.ok ? 0 : 1;
     }
     case "shell":
       await shell(await (await host()).workspace.open(project), io);
