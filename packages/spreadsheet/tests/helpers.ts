@@ -82,6 +82,43 @@ schemas:
     properties:
       - name: name
         type: string
+  - name: entity
+    abstract: true
+    is_root: true
+    properties:
+      - name: tags
+        type: string
+        is_array: true
+  - name: box
+    extends: entity
+    is_root: true
+    name_scope: []
+    properties:
+      - name: name
+        type: string
+  - name: link
+    extends: entity
+    is_root: true
+    unique:
+      - name: link_unique
+        properties: [source, target]
+    properties:
+      - name: source
+        type: box
+        mandatory: true
+      - name: target
+        type: box
+        mandatory: true
+      - name: weight
+        type: number
+  - name: comment
+    is_root: true
+    properties:
+      - name: about
+        type: entity
+        mandatory: true
+      - name: text
+        type: localized_markdown
   - name: memo
     is_root: true
     properties:
@@ -128,6 +165,15 @@ export async function setup(options: { languages?: string[]; facet?: boolean } =
   counter += 1;
   const fresh = () => open(`js:plants${++counter}`);
   return { env, dataset, fresh };
+}
+
+/** Boxes and links: entities with no name, found by their key. */
+export async function seedLinks(dataset: OpenDataset): Promise<void> {
+  await dataset.run("plants/create_box", { name: "A" });
+  await dataset.run("plants/create_box", { name: "B" });
+  await dataset.run("plants/create_box", { name: "C" });
+  await dataset.run("plants/create_link", { source: "A", target: "B", weight: 1 });
+  await dataset.run("plants/create_link", { source: "B", target: "C", weight: 2 });
 }
 
 /** The instances of a schema, as the dataset holds them. */

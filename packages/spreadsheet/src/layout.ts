@@ -1,12 +1,12 @@
 import {
   facetOfProperty,
-  hasNameScope,
   isEmbedded,
   resolveType,
   type DatasetModel,
   type NormalizedProperty,
   type NormalizedSchema,
 } from "@scfloworg/core";
+import { candidatesOf } from "./model.js";
 import type { Skipped } from "./types.js";
 
 /** The pattern of a language code, which the key of a localized property follows. */
@@ -27,8 +27,9 @@ export interface ColumnSpec {
   base?: Base;
   /** The language of a `localized` column. */
   language?: string;
-  /** The schema a `relation` column points at. */
+  /** The schema a `relation` column points at, and the schemas with a sheet it can point at: it and those that extend it. */
   target?: NormalizedSchema;
+  candidates?: NormalizedSchema[];
   /** The qualified name of the facet that adds the property, when one does. */
   facet?: string;
 }
@@ -46,8 +47,7 @@ export const localizedHeader = (property: string, language: string): string => `
  * The columns of the sheet of `schema`: its properties in the order of the
  * schema, `name` first, each as one column, or one column per language for a
  * localized property. A property that cannot be written in a cell is left
- * out, with the reason: a generated inverse relation, a relation to something
- * that has no name, an owned embedded schema, a map that is not a text by
+ * out, with the reason: a generated inverse relation, an owned embedded schema, a map that is not a text by
  * language.
  */
 export function layoutOf(model: DatasetModel, schema: NormalizedSchema, languages: readonly string[]): Layout {
@@ -69,9 +69,10 @@ export function layoutOf(model: DatasetModel, schema: NormalizedSchema, language
     }
     if (resolved.kind === "relation") {
       const target = resolved.schema;
+      const candidates = candidatesOf(model, target);
       if (isEmbedded(target)) skip(property.name, `it holds "${target.name}" instances nested in the entity, which a cell cannot hold`);
-      else if (!hasNameScope(target)) skip(property.name, `"${target.name}" has no name_scope: its instances are not referred to by name`);
-      else columns.push({ ...base, header: property.name, kind: "relation", target });
+      else if (candidates.length === 0) skip(property.name, `"${target.name}" has no instance a sheet can hold`);
+      else columns.push({ ...base, header: property.name, kind: "relation", target, candidates });
       continue;
     }
     if (resolved.kind === "map") {

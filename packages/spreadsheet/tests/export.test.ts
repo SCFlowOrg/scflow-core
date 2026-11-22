@@ -5,14 +5,13 @@ import { seed, setup } from "./helpers.js";
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 
 describe("exportSheets", () => {
-  it("writes one sheet per entity type that has a name, and says what it leaves out", async () => {
+  it("writes one sheet per entity type, named or not", async () => {
     const { dataset } = await setup();
     const { sheets, skipped, languages } = await exportSheets(dataset);
     expect(languages).toEqual(["fr", "en"]);
-    expect(sheets.map((s) => s.name)).toEqual(["country", "city", "line", "pair", "node", "fixed"]);
+    expect(sheets.map((s) => s.name)).toEqual(["country", "city", "line", "pair", "node", "fixed", "box", "link", "comment", "memo"]);
     expect(sheets.every((s) => s.schema === `plants.${s.name}`)).toBe(true);
-    // memo has no name_scope: nothing to refer to it by
-    expect(skipped).toContainEqual(expect.objectContaining({ schema: "plants.memo" }));
+    expect(skipped).toEqual([]);
   });
 
   it("takes the columns from the schema, name first, one per language for a localized property", async () => {

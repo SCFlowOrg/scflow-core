@@ -1,5 +1,6 @@
 import {
   buildDatasetModel,
+  facetOfProperty,
   hasNameScope,
   isEmbedded,
   loadNamedInstances,
@@ -33,14 +34,45 @@ export async function loadContext(dataset: SpreadsheetDataset): Promise<Context>
   return { model, languages: languages.length > 0 ? languages : ["en"] };
 }
 
-/** A schema a sheet exists for: referred to by name, stored, and not a base to extend only. */
+/** A schema a sheet exists for: stored, and not a base to extend only, a facet or a singleton. */
 export function isSheetSchema(schema: NormalizedSchema): boolean {
-  return hasNameScope(schema) && !isEmbedded(schema) && schema.constraints.abstract !== true && schema.constraints.facet_of === undefined;
+  return !isEmbedded(schema) && schema.constraints.abstract !== true && schema.constraints.facet_of === undefined && schema.constraints.singleton !== true;
 }
 
 /** The schemas with a sheet, in the order of the model. */
 export function sheetSchemas(model: DatasetModel): NormalizedSchema[] {
   return [...model.schemas.values()].filter(isSheetSchema);
+}
+
+/**
+ * How a row of a sheet is found again among the instances of its schema: by its
+ * `name` in its scope when the schema has a `name_scope`; else by the values of
+ * the first `unique` group it declares; else by the values of all its own
+ * properties, so that a row equal to an instance is that instance.
+ */
+export type EntityKey =
+  | { kind: "name" }
+  | { kind: "group"; name: string; properties: string[] }
+  | { kind: "values"; properties: string[] };
+
+/** The key of the rows of `schema`, see `EntityKey`. */
+export function keyOf(schema: NormalizedSchema): EntityKey {
+  if (hasNameScope(schema)) return { kind: "name" };
+  const groups = Array.isArray(schema.constraints.unique) ? (schema.constraints.unique as unknown as { name: string; properties: string[] }[]) : [];
+  if (groups.length > 0) return { kind: "group", name: groups[0].name, properties: groups[0].properties };
+  const own = schema.properties.filter(
+    (p) => p.constraints.__generated !== true && p.constraints.is_array !== true && p.name !== "id" && !p.name.includes(".") && facetOfProperty(p) === undefined,
+  );
+  return { kind: "values", properties: own.map((p) => p.name) };
+}
+
+/** `target` and the schemas that extend it, transitively, that have a sheet: what a relation to `target` can point at. */
+export function candidatesOf(model: DatasetModel, target: NormalizedSchema): NormalizedSchema[] {
+  const names = [target.name];
+  for (let i = 0; i < names.length; i++) {
+    for (const s of model.schemas.values()) if (s.extends === names[i] && !names.includes(s.name)) names.push(s.name);
+  }
+  return names.map((n) => model.schemas.get(n) as NormalizedSchema).filter(isSheetSchema);
 }
 
 /** The short name of a qualified schema name: `scflow.actor` gives `actor`. */

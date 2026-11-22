@@ -15,7 +15,8 @@ const dry = await importSheets(dataset, sheets, { dryRun: true }); // what would
 const report = await importSheets(dataset, sheets); // one transaction, one undo
 ```
 
-- **Names, never ids.** A relation is written as the name of its target, as short as it stays unambiguous (`Paris`, or `France / Lyon` when two cities share a name). An id is accepted when read, never written.
+- **Names, never ids.** A relation is written as the name of its target, as short as it stays unambiguous (`Paris`, or `France / Lyon` when two cities share a name). An entity with no name is designated by the values of its `unique` group (`Plant | Depot | Bolt`). An id is accepted when read, never written.
+- **The whole dataset.** Every stored entity type has a sheet, named or not, and a dataset leaves as sheets and comes back identical.
 - **Generic.** Every sheet comes from the schemas of the installed modules: the columns, the references, the localized texts (one column per language), the facets. Nothing is specific to a module.
 - **Through the actions.** An import writes with the `create_*` and `update_*` actions of the model, so its rules and its integrity apply, as for any other caller.
 - **All or nothing.** A refused row refuses the whole import, and the report gives every row with its reason. An import never deletes.

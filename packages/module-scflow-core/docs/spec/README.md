@@ -70,7 +70,7 @@ This specification is normative: the code and `module.yaml` follow it. The langu
 - [Schemas Package](implementation.md#schemas-package): `@scfloworg/module-scflow-core` is the module `scflow:core`, declared in its manifest `module.yaml`; the schemas are compiled to TypeScript at build time and exported as `SCHEMAS`
 - [SCFLOW Model Contribution](implementation.md#scflow-model-contribution): scflow-plugin installs the module `scflow:core` in its environment.
 - [Type Libraries](implementation.md#type-libraries): Type libraries are datasets of actor, item and transformation type instances and scopes, imported by a network through CORE's import
-- [Network Rules](implementation.md#network-rules): The thirteen rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`
+- [Network Rules](implementation.md#network-rules): The fifteen rules a network satisfies, each declared on a schema with a stable name reported in `rule_violation`
 - [Route Rules Checked By Actions](implementation.md#route-rules-checked-by-actions): `route_serves_flow` cannot be declared, so the actions that can break it check it; a stop that ends no flow, such as a depot, is a normal case listed by inspect_route
 - [Lead Time Of A Flow](implementation.md#lead-time-of-a-flow): leadTimeOnRoute derives the lead time of a flow from the legs of its route, summing ISO 8601 durations component by component
 - [Network Check](implementation.md#network-check): The engine refuses a breach of a network rule at the end of any transaction; there is no separate check

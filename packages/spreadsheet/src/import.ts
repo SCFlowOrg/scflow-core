@@ -2,7 +2,6 @@ import {
   hasNameScope,
   nameScopeOf,
   qualifiedName,
-  resolveReferenceIn,
   type AuthoredCommand,
   type DatasetModel,
   type NamedInstance,
@@ -10,10 +9,11 @@ import {
   type NormalizedSchema,
   type TransientObject,
 } from "@scfloworg/core";
+import { loadCatalog } from "./catalog.js";
 import { DEFAULT_SEPARATOR, isBlank, parseScalar, sameValue, splitList } from "./cells.js";
 import { readValue } from "./export.js";
 import { layoutOf, splitQualified, type ColumnSpec, type Layout } from "./layout.js";
-import { loadContext, loadIndex, sheetNames, sheetSchemas, shortName } from "./model.js";
+import { keyOf, loadContext, sheetNames, sheetSchemas, shortName, type EntityKey } from "./model.js";
 import { createActionOf, signatureOf, updateActionOf, violationOf, type Signature } from "./params.js";
 import {
   SpreadsheetError,
@@ -78,6 +78,8 @@ interface Plan {
   late: Op[];
   /** The id of the entity a create action returned. */
   createdId?: string;
+  /** The values of the key of a row without a name, once resolved. */
+  keyValues?: Record<string, unknown>;
 }
 
 /** One call of an action. */
@@ -85,6 +87,11 @@ interface Op {
   plan: Plan;
   action: string;
   params: Record<string, unknown>;
+}
+
+/** The id of an entity this import creates, known once its create action has run. */
+class Ref {
+  constructor(readonly key: string) {}
 }
 
 const TEMPORARY = "planned:";
@@ -124,8 +131,8 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
   }
   const separator = options.listSeparator ?? DEFAULT_SEPARATOR;
   const { model, languages } = await loadContext(dataset);
-  const all = await loadIndex(dataset, model);
-  const resolvers = { schemas: model.schemas, importNamespaces: [] } as never;
+  const { catalog, stored } = await loadCatalog(dataset, model, languages);
+  const all = catalog.named;
   const schemas = sheetSchemas(model);
   const titles = sheetNames(schemas);
   const errors: ImportError[] = [];
@@ -135,7 +142,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
   const instancesOf = async (schema: NormalizedSchema): Promise<Map<string, TransientObject>> => {
     let found = instances.get(schema.name);
     if (!found) {
-      found = new Map(((await dataset.query({ query: schema.name } as AuthoredCommand)).after as TransientObject[]).map((i) => [i.id as string, i]));
+      found = new Map((stored.get(schema.name) ?? []).map((i) => [i.id as string, i]));
       instances.set(schema.name, found);
     }
     return found;
@@ -170,7 +177,13 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
         else if (headers.has(spec)) sheetRefuse("duplicate_column", `the column "${spec.header}" is given twice`);
         else headers.set(spec, raw);
       }
-      if (![...headers.keys()].some((c) => c.property.name === "name")) sheetRefuse("missing_name", `the sheet has no column "name": rows are found by their name`);
+      const key = keyOf(matches[0]);
+      const present = new Set([...headers.keys()].map((c) => c.property.name));
+      if (key.kind === "name" && !present.has("name")) sheetRefuse("missing_name", `the sheet has no column "name": rows are found by their name`);
+      if (key.kind !== "name") {
+        const absent = key.properties.filter((name) => !present.has(name));
+        if (absent.length > 0) sheetRefuse("missing_key", `the sheet has no column ${absent.map((n) => `"${n}"`).join(", ")}: a row of "${titles.get(matches[0].name)}" is found by ${key.kind === "group" ? `the group "${key.name}"` : "all its values"}`);
+      }
     }
     for (const [index, row] of sheet.rows.entries()) {
       if (Object.values(row).every(isBlank)) continue; // a blank line, as a spreadsheet leaves at its end
@@ -239,6 +252,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
       const spec = localizedSpec.get(property) as ColumnSpec;
       plan.cells.push({ spec, blank: Object.values(map).every((t) => t === null), value: map });
     }
+    if (keyOf(plan.schema).kind !== "name") continue;
     const name = plan.cells.find((c) => c.spec.property.name === "name");
     if (!name || name.blank) {
       refuse(plan, "missing_name", `the name is empty: a row is found by its name`);
@@ -264,11 +278,67 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
     for (const relation of nameScopeOf(plan.schema)) {
       const cell = plan.cells.find((c) => c.spec.property.name === relation);
       if (!cell || cell.blank || cell.spec.target === undefined) continue;
-      return { key: resolveReferenceIn(all, resolvers, cell.value as string, { schema: cell.spec.target.name, languages }).key, specified: true };
+      return { key: catalog.resolve(cell.value as string, cell.spec.candidates ?? []).key, specified: true };
     }
     return { key: null, specified: false };
   };
+  /** The values of the key of a row without a name, as an instance holds them: a relation by key, a scalar, a localized text as a map. */
+  const keyValues = (plan: Plan, key: Exclude<EntityKey, { kind: "name" }>): Record<string, unknown> => {
+    const values: Record<string, unknown> = {};
+    for (const property of key.properties) {
+      const cell = plan.cells.find((c) => c.spec.property.name === property);
+      if (!cell || cell.blank) values[property] = null;
+      else if (cell.spec.kind === "relation") values[property] = catalog.resolve(cell.value as string, cell.spec.candidates ?? []).key;
+      else if (cell.spec.kind === "localized") values[property] = Object.fromEntries(Object.entries(cell.value as Record<string, string | null>).filter((e) => e[1] !== null));
+      else values[property] = cell.value;
+    }
+    return values;
+  };
+  const sameKey = (stored: unknown, wanted: unknown): boolean => {
+    const empty = (v: unknown) => v === null || v === undefined || v === "" || (typeof v === "object" && Object.keys(v as object).length === 0);
+    if (empty(stored) || empty(wanted)) return empty(stored) && empty(wanted);
+    return sameValue(stored, wanted);
+  };
+  const taken = new Set<string>();
+  const placeKeyed = async (plan: Plan, key: Exclude<EntityKey, { kind: "name" }>): Promise<void> => {
+    const wanted = keyValues(plan, key);
+    const matches = [...(await instancesOf(plan.schema)).values()].filter((i) => key.properties.every((p) => sameKey(i[p], wanted[p])));
+    plan.keyValues = wanted;
+    if (key.kind === "values") {
+      // Nothing tells two equal rows apart: a sheet that holds a row twice means two entities, so each row takes the
+      // next equal entity that no row took yet, and creates one when there is none left.
+      const next = matches.find((m) => !taken.has(m.id as string));
+      if (next) {
+        taken.add(next.id as string);
+        plan.key = next.id as string;
+        plan.existing = next;
+        return;
+      }
+    } else {
+      const earlier = [...plannedBy.values()].find((p) => p.schema.name === plan.schema.name && key.properties.every((n) => sameKey(p.keyValues?.[n], wanted[n])));
+      if (earlier) {
+        plan.problems.push({ code: "duplicate_row", message: `it is the same entity as line ${earlier.line} of "${earlier.title}"` });
+        return;
+      }
+      if (matches.length > 1) {
+        plan.problems.push({ code: "ambiguous_reference", message: `${matches.length} existing entities have these values of "${key.name}": it cannot tell which one the row is` });
+        return;
+      }
+      if (matches.length === 1) {
+        plan.key = matches[0].id as string;
+        plan.existing = matches[0];
+        return;
+      }
+    }
+    const temporary = `${TEMPORARY}${++counter}`;
+    catalog.addUnnamed({ key: temporary, schema: plan.schema.name, values: wanted as TransientObject });
+    plannedBy.set(temporary, plan);
+    plan.key = temporary;
+    plan.creating = true;
+  };
   const place = async (plan: Plan): Promise<void> => {
+    const entityKey = keyOf(plan.schema);
+    if (entityKey.kind !== "name") return placeKeyed(plan, entityKey);
     const scope = scopeOf(plan);
     const family = familyOf(model, plan.schema);
     const found = [...all.values()].filter(
@@ -297,6 +367,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
     const key = `${TEMPORARY}${++counter}`;
     const node: NamedInstance = { schema: plan.schema.name, key, family, names: plan.nameTexts, name: plan.name as never, scope: scope.key, imported: false };
     all.set(key, node);
+    catalog.changed();
     plannedBy.set(key, plan);
     plan.key = key;
     plan.creating = true;
@@ -319,7 +390,8 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
 
   // 4. The references, now that every row that creates an entity is known; the rows they point at.
   for (const plan of live()) {
-    const scope = new Set(nameScopeOf(plan.schema));
+    const entityKey = keyOf(plan.schema);
+    const scope = new Set(entityKey.kind === "name" ? nameScopeOf(plan.schema) : entityKey.properties);
     for (const cell of plan.cells) {
       if (cell.spec.kind !== "relation") continue;
       const property = cell.spec.property.name;
@@ -328,7 +400,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
         continue;
       }
       try {
-        const key = resolveReferenceIn(all, resolvers, cell.value as string, { schema: (cell.spec.target as NormalizedSchema).name, languages }).key;
+        const key = catalog.resolve(cell.value as string, cell.spec.candidates ?? []).key;
         plan.relations.set(property, key);
         const target = plannedBy.get(key);
         if (target) plan.dependencies.push({ target, property, hard: cell.spec.property.constraints.mandatory === true || scope.has(property) });
@@ -342,7 +414,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
   //    written after the creations; a cycle of mandatory ones cannot be written.
   const order: Plan[] = [];
   const state = new Map<Plan, 1 | 2>();
-  const describe = (plan: Plan): string => (plan.key !== undefined && all.has(plan.key) ? qualifiedName(all.get(plan.key) as NamedInstance, all, languages) : plan.nameTexts[0] ?? "?");
+  const describe = (plan: Plan): string => (plan.key !== undefined ? catalog.describe(plan.key) : plan.nameTexts[0] ?? "?");
   const visit = (plan: Plan, path: Plan[]): void => {
     state.set(plan, 1);
     for (const dependency of [...plan.dependencies].sort((a, b) => Number(b.hard) - Number(a.hard))) {
@@ -373,7 +445,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
     if (id !== undefined && !signatures.has(id)) signatures.set(id, signatureOf(dataset, id));
     return id === undefined ? undefined : signatures.get(id);
   };
-  const argument = (key: string): string => (isTemporary(key) ? qualifiedName(all.get(key) as NamedInstance, all, languages) : key);
+  const argument = (key: string): string | Ref => (isTemporary(key) ? new Ref(key) : key);
 
   for (const plan of order.filter((p) => p.problems.length === 0)) {
     buildOps(plan);
@@ -476,7 +548,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
       }
       checkParams(action, values, "");
       if (plan.problems.length > 0) return;
-      plan.ops.push({ plan, action: action.id, params: { id: plan.creating ? argument(plan.key as string) : plan.key, ...Object.fromEntries(values) } });
+      plan.ops.push({ plan, action: action.id, params: { id: argument(plan.key as string), ...Object.fromEntries(values) } });
     }
     if (deferred.size > 0) {
       const action = update ?? signature(updateActionOf(plan.schema));
@@ -497,7 +569,7 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
       const entry: RowReport = {
         sheet: plan.title,
         line: plan.line,
-        name: plan.key !== undefined && all.has(plan.key) ? describe(plan) : plan.nameTexts[0] ?? "",
+        name: plan.key !== undefined ? describe(plan) : plan.nameTexts[0] ?? "",
         status: plan.problems.length > 0 ? "refused" : plan.status,
       };
       if (plan.problems.length > 0) {
@@ -538,10 +610,19 @@ export async function importSheets(dataset: SpreadsheetDataset, sheets: readonly
       // the environment already rolled the transaction back when an action failed
     }
   };
+  /** The id of an entity created earlier in this run; its qualified name when its action returned no id. */
+  const idOf = (key: string): string => {
+    const created = plannedBy.get(key)?.createdId;
+    if (created !== undefined) return created;
+    const named = all.get(key);
+    if (named) return qualifiedName(named, all, languages);
+    throw new SpreadsheetError("no_id", `the action that created "${catalog.describe(key)}" returned no id, which a later row needs`);
+  };
   let done = 0;
   try {
     for (const op of ops) {
-      const outcome = await dataset.run(op.action, op.params);
+      const params = Object.fromEntries(Object.entries(op.params).map(([name, value]) => [name, value instanceof Ref ? idOf(value.key) : value]));
+      const outcome = await dataset.run(op.action, params);
       const result = outcome.result as { id?: unknown } | null;
       if (op.plan.creating && op.plan.createdId === undefined && result !== null && typeof result === "object" && typeof result.id === "string") op.plan.createdId = result.id;
       done += 1;

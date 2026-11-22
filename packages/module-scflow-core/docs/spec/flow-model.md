@@ -52,7 +52,7 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 - The item's domain is among the domains of the source and of the destination (`carried_item_domain`).
 - Both ends hold the item through an [item at actor](#item-at-actor): what leaves the source and what reaches the destination is held there (`flow_ends_hold_item`).
 - Its `bidirectional` flag is a boolean, `false` by default. When `true`, the item may move in both directions; when `false`, only from source to destination.
-- It has no name. Its source, destination, item and route identify it, and what else there is to say goes in its description; see [Names](schemas.md#names).
+- It has no name. Its source, destination, item and route identify it (`flow_unique`): two flows that share all four, when the item and the route are set, are refused, and what else there is to say goes in its description; see [Names](schemas.md#names).
 - Its `route` is optional: a flow travels on at most one [route](#route), which says how it travels. A flow keeps its `source` and `destination` on a route: on a round trip they say where the item is loaded and unloaded.
 
 ## Route
@@ -129,7 +129,7 @@ A **conversion** states that an [actor](#actor) turns one [item](#item) into ano
 - It is owned by its actor, where it takes place.
 - It references a source item (`from_item`) and a target item (`to_item`); both are mandatory and set at creation, and neither changes afterwards.
 - The domain of the source item and the domain of the target item are identical.
-- It has no name: its actor, its source item and its target item identify it. It has an optional description, written in one or more languages; see [Names](schemas.md#names).
+- It has no name: its actor, its source item and its target item identify it, and an actor has at most one conversion from an item to another (`conversion_unique`). It has an optional description, written in one or more languages; see [Names](schemas.md#names).
 
 An item referenced by a conversion cannot be deleted: the relation to the item is mandatory, so its deletion is restricted.
 

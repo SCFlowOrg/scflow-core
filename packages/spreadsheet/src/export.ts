@@ -1,7 +1,8 @@
-import { qualifiedName, referenceOfIn, type NamedInstances, type NormalizedSchema, type TransientObject } from "@scfloworg/core";
+import { qualifiedName, type NormalizedSchema, type TransientObject } from "@scfloworg/core";
+import { Catalog, loadCatalog } from "./catalog.js";
 import { DEFAULT_SEPARATOR, formatList } from "./cells.js";
 import { layoutOf, splitQualified, type ColumnSpec } from "./layout.js";
-import { loadContext, loadIndex, sheetNames, sheetSchemas, shortName } from "./model.js";
+import { keyOf, loadContext, sheetNames, sheetSchemas, shortName } from "./model.js";
 import { SpreadsheetError, type CellValue, type ExportOptions, type ExportResult, type Row, type Sheet, type Skipped, type SpreadsheetDataset } from "./types.js";
 
 /** The value of the property of `spec` in a stored instance, a facet value being nested under the namespace of its facet. */
@@ -14,12 +15,12 @@ export function readValue(instance: TransientObject, spec: ColumnSpec): unknown 
 }
 
 /** The cell of one column for a stored instance. */
-function cellOf(instance: TransientObject, spec: ColumnSpec, all: NamedInstances, languages: readonly string[], separator: string, where: string): CellValue {
+function cellOf(instance: TransientObject, spec: ColumnSpec, catalog: Catalog, separator: string, where: string): CellValue {
   const value = readValue(instance, spec);
   if (value === undefined || value === null) return null;
   switch (spec.kind) {
     case "relation":
-      return typeof value === "string" && value !== "" ? referenceOfIn(all, value, languages).reference : null;
+      return typeof value === "string" && value !== "" ? catalog.referenceIn(value, spec.candidates ?? []) : null;
     case "localized": {
       const text = (value as Record<string, unknown>)[spec.language as string];
       return typeof text === "string" && text !== "" ? text : null;
@@ -42,7 +43,8 @@ function cellOf(instance: TransientObject, spec: ColumnSpec, all: NamedInstances
 export async function exportSheets(dataset: SpreadsheetDataset, options: ExportOptions = {}): Promise<ExportResult> {
   const { model, languages } = await loadContext(dataset);
   const separator = options.listSeparator ?? DEFAULT_SEPARATOR;
-  const all = await loadIndex(dataset, model);
+  const { catalog, stored } = await loadCatalog(dataset, model, languages);
+  const all = catalog.named;
   const skipped: Skipped[] = [];
 
   let schemas: NormalizedSchema[] = sheetSchemas(model);
@@ -51,32 +53,26 @@ export async function exportSheets(dataset: SpreadsheetDataset, options: ExportO
     const wanted = options.schemas;
     for (const name of wanted) {
       if (!schemas.some((s) => s.name === name || shortName(s.name) === name)) {
-        throw new SpreadsheetError("unknown_sheet", `no schema "${name}" is referred to by name: ${schemas.map((s) => titles.get(s.name)).join(", ")}`);
+        throw new SpreadsheetError("unknown_sheet", `no schema "${name}" has a sheet: ${schemas.map((s) => titles.get(s.name)).join(", ")}`);
       }
     }
     schemas = schemas.filter((s) => wanted.includes(s.name) || wanted.includes(shortName(s.name)));
-  }
-  for (const schema of model.schemas.values()) {
-    if (!schemas.includes(schema) && !options.schemas && schema.constraints.abstract !== true && schema.constraints.embedded !== true && schema.constraints.facet_of === undefined && schema.constraints.singleton !== true) {
-      skipped.push({ schema: schema.name, reason: "it has no name_scope: its instances have no name to write a reference or a key with" });
-    }
   }
 
   const sheets: Sheet[] = [];
   for (const schema of schemas) {
     const layout = layoutOf(model, schema, languages);
     skipped.push(...layout.skipped);
-    const instances = (await dataset.query({ query: schema.name } as never)).after as TransientObject[];
-    const named = instances
-      .map((instance) => ({ instance, found: all.get(instance.id as string) }))
-      .filter((entry): entry is { instance: TransientObject; found: NonNullable<typeof entry.found> } => entry.found !== undefined && entry.found.schema === schema.name)
-      .map((entry) => ({ ...entry, sort: qualifiedName(entry.found, all, languages) }))
-      .sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0));
-    const rows: Row[] = named.map(({ instance, sort }) => {
-      const row: Row = {};
-      for (const spec of layout.columns) row[spec.header] = cellOf(instance, spec, all, languages, separator, `${titles.get(schema.name)} "${sort}"`);
-      return row;
-    });
+    const instances = stored.get(schema.name) as TransientObject[];
+    const rows: Row[] = instances
+      .filter((instance) => keyOf(schema).kind !== "name" || all.get(instance.id as string)?.schema === schema.name)
+      .map((instance) => ({ instance, sort: keyOf(schema).kind === "name" ? qualifiedName(all.get(instance.id as string) as never, all, languages) : catalog.labelOf(instance.id as string) }))
+      .sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0))
+      .map(({ instance, sort }) => {
+        const row: Row = {};
+        for (const spec of layout.columns) row[spec.header] = cellOf(instance, spec, catalog, separator, `${titles.get(schema.name)} "${sort}"`);
+        return row;
+      });
     sheets.push({ name: titles.get(schema.name) as string, schema: schema.name, columns: layout.columns.map((c) => c.header), rows });
   }
   return { sheets, languages, skipped };
