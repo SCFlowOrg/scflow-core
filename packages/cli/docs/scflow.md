@@ -8,6 +8,8 @@ scflow <project> languages [<codes as JSON array>] [--modules <folder>]
 scflow <project> actions [--modules <folder>]
 scflow <project> run <action> [<parameters as JSON>] [--modules <folder>]
 scflow <project> query <schema> [<filters as JSON>] [--modules <folder>]
+scflow <project> export <folder> [--schema <name>]... [--separator <c>] [--list-separator <s>] [--modules <folder>]
+scflow <project> import <folder|file.csv>... [--dry-run] [--separator <c>] [--list-separator <s>] [--modules <folder>]
 scflow <project> shell [--modules <folder>]
 scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]
 ```
@@ -21,10 +23,12 @@ scflow <project> ask <prompt> [--yes] [--max-turns <n>] [--modules <folder>]
 | `actions` | Lists the actions the project can run |
 | `run` | Runs one action, and saves the project if the action changed it |
 | `query` | Runs a query of a schema, with no action. It writes nothing |
+| `export` | Writes the project to CSV files, one per sheet, in a folder. It writes nothing in the project. See [CSV files](#csv-files) |
+| `import` | Creates and updates the entities the CSV files hold, as one undoable step, and saves the project. See [CSV files](#csv-files) |
 | `shell` | Reads commands from the standard input, one per line |
 | `ask` | Runs a prompt with a language model that works on the project through its actions, and saves the project if they changed it |
 
-`actions` and `query` open the project read only, so they upgrade nothing.
+`actions`, `query` and `export` open the project read only, so they upgrade nothing.
 
 ## Output
 
@@ -34,9 +38,42 @@ A refusal prints `{ "error": { "code", "message" } }` on the standard error and 
 
 ## The shell
 
-`run <action> [<JSON>]`, `query <schema> [<JSON>]`, `actions`, `undo`, `redo`, `history`, `save` and `exit`. A refusal is printed and the shell goes on.
+`run <action> [<JSON>]`, `query <schema> [<JSON>]`, `actions`, `export <folder> [options]`, `import <folder|file.csv>... [options]`, `undo`, `redo`, `history`, `save` and `exit`. A refusal is printed and the shell goes on.
+
+In the shell, `export` and `import` take the same options as the command, written after their arguments, and the paths hold no space. An `import` is one undo step, labelled `Import sheets`, and it does not save either.
 
 Undo lives in memory, so it exists only in the shell. In the shell, `run` does not save: `save` does, and the end of the input without a `save` loses the changes, which the shell says.
+
+## CSV files
+
+`export` and `import` put a project in files and read it back. The rows come from [`@scfloworg/spreadsheet`](../../spreadsheet/docs/spreadsheet.md), which says which entities have a sheet, which columns it has, how a reference is written and what an import does with a row; this section says only what the command adds: the files.
+
+### Export
+
+`export <folder>` writes one file per sheet in the folder, which it creates if need be, named after the sheet, `actor.csv`, `flow.csv`, and replaces a file of the same name. `--schema <name>` (repeatable, a short or a qualified name) keeps only those sheets; an unknown name is a refusal (`unknown_sheet`) and nothing is written. It prints `{ files, skipped }`: `files` lists the names of the files written, `skipped` what the sheets leave out, with the reason. Two exports of one project are the same files.
+
+### Import
+
+`import` takes files, or folders, which stand for the `.csv` files they hold, by name. The sheet of a file is its name without `.csv`: `actor.csv` is the sheet `actor`, `scflow.actor.csv` the sheet `scflow.actor`. Two files for one sheet are a refusal (`duplicate_sheet`).
+
+- The whole import is one transaction of the project and one undo step. Rows are written by the actions of the model, and its rules are checked at the end.
+- `--dry-run` runs it all, then rolls back: nothing is written, and the report still says what the rules of the model refuse.
+- The project is saved only when the report is `ok` and the import is not a dry run. An import never deletes.
+- It prints the `ImportReport` of the package as one JSON document, with `written` as the other commands have it: `{ ok, dryRun, applied, created, updated, unchanged, refused, rows, errors, order, written }`. `line` of a row is the number of its record in the file, the header being line 1.
+- To build a project from a spreadsheet: `scflow <project> create ...`, then `scflow <project> import <folder>`. Create the project with the languages and modules of the files.
+
+### The files
+
+- UTF-8, one header line with the columns of the sheet (`name`, `name (fr)`, `carbon.co2`), then one record per row. A leading byte order mark is accepted on read, and never written.
+- Cells are text. An empty cell is an empty field. A number or a boolean is written `12.5`, `true`, and read back by the import, which converts it to the type of its property. A list is one cell, its values joined by `;` and a space, or by `--list-separator`; a value that holds the list separator fails the export (`separator_in_value`).
+- Columns are separated by a comma, or by `--separator <c>`, one character, which is neither a quote nor a line break: `--separator ';'` for a spreadsheet in French, `--separator '	'` for a tab. A field that holds the separator, a quote or a line break is quoted, the quotes doubled (RFC 4180); line breaks inside a field are kept. Lines end with LF when written; LF, CRLF and CR are read.
+- A record shorter than the header leaves its last cells empty. A record with a value beyond the header, a quote that never closes, and a file with no header are refused (`invalid_csv`).
+
+### Refusals
+
+- A refused import (a row refused, a rule of the model broken) prints its report on the standard output, since the report is the result, exits with `1` and saves nothing: every row is listed with its status and its reason.
+- A refusal that is not about the rows prints `{ "error": { "code", "message" } }` on the standard error, exits with `1` and saves nothing: `file_unreadable`, `invalid_csv`, `duplicate_sheet`, `unknown_sheet` (a file named after no sheet), `separator_in_value`.
+- A wrong command line exits with `2`: no folder or file, a folder that holds no `.csv` file, a separator that is not one character.
 
 ## Asking a model
 

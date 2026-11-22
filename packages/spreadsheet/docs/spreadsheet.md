@@ -75,7 +75,7 @@ interface ImportReport {
 }
 ```
 
-`line` is the line of the row in the sheet, the header being line 1. A row that is fine keeps its status (`create`, `update`) when another row refuses the import, with `applied: false`. A row after the first failed write is `not_run`.
+`line` is the number of the row in the sheet, the header being line 1: the position of the row, not of a line of a file. A layer that reads a file counts a record with a line break inside a field as one. A row that is fine keeps its status (`create`, `update`) when another row refuses the import, with `applied: false`. A row after the first failed write is `not_run`.
 
 ### Dry run
 
