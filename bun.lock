@@ -12,12 +12,12 @@
     },
     "packages/actions": {
       "name": "@scfloworg/actions",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
         "ajv": "^8.17.1",
       },
       "devDependencies": {
-        "@scfloworg/conformance": "^0.2.0-next.1",
+        "@scfloworg/conformance": "^0.2.0-next.2",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
       },
@@ -26,26 +26,26 @@
       "name": "@scfloworg/ai",
       "version": "0.1.0",
       "devDependencies": {
-        "@scfloworg/actions": "^0.2.0-next.1",
+        "@scfloworg/actions": "^0.2.0-next.2",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
       },
     },
     "packages/cli": {
       "name": "@scfloworg/cli",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "bin": {
         "model-repl": "dist/cli.js",
         "scflow": "dist/scflowCli.js",
       },
       "dependencies": {
-        "@scfloworg/actions": "^0.2.0-next.1",
+        "@scfloworg/actions": "^0.2.0-next.2",
         "@scfloworg/ai": "^0.1.0",
-        "@scfloworg/core": "^0.2.0-next.1",
-        "@scfloworg/environment": "^0.2.0-next.1",
-        "@scfloworg/format-js": "^0.2.0-next.1",
-        "@scfloworg/spreadsheet": "^0.2.0-next.1",
-        "@scfloworg/workspace": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
+        "@scfloworg/environment": "^0.2.0-next.2",
+        "@scfloworg/format-js": "^0.2.0-next.2",
+        "@scfloworg/spreadsheet": "^0.2.0-next.2",
+        "@scfloworg/workspace": "^0.2.0-next.2",
         "js-yaml": "^4.1.0",
       },
       "devDependencies": {
@@ -57,9 +57,9 @@
     },
     "packages/conformance": {
       "name": "@scfloworg/conformance",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
         "vitest": "^4.1.10",
       },
       "devDependencies": {
@@ -68,7 +68,7 @@
     },
     "packages/core": {
       "name": "@scfloworg/core",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
         "js-yaml": "^4.1.0",
       },
@@ -88,16 +88,16 @@
     },
     "packages/environment": {
       "name": "@scfloworg/environment",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/actions": "^0.2.0-next.1",
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/actions": "^0.2.0-next.2",
+        "@scfloworg/core": "^0.2.0-next.2",
         "@scfloworg/docs": "^0.1.0",
-        "@scfloworg/module": "^0.2.0-next.1",
+        "@scfloworg/module": "^0.2.0-next.2",
       },
       "devDependencies": {
-        "@scfloworg/conformance": "^0.2.0-next.1",
-        "@scfloworg/format-js": "^0.2.0-next.1",
+        "@scfloworg/conformance": "^0.2.0-next.2",
+        "@scfloworg/format-js": "^0.2.0-next.2",
         "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.10.0",
         "js-yaml": "^4.1.0",
@@ -107,14 +107,14 @@
     },
     "packages/format-file": {
       "name": "@scfloworg/format-file",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
-        "@scfloworg/format-js": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
+        "@scfloworg/format-js": "^0.2.0-next.2",
         "@scfloworg/project-file": "^0.1.0",
       },
       "devDependencies": {
-        "@scfloworg/conformance": "^0.2.0-next.1",
+        "@scfloworg/conformance": "^0.2.0-next.2",
         "@types/node": "^22.10.0",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
@@ -122,12 +122,12 @@
     },
     "packages/format-js": {
       "name": "@scfloworg/format-js",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
       },
       "devDependencies": {
-        "@scfloworg/conformance": "^0.2.0-next.1",
+        "@scfloworg/conformance": "^0.2.0-next.2",
         "@scfloworg/repl-conformance": "^0.1.0",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
@@ -135,19 +135,19 @@
     },
     "packages/mcp": {
       "name": "@scfloworg/mcp",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "bin": {
         "scflow-mcp": "dist/cli.js",
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "1.32.2",
-        "@scfloworg/actions": "^0.2.0-next.1",
-        "@scfloworg/core": "^0.2.0-next.1",
-        "@scfloworg/environment": "^0.2.0-next.1",
-        "@scfloworg/workspace": "^0.2.0-next.1",
+        "@scfloworg/actions": "^0.2.0-next.2",
+        "@scfloworg/core": "^0.2.0-next.2",
+        "@scfloworg/environment": "^0.2.0-next.2",
+        "@scfloworg/workspace": "^0.2.0-next.2",
       },
       "devDependencies": {
-        "@scfloworg/cli": "^0.2.0-next.1",
+        "@scfloworg/cli": "^0.2.0-next.2",
         "@types/node": "^22.10.0",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
@@ -155,9 +155,9 @@
     },
     "packages/module": {
       "name": "@scfloworg/module",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
         "acorn": "^8.18.0",
         "eslint-scope": "^8.4.0",
         "js-yaml": "^4.1.0",
@@ -173,16 +173,16 @@
     },
     "packages/module-scflow-core": {
       "name": "@scfloworg/module-scflow-core",
-      "version": "2.0.0-next.1",
+      "version": "2.0.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
       },
       "devDependencies": {
         "@scfloworg/docs": "^0.1.0",
-        "@scfloworg/environment": "^0.2.0-next.1",
-        "@scfloworg/format-js": "^0.2.0-next.1",
-        "@scfloworg/module": "^0.2.0-next.1",
-        "@scfloworg/spreadsheet": "^0.2.0-next.1",
+        "@scfloworg/environment": "^0.2.0-next.2",
+        "@scfloworg/format-js": "^0.2.0-next.2",
+        "@scfloworg/module": "^0.2.0-next.2",
+        "@scfloworg/spreadsheet": "^0.2.0-next.2",
         "@types/node": "^22.10.0",
         "js-yaml": "^5.4.2",
         "typescript": "^5.7.0",
@@ -202,8 +202,8 @@
       "name": "@scfloworg/repl-conformance",
       "version": "0.1.0",
       "dependencies": {
-        "@scfloworg/cli": "^0.2.0-next.1",
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/cli": "^0.2.0-next.2",
+        "@scfloworg/core": "^0.2.0-next.2",
         "js-yaml": "^4.1.0",
         "vitest": "^4.1.10",
       },
@@ -215,14 +215,14 @@
     },
     "packages/spreadsheet": {
       "name": "@scfloworg/spreadsheet",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
       },
       "devDependencies": {
-        "@scfloworg/environment": "^0.2.0-next.1",
-        "@scfloworg/format-js": "^0.2.0-next.1",
-        "@scfloworg/module": "^0.2.0-next.1",
+        "@scfloworg/environment": "^0.2.0-next.2",
+        "@scfloworg/format-js": "^0.2.0-next.2",
+        "@scfloworg/module": "^0.2.0-next.2",
         "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.10.0",
         "js-yaml": "^4.1.0",
@@ -232,16 +232,16 @@
     },
     "packages/workspace": {
       "name": "@scfloworg/workspace",
-      "version": "0.2.0-next.1",
+      "version": "0.2.0-next.2",
       "dependencies": {
-        "@scfloworg/core": "^0.2.0-next.1",
-        "@scfloworg/environment": "^0.2.0-next.1",
-        "@scfloworg/format-file": "^0.2.0-next.1",
+        "@scfloworg/core": "^0.2.0-next.2",
+        "@scfloworg/environment": "^0.2.0-next.2",
+        "@scfloworg/format-file": "^0.2.0-next.2",
         "@scfloworg/project-file": "^0.1.0",
       },
       "devDependencies": {
-        "@scfloworg/format-js": "^0.2.0-next.1",
-        "@scfloworg/module": "^0.2.0-next.1",
+        "@scfloworg/format-js": "^0.2.0-next.2",
+        "@scfloworg/module": "^0.2.0-next.2",
         "@types/node": "^22.10.0",
         "typescript": "^5.6.3",
         "vitest": "^4.1.10",
