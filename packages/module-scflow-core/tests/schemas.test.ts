@@ -331,9 +331,9 @@ describe("SCFLOW schemas", () => {
     expect(SCHEMAS.schemas.map((s) => s.name)).not.toContain("flow_network");
   });
 
-  it("keeps a scope flat, with a name and a description only", () => {
+  it("keeps a scope flat, with a name, a description and its place in a group", () => {
     const scope = SCHEMAS.schemas.find((s) => s.name === "scope") as { properties: { name: string }[] };
-    expect(scope.properties.map((p) => p.name)).toEqual(["name", "description"]);
+    expect(scope.properties.map((p) => p.name)).toEqual(["name", "description", "group", "group_index"]);
   });
 
   it("creates a scope with no owner", async () => {

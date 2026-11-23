@@ -127,13 +127,15 @@ Flags: writes `scope`.
 Parameters:
 - `name` (text or map language → text, required): Name of the scope, a string or a map of language to string.
 - `description` (text or map language → text): Markdown description of the scope.
+- `group` (string): Name of the group of scopes this scope is in (a region, a stage); empty or omitted when it is in none.
+- `group_index` (integer): Position of the scope in its group, from 1.
 - `tags` (list of string): Tags of the scope.
 
 Examples:
 
 ```
 scflow/create_scope {"name":"text"}
-scflow/create_scope {"name":"text","description":"text","tags":["text"]}
+scflow/create_scope {"name":"text","description":"text","group":"text","group_index":1,"tags":["text"]}
 ```
 
 ### `scflow/create_flow`

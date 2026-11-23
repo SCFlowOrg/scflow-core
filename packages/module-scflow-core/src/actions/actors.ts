@@ -11,6 +11,8 @@ type Text = string | Record<string, string>;
 export interface CreateScopeParams {
   name: Text;
   description?: Text;
+  group?: string;
+  group_index?: number;
   tags?: string[];
 }
 
@@ -102,6 +104,8 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
     properties: {
       name: localizedTextParam("Name of the scope, a string or a map of language to string."),
       description: localizedTextParam("Markdown description of the scope."),
+      group: { type: "string", description: "Name of the group of scopes this scope is in (a region, a stage); empty or omitted when it is in none." },
+      group_index: { type: "integer", minimum: 1, description: "Position of the scope in its group, from 1." },
       tags: tagsParam("Tags of the scope."),
     },
     required: ["name"],
@@ -111,6 +115,12 @@ export const createScopeAction: ScflowActionDefinition<CreateScopeParams, ScopeS
     const input: Record<string, unknown> = { name: await localizedText(context, params.name) };
     if (params.description !== undefined) {
       input.description = await localizedText(context, params.description);
+    }
+    if (params.group !== undefined) {
+      input.group = params.group;
+    }
+    if (params.group_index !== undefined) {
+      input.group_index = params.group_index;
     }
     const tags = unique(params.tags);
     if (tags !== undefined) {
