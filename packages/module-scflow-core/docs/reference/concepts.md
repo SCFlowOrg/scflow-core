@@ -158,6 +158,8 @@ Extends `annotable`.
 
 - `name`: localized_string
 - `description`: localized_markdown
+- `group`: string
+- `group_index`: integer
 
 ### location
 

@@ -766,9 +766,16 @@ properties:
     min_length: 1
   - name: description
     type: localized_markdown
+  - name: group
+    type: string
+    default_value: ""
+  - name: group_index
+    type: integer
+    minimum: 1
+    default_value: 1
 ```
 
-Per [Scope](flow-model.md#scope). A scope has no owner and no parent, so a type library holds scopes beside its types. `actors` is generated from `actor`'s `scope` relation. The `default_scope` relation of `actor_type` has no inverse.
+Per [Scope](flow-model.md#scope). A scope has no owner and no parent, so a type library holds scopes beside its types. `group` is the name of the group of the scope, empty when it is in none, and `group_index` its position in the group, from 1. Both are written by the generated update of `scope`. `actors` is generated from `actor`'s `scope` relation. The `default_scope` relation of `actor_type` has no inverse.
 
 ## location
 

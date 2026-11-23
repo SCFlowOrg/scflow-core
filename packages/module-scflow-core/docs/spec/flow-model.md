@@ -142,6 +142,7 @@ A **scope** groups [actors](#actor) into a swim lane read on its own: sourcing, 
 - A scope is flat: it has no parent and no owner. It is an instance of the dataset, and a type library holds scopes beside its types.
 - An actor belongs to at most one scope, through its `scope` relation. An actor type can name a default scope, per [Typing](#typing).
 - A flow connecting actors of different scopes crosses their boundary.
+- A scope may be put in a **group** of scopes (a region, a stage such as SOURCE, MAKE, DELIVER), with a **position in the group**. The group is the name its scopes share, an unlocalized string that is never shown as a label: it only says which scopes belong together. A group has no existence of its own: it exists while a scope carries its name, and a scope with an empty group is in none. The position starts at 1 and orders the scopes of a group; two scopes of a group may share a position, and then the name of the scope orders them. How a group is drawn is the business of the graph, not of the model.
 
 ## Location
 

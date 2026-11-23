@@ -460,6 +460,15 @@ schemas:
         min_length: 1
       - name: description
         type: localized_markdown
+      # The group is the name the scopes of a group share; it is never shown, so it is not localized.
+      - name: group
+        type: string
+        default_value: ""
+      # Position in the group, from 1; scopes may share one.
+      - name: group_index
+        type: integer
+        minimum: 1
+        default_value: 1
 
   - name: location
     description: A geographic place or site where actors operate
@@ -646,6 +655,8 @@ actions:
       properties:
         name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the scope, a string or a map of language to string.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the scope.}
+        group: {type: string, description: 'Name of the group of scopes this scope is in (a region, a stage); empty or omitted when it is in none.'}
+        group_index: {type: integer, minimum: 1, description: 'Position of the scope in its group, from 1.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the scope.}
       required:
         - name
