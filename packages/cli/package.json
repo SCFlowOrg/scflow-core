@@ -1,6 +1,6 @@
 {
   "name": "@scfloworg/cli",
-  "version": "0.2.0-next.1",
+  "version": "0.2.0-next.2",
   "type": "module",
   "description": "Interactive REPL for the Model Command Language: named dataset contexts, incremental scripting with result and snippet variables. See README.md.",
   "main": "dist/index.js",
@@ -28,13 +28,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@scfloworg/actions": "^0.2.0-next.1",
+    "@scfloworg/actions": "^0.2.0-next.2",
     "@scfloworg/ai": "^0.1.0",
-    "@scfloworg/core": "^0.2.0-next.1",
-    "@scfloworg/environment": "^0.2.0-next.1",
-    "@scfloworg/format-js": "^0.2.0-next.1",
-    "@scfloworg/spreadsheet": "^0.2.0-next.1",
-    "@scfloworg/workspace": "^0.2.0-next.1",
+    "@scfloworg/core": "^0.2.0-next.2",
+    "@scfloworg/environment": "^0.2.0-next.2",
+    "@scfloworg/format-js": "^0.2.0-next.2",
+    "@scfloworg/spreadsheet": "^0.2.0-next.2",
+    "@scfloworg/workspace": "^0.2.0-next.2",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@scfloworg/environment",
-  "version": "0.2.0-next.1",
+  "version": "0.2.0-next.2",
   "type": "module",
   "license": "MIT",
   "publishConfig": {
@@ -30,14 +30,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@scfloworg/actions": "^0.2.0-next.1",
-    "@scfloworg/core": "^0.2.0-next.1",
+    "@scfloworg/actions": "^0.2.0-next.2",
+    "@scfloworg/core": "^0.2.0-next.2",
     "@scfloworg/docs": "^0.1.0",
-    "@scfloworg/module": "^0.2.0-next.1"
+    "@scfloworg/module": "^0.2.0-next.2"
   },
   "devDependencies": {
-    "@scfloworg/conformance": "^0.2.0-next.1",
-    "@scfloworg/format-js": "^0.2.0-next.1",
+    "@scfloworg/conformance": "^0.2.0-next.2",
+    "@scfloworg/format-js": "^0.2.0-next.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "js-yaml": "^4.1.0",

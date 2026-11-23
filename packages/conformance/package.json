@@ -1,6 +1,6 @@
 {
   "name": "@scfloworg/conformance",
-  "version": "0.2.0-next.1",
+  "version": "0.2.0-next.2",
   "type": "module",
   "description": "Format-agnostic vitest suite, derived from the Model convention's worked command examples. Any PersistenceInterface implementation runs this suite against itself to prove it supports the command language correctly.",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@scfloworg/core": "^0.2.0-next.1",
+    "@scfloworg/core": "^0.2.0-next.2",
     "vitest": "^4.1.10"
   },
   "devDependencies": {
