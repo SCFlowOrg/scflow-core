@@ -71,7 +71,7 @@ a URL. Each entry, a `ProviderPreset`, gives:
 
 | Field | Is |
 | --- | --- |
-| `id` | A short stable name: `openai`, `anthropic`, `mistral`, `gemini`, `groq`, `openrouter`, `ollama`, `lmstudio` |
+| `id` | A short stable name: `openai`, `anthropic`, `mistral`, `gemini`, `groq`, `openrouter`, `requesty`, `ollama`, `lmstudio` |
 | `label` | The name shown to a user |
 | `baseUrl` | The `baseUrl` of a `byok` connection to it |
 | `models` | Model ids suggested for it, the first the default; empty when only the provider can tell |
