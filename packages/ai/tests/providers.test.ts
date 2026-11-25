@@ -25,6 +25,7 @@ describe("the catalogue of providers", () => {
   it("finds the provider of a base URL, with or without a trailing slash", () => {
     expect(providerOf("https://api.openai.com/v1/")?.id).toBe("openai");
     expect(providerOf("https://api.mistral.ai/v1")?.id).toBe("mistral");
+    expect(providerOf("https://router.requesty.ai/v1")?.id).toBe("requesty");
     expect(providerOf("https://example.test/v1")).toBeUndefined();
   });
 });

@@ -74,6 +74,14 @@ export const PROVIDERS: readonly ProviderPreset[] = [
     needsKey: true,
   },
   {
+    id: "requesty",
+    label: "Requesty",
+    baseUrl: "https://router.requesty.ai/v1",
+    models: [],
+    keyUrl: "https://app.requesty.ai/api-keys",
+    needsKey: true,
+  },
+  {
     id: "ollama",
     label: "Ollama (local)",
     baseUrl: "http://localhost:11434/v1",
