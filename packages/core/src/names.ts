@@ -245,8 +245,8 @@ export function nameBreaches(all: NamedInstances, written: ReadonlySet<Key> | "a
       if (others.length === 0) continue;
       const shared = instance.names.find((t) => others.some((o) => o.names.includes(t))) as string;
       const scope = instance.scope !== null && all.get(instance.scope) ? `"${qualifiedName(all.get(instance.scope) as NamedInstance, all, languages)}"` : "the dataset";
-      const who = [instance, ...others].map((i) => `"${i.schema}" ${i.key}`).join(", ");
-      breaches.push({ schema: instance.schema, key: instance.key, message: `"${instance.key}" of "${instance.schema}" breaks the rule "name_scope": the name "${shared}" is also used in the scope ${scope} by ${others.length === 1 ? "another instance" : `${others.length} other instances`} (${who})` });
+      const who = [...new Set(others.map((o) => `"${o.schema}"`))].join(", ");
+      breaches.push({ schema: instance.schema, key: instance.key, message: `"${qualifiedName(instance, all, languages)}" of "${instance.schema}" breaks the rule "name_scope": the name "${shared}" is also used in the scope ${scope} by ${others.length === 1 ? "another instance" : `${others.length} other instances`} of ${who}` });
     }
   }
   return breaches;

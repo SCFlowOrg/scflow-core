@@ -17,6 +17,7 @@ it never writes. The normative text is
 name: flow
 checks:
   - name: carried_item_domain
+    message: the domain of the item must be among the domains of the types of both actors
     when: { item: { exists: true } }
     require:
       and:
@@ -82,6 +83,18 @@ and adds its own.
   `exists` rule runs again when an instance of its schema is written or deleted.
 - `upgradeDataset` and `upgradeModule` check every rule on every instance; an
   upgrade that breaks one is refused, changing nothing.
+
+A `checks` entry and a `unique` group take an optional `message`, saying in
+words what they require. The message of a refusal names the instance at fault
+and the rule, then gives that text, or what failed when the rule has none:
+
+```
+the "scflow.flow" with source "Plant", destination "Pharmacy", type "Order" breaks the rule "flow_type_end_domain": the domain of the flow type must be among the domains of the types of both actors
+```
+
+The instance is named by what survives the rollback: its qualified name, else
+its `name`, else what its single-valued relations link, and its id only when it
+has none of these.
 
 `rule_violation` carries `details`: `rule`, `schema` and `key` of the first
 breach, and `violations`, the list of every breach found, which an upgrade uses

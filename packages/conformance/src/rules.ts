@@ -98,6 +98,7 @@ ${actorExtra}
     unique:
       - name: held_once
         properties: [actor, item]
+        message: an actor holds an item once
     properties:
       - name: actor
         type: actor
@@ -129,6 +130,7 @@ ${actorExtra}
     is_root:
     checks:
       - name: carried_item_domain
+        message: the domain of the item must be among the domains of the types of both actors
         when: { item: { exists: true } }
         require:
           and:
@@ -300,6 +302,31 @@ export function ruleCases(formatPrefix: string, newLocator: () => string): void 
       expect(await query(locator, "net.flow")).toHaveLength(2);
     });
 
+    it("says what a refused rule requires, naming the instances by what survives the rollback", async () => {
+      const locator = await network();
+      const refusal = (command: Promise<unknown>) => command.then(() => "", (e: Error) => e.message);
+      // an instance without a name is named by what it links
+      expect(await refusal(create(locator, "net.flow", [{ source: "f1", destination: "s1", item: "plank" }]))).toContain(
+        'the "net.flow" with source "f1", destination "s1", item "plank" breaks the rule "carried_item_domain": the domain of the item must be among the domains of the types of both actors',
+      );
+      // a rule without a message says what failed
+      await create(locator, "net.item", [{ name: "pear", domain: "food" }]);
+      expect(await refusal(create(locator, "net.flow", [{ source: "f1", destination: "s1", item: "pear" }]))).toContain(
+        'the "net.flow" with source "f1", destination "s1", item "pear" breaks the rule "flow_ends_hold_item": no instance of "net.holding" has the values it requires',
+      );
+      // the message of a unique group
+      await create(locator, "net.holding", [{ actor: "f1", item: "pear" }]);
+      expect(await refusal(create(locator, "net.holding", [{ actor: "f1", item: "pear" }]))).toContain(
+        'the "net.holding" with actor "f1", item "pear" breaks the rule "held_once": an actor holds an item once',
+      );
+      // an instance with a name is named by it
+      expect(await refusal(create(locator, "net.actor", [{ name: "x", type: "farm", parent: "s1" }]))).toContain(
+        '"x" of "net.actor" breaks the rule "parent_actor_domains"',
+      );
+      const renamed = runCommand(locator, { update: "net.actor", filters: { name: "s1" }, input: { name: "f1" } });
+      expect(await refusal(renamed)).toContain('"f1" of "net.actor" breaks the rule "name_scope"');
+    });
+
     it("re-evaluates a rule when a path it reads changes", async () => {
       const locator = await network();
       await create(locator, "net.flow", [{ source: "f1", destination: "s1", item: "apple" }]);
@@ -417,6 +444,8 @@ ${body}
       expect(await refused(thing(`    checks:\n      - name: neither\n        when: { size: 1 }`))).toBe("constraint_violation");
       expect(await refused(thing(`    checks:\n      - name: lone_each\n        each: ["\${this.actor}"]\n        require: { size: 1 }`))).toBe("constraint_violation");
       expect(await refused(thing(`    checks:\n      - name: array_path\n        require: { actor.notes.text: x }`))).toBe("constraint_violation");
+      expect(await refused(thing(`    checks:\n      - name: no_words\n        message: ""\n        require: { size: 1 }`))).toBe("constraint_violation");
+      expect(await refused(thing(`    unique:\n      - name: no_words\n        message: 3\n        properties: [size]`))).toBe("constraint_violation");
       expect(await refused(thing(`    checks:\n      - name: no_schema\n        exists: { schema: nothing, with: { name: x } }`))).toBe("unknown_schema");
     });
 

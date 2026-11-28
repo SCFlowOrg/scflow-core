@@ -6,10 +6,13 @@ import type { FilterEvalContext } from "./filter.js";
 import { isModelSchema } from "./modelUpgrade.js";
 import { checksOf, uniqueGroupsOf } from "./ruleDeclarations.js";
 import type { CheckRule } from "./ruleDeclarations.js";
+import { subjectOf } from "./ruleLabels.js";
+import type { LabelSource } from "./ruleLabels.js";
 import { EACH, hasRules, thisPath } from "./ruleValidation.js";
 import type { Resolvers } from "./resolvers.js";
 import { importNamespaceOf } from "./resolvers.js";
 import { loadNamedInstances, nameBreaches, namedSchemas } from "./names.js";
+import type { NamedInstances } from "./names.js";
 import { findProperty, keyPropertyName } from "./schema.js";
 import { derivePropertyRoles, resolveType } from "./schemaProcessing.js";
 import type { Key, NormalizedSchema, PersistenceInterface, TransientObject, TransientValue } from "./types.js";
@@ -183,6 +186,10 @@ export async function evaluateRules(
     return out;
   };
 
+  let namedIndex: Promise<NamedInstances> | undefined;
+  const loadNamed = () => (namedIndex ??= loadNamedInstances(impl, rest, resolvers));
+  const labels: LabelSource = { resolvers, named: loadNamed, listFamily };
+
   for (const schema of schemas) {
     const checks = checksOf(schema.constraints);
     const groups = uniqueGroupsOf(schema.constraints);
@@ -200,17 +207,21 @@ export async function evaluateRules(
       const isWritten = all || writtenHere.has(key);
       if (!isWritten && !everyInstance) continue;
       const instance = await resolveVirtualProperties(impl, rest, resolvers, schema, clone(raw) as TransientObject, new Map());
-      const breach = (rule: string, message: string) => violations.push({ rule, schema: schema.name, key, message: `"${key}" of "${schema.name}" breaks the rule "${rule}": ${message}` });
+      let subject: string | undefined;
+      const breach = async (rule: string, message: string) => {
+        subject ??= await subjectOf(labels, schema, instance);
+        violations.push({ rule, schema: schema.name, key, message: `${subject} breaks the rule "${rule}": ${message}` });
+      };
 
       for (const check of checks) {
         if (!isWritten && !dependencies(schema, check, resolvers).some(touches)) continue;
         if (check.when && !(await matchFilter(instance, check.when, schema, ctx))) continue;
         if (check.require) {
-          if (!(await matchFilter(instance, check.require, schema, ctx))) breach(check.name, "its require does not hold");
+          if (!(await matchFilter(instance, check.require, schema, ctx))) await breach(check.name, check.message ?? "its require does not hold");
           continue;
         }
         if (check.exists && !(await existsHolds(check, instance, schema, ctx, resolvers, listFamily))) {
-          breach(check.name, `no instance of "${check.exists.schema}" has the values it requires`);
+          await breach(check.name, check.message ?? `no instance of "${check.exists.schema}" has the values it requires`);
         }
       }
 
@@ -227,7 +238,7 @@ export async function evaluateRules(
         for (const other of await listFamily(root)) {
           if (other.schema.name === schema.name && keyOf(other.schema, other.instance) === key) continue;
           if (group.properties.every((p, i) => sameValue(other.instance[p], values[i]))) {
-            breach(group.name, `"${keyOf(other.schema, other.instance)}" has the same ${group.properties.join(", ")}`);
+            await breach(group.name, group.message ?? `another instance of "${other.schema.name}" has the same ${group.properties.join(", ")}`);
             break;
           }
         }
@@ -241,7 +252,7 @@ export async function evaluateRules(
         let next = instance[prop.name];
         while (typeof next === "string") {
           if (next === key) {
-            breach(prop.name, `following "${prop.name}" leads back to it`);
+            await breach(prop.name, `following "${prop.name}" leads back to it`);
             break;
           }
           if (seen.has(next)) break;
@@ -258,7 +269,7 @@ export async function evaluateRules(
     const writtenNamed = new Set<Key>();
     for (const schema of named) for (const key of written.get(schema.name) ?? []) writtenNamed.add(key);
     if (scope === "all" || writtenNamed.size > 0) {
-      const breaches = nameBreaches(await loadNamedInstances(impl, rest, resolvers), scope === "all" ? "all" : writtenNamed);
+      const breaches = nameBreaches(await loadNamed(), scope === "all" ? "all" : writtenNamed);
       for (const b of breaches) violations.push({ rule: "name_scope", schema: b.schema, key: b.key, message: b.message });
     }
   }
