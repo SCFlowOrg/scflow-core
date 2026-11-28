@@ -173,7 +173,7 @@
     },
     "packages/module-scflow-core": {
       "name": "@scfloworg/module-scflow-core",
-      "version": "2.0.0-next.2",
+      "version": "2.0.0-next.3",
       "dependencies": {
         "@scfloworg/core": "^0.2.0-next.2",
       },

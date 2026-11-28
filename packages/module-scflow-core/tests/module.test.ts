@@ -30,7 +30,7 @@ describe("the module scflow:core", () => {
   });
 
   it("has the version of the package, without its pre-release suffix", () => {
-    // A manifest version is `major.minor.patch`: the package `2.0.0-next.2` is a
+    // A manifest version is `major.minor.patch`: the package `2.0.0-next.3` is a
     // pre-release of the module version `2.0.0`.
     expect(manifest.version).toBe(packageJson.version.replace(/-.*$/, ""));
   });
