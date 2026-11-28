@@ -275,7 +275,7 @@ The `item` of a `flow` is `updated_by` `scflow/set_flow_item`, because the item 
 
 *Rule.*
 
-Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type`, the `location` of an `actor` and the `route` of a `flow` have no `on_delete`, so they are cleared when their target is deleted: deleting a route keeps its flows, which travel on no route afterwards. The stops of a route go with it silently, and the stops at an actor are confirmed with the actor.
+Each relation marked `on_delete: confirm` asks for the consent of the caller: a plain delete of its target is refused with `constraint_violation`, and a delete with `cascade: true` removes the referencing instance too, transitively (see [On Delete](../../../core/docs/spec/meta-model.md#on-delete)). A note and a transformation line go with their owner silently. The `default_scope` of an `actor_type`, the `location` of an `actor`, and the `type` and the `route` of a `flow` have no `on_delete`, so they are cleared when their target is deleted: deleting a route keeps its flows, which travel on no route afterwards, and deleting a flow type keeps its flows, which have no type afterwards. A flow type classifies flows, and a flow without one is valid. The stops of a route go with it silently, and the stops at an actor are confirmed with the actor.
 
 ## Names
 
@@ -413,7 +413,7 @@ properties:
     default_value: forward
 ```
 
-Per [Typing](flow-model.md#typing). `flows` is generated from `flow`'s `type` relation. `direction` says what the flows of the type mean for the shape of the network; it is independent of `flow.bidirectional`, and no rule relates them.
+Per [Typing](flow-model.md#typing). `flows` is generated from `flow`'s `type` relation, which is cleared when the type is deleted (see [Deletion](#deletion)). `direction` says what the flows of the type mean for the shape of the network; it is independent of `flow.bidirectional`, and no rule relates them.
 
 ## actor
 
@@ -535,7 +535,6 @@ properties:
     inverse_is_array:
   - name: type
     type: flow_type
-    on_delete: confirm
     inverse_name: flows
     inverse_is_array:
   - name: item

@@ -49,7 +49,7 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 - `source` and `destination` are mandatory; the item moves from source to destination.
 - Its `item` is optional: a flow carries at most one [item](#item). The actions set it once and never change or remove it.
 - A flow between an actor and one of its child actors, in either direction, carries an item: it is a transport inside the actor (`internal_flow_item`).
-- Its [flow type](#typing) is optional and can change. It says what the flow means, such as a delivery, a return or a disposal, which its item cannot say: one item moves in flows of opposite meaning, a drug delivered and then returned.
+- Its [flow type](#typing) is optional and can change. Deleting a flow type keeps its flows, with no type. It says what the flow means, such as a delivery, a return or a disposal, which its item cannot say: one item moves in flows of opposite meaning, a drug delivered and then returned.
 - A carried item belongs to the domain of the flow type (`flow_item_type_domain`).
 - The domain of the flow type is among the domains of the source and of the destination, with or without an item (`flow_type_end_domain`).
 - The item's domain is among the domains of the source and of the destination (`carried_item_domain`).

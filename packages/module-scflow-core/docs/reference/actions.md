@@ -160,13 +160,13 @@ scflow/create_flow_type {"name":"text","domain":"physical","direction":"forward"
 
 ### `scflow/delete_flow_type`
 
-Delete a flow type. Deletes a flow type. It is refused while flows have this type, unless cascade is true, which deletes those flows first, each as scflow/delete_flow does: the items held by their ends are kept.
+Delete a flow type. Deletes a flow type and returns its id. The flows that have this type are kept and have no type afterwards. The cascade parameter is accepted for consistency with the other delete actions and changes nothing.
 
 Flags: destructive; writes `flow_type`, `flow`.
 
 Parameters:
 - `id` (reference (name or id) of flow_type, required): Id or name of the flow type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
-- `cascade` (boolean): When true, also deletes the flows of this type with their notes.
+- `cascade` (boolean): Has no effect: deleting a flow type never deletes a flow.
 
 Examples:
 

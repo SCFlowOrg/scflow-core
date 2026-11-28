@@ -253,7 +253,6 @@ schemas:
         inverse_is_array: true
       - name: type
         type: flow_type
-        on_delete: confirm
         inverse_name: flows
         inverse_is_array: true
       - name: item
@@ -734,9 +733,9 @@ actions:
   - id: scflow/delete_flow_type
     title: Delete a flow type
     description: >-
-      Deletes a flow type. It is refused while flows have this type, unless cascade is true, which
-      deletes those flows first, each as scflow/delete_flow does: the items held by their ends are
-      kept.
+      Deletes a flow type and returns its id. The flows that have this type are kept and have no
+      type afterwards. The cascade parameter is accepted for consistency with the other delete
+      actions and changes nothing.
     kind: action
     destructive: true
     writes:
@@ -746,7 +745,7 @@ actions:
       type: object
       properties:
         id: {type: string, ref: flow_type, description: 'Id or name of the flow type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
-        cascade: {type: boolean, default: false, description: 'When true, also deletes the flows of this type with their notes.'}
+        cascade: {type: boolean, default: false, description: 'Has no effect: deleting a flow type never deletes a flow.'}
       required:
         - id
       additionalProperties: false
@@ -1524,7 +1523,7 @@ actions:
     parameters:
       type: object
       properties:
-        targets: {type: array, minItems: 1, description: The entities to delete., items: {type: object, properties: {schema: {type: string, enum: [actor, actor_type, scope, item, item_type, flow_type, flow, transformation, transformation_type, conversion, item_at_actor], description: The kind of the entity.}, ref: {type: string, minLength: 1, description: Id or name of the entity; the id only for a flow and an item_at_actor.}}, required: [schema, ref], additionalProperties: false}}
+        targets: {type: array, minItems: 1, description: The entities to delete., items: {type: object, properties: {schema: {type: string, enum: [actor, actor_type, scope, item, item_type, flow, transformation, transformation_type, conversion, item_at_actor], description: The kind of the entity.}, ref: {type: string, minLength: 1, description: Id or name of the entity; the id only for a flow and an item_at_actor.}}, required: [schema, ref], additionalProperties: false}}
       required:
         - targets
       additionalProperties: false

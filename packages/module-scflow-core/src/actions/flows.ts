@@ -139,19 +139,20 @@ export const deleteFlowTypeAction: ScflowActionDefinition<DeleteFlowTypeParams, 
   destructive: true,
   title: "Delete a flow type",
   description:
-    "Deletes a flow type. It is refused while flows have this type, unless cascade is true, which deletes those flows first, " +
-    "each as scflow/delete_flow does: the items held by their ends are kept.",
+    "Deletes a flow type and returns its id. The flows that have this type are kept and have no type afterwards. " +
+    "The cascade parameter is accepted for consistency with the other delete actions and changes nothing.",
   parameters: {
     type: "object",
     properties: {
       id: refParam("flow_type", "Id or name of the flow type to delete."),
-      cascade: cascadeParam("When true, also deletes the flows of this type with their notes."),
+      cascade: cascadeParam("Has no effect: deleting a flow type never deletes a flow."),
     },
     required: ["id"],
     additionalProperties: false,
   },
   async run(params, context) {
-    await deleteById(context, "scflow.flow_type", params.id, params.cascade);
+    // The relation `type` of a flow has no `on_delete`, so the engine clears it on the flows of the type.
+    await deleteById(context, "scflow.flow_type", params.id);
     return { id: params.id };
   },
 };

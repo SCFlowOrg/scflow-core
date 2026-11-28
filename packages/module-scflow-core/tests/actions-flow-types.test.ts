@@ -134,22 +134,33 @@ describe("the rules of a flow type", () => {
 });
 
 describe("scflow/delete_flow_type", () => {
-  it("is refused while flows have the type, and deletes them with cascade, keeping the others", async () => {
+  it("keeps the flows of the type, with no type, their items, routes and notes", async () => {
     const { run, query } = await world();
-    const typed = await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug", item: "Pill" });
+    await route(run, "Truck", "Road");
+    const carrying = await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug", item: "Pill", route: "Truck" });
+    const empty = await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug" });
     const other = await run("scflow/create_flow", { source: "Pharmacy", destination: "Plant", type: "Return", item: "Pill" });
-    await run("scflow/add_note", { annotated: typed.id, content: "Daily" });
+    await run("scflow/add_note", { annotated: carrying.id, content: "Daily" });
 
-    await expect(run("scflow/delete_flow_type", { id: "Drug" })).rejects.toMatchObject({ code: "constraint_violation" });
+    await run("scflow/delete_flow_type", { id: "Drug" });
 
-    const impact = await run("scflow/inspect_delete_impact", { targets: [{ schema: "flow_type", ref: "Drug" }] });
-    expect(impact.cascaded.flows.map((flow: { id: string }) => flow.id)).toEqual([typed.id]);
-    expect(impact.counts).toMatchObject({ flows: 1, notes: 1 });
+    expect(await query("flow_type", { "name.en": "Drug" })).toHaveLength(0);
+    const flows = Object.fromEntries((await query("flow")).map((flow) => [flow.id, flow]));
+    expect(Object.keys(flows).sort()).toEqual([carrying.id, empty.id, other.id].sort());
+    expect(flows[carrying.id]).toMatchObject({ item: carrying.item, route: carrying.route });
+    expect(flows[carrying.id].type ?? null).toBeNull();
+    expect(flows[empty.id].type ?? null).toBeNull();
+    expect(flows[other.id].type).toBe(other.type);
+    expect(await query("note")).toHaveLength(1);
+  });
+
+  it("accepts cascade, which deletes no flow, as every delete action takes it", async () => {
+    const { run, query } = await world();
+    const flow = await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug" });
 
     await run("scflow/delete_flow_type", { id: "Drug", cascade: true });
-    expect((await query("flow")).map((flow) => flow.id)).toEqual([other.id]);
-    expect(await query("note")).toHaveLength(0);
-    expect(await query("item_at_actor")).toHaveLength(2);
+
+    expect((await query("flow")).map((kept) => [kept.id, kept.type ?? null])).toEqual([[flow.id, null]]);
   });
 
   it("deletes a type that no flow has", async () => {

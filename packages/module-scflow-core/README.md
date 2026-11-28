@@ -75,9 +75,9 @@ disposal and empty packaging. The direction is independent of the `bidirectional
 The `type` of a flow is optional. A carried item belongs to the domain of the type
 (`flow_item_type_domain`), and a flow without an item takes its domain from its type: that domain
 is among the domains of both ends (`flow_type_end_domain`) and is that of the route type of its
-route (`route_flow_type_domain`). `scflow/delete_flow_type` is refused while flows have the type,
-unless `cascade` is true, which deletes those flows. A flow type is updated with the generated
-action `scflow/update_flow_type`.
+route (`route_flow_type_domain`). `scflow/delete_flow_type` keeps the flows of the type and clears their
+type; its `cascade`, which every delete action takes, changes nothing. A flow type is updated with
+the generated action `scflow/update_flow_type`.
 
 ## Locations
 
