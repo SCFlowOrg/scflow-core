@@ -115,6 +115,29 @@ describe("the rules of a flow type", () => {
     await expect(run("scflow/update_actor", { id: "System", type: "Site" })).resolves.toBeDefined();
   });
 
+  it("refuses a change of actor type that drops the domain of a flow without an item, at either end", async () => {
+    const { run, query } = await world();
+    await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug" });
+    const before = await query("actor");
+
+    for (const id of ["Plant", "Pharmacy"]) {
+      await expect(run("scflow/update_actor", { id, type: "ERP" })).rejects.toMatchObject(refusedBy("flow_type_end_domain"));
+    }
+    expect(await query("actor")).toEqual(before);
+  });
+
+  it("refuses to give a flow a type whose domain one of its ends does not have", async () => {
+    const { run, query } = await world();
+    const typed = await run("scflow/create_flow", { source: "Plant", destination: "System", type: "Ordering" });
+    const untyped = await run("scflow/create_flow", { source: "System", destination: "Plant" });
+
+    for (const id of [typed.id, untyped.id]) {
+      await expect(run("scflow/update_flow", { id, type: "Drug" })).rejects.toMatchObject(refusedBy("flow_type_end_domain"));
+    }
+    const types = Object.fromEntries((await query("flow")).map((flow) => [flow.id, flow.type ?? null]));
+    expect(types).toEqual({ [typed.id]: typed.type, [untyped.id]: null });
+  });
+
   it("gives a flow without an item the domain of its type on a route", async () => {
     const { run } = await world();
     await route(run, "Truck", "Road");
