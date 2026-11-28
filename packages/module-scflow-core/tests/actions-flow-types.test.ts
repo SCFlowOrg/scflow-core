@@ -115,6 +115,16 @@ describe("the rules of a flow type", () => {
     await expect(run("scflow/update_actor", { id: "System", type: "Site" })).resolves.toBeDefined();
   });
 
+  it("says in words what a refused rule requires, naming the source, the destination and the flow type", async () => {
+    const { run } = await world();
+    const refusal = await run("scflow/create_flow", { source: "Plant", destination: "System", type: "Drug" }).catch((error: Error) => error);
+    expect(refusal).toBeInstanceOf(Error);
+    expect((refusal as Error).message).toContain(
+      'the "scflow.flow" with source "Plant", destination "System", type "Drug" breaks the rule "flow_type_end_domain": ' +
+        "the domain of the flow type must be among the domains of the types of both actors",
+    );
+  });
+
   it("refuses a change of actor type that drops the domain of a flow without an item, at either end", async () => {
     const { run, query } = await world();
     await run("scflow/create_flow", { source: "Plant", destination: "Pharmacy", type: "Drug" });

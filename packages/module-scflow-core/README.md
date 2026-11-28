@@ -70,8 +70,9 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
 A `flow_type` says what a flow means, such as a delivery, a return or a disposal, so that a tool
 can give flows a shared look and tell reverse logistics apart. It has one flow domain, tags and a
 `direction`: `forward` (default), `same-level`, for flows between peers such as an overflow
-warehouse or a subcontractor, or `reverse`, for reverse logistics such as returns, recalls,
-disposal and empty packaging. The direction is independent of the `bidirectional` flag of a flow.
+warehouse or a subcontractor, or `reverse`, against the main stream: reverse logistics such as returns, recalls, disposal and
+empty packaging, and a request, an order or a forecast going upstream to ask for a delivery, while
+the delivery itself stays `forward`. The direction is independent of the `bidirectional` flag of a flow.
 The `type` of a flow is optional. A carried item belongs to the domain of the type
 (`flow_item_type_domain`), and a flow without an item takes its domain from its type: that domain
 is among the domains of both ends (`flow_type_end_domain`) and is that of the route type of its

@@ -101,9 +101,9 @@ A flow type also has a **direction**, which says how its flows run relative to t
 | --- | --- |
 | `forward` (default) | Flows along the main stream, from suppliers to customers, such as a delivery |
 | `same-level` | Flows between peers, such as with an overflow warehouse or a subcontractor |
-| `reverse` | Reverse logistics: returns, recalls, disposal, empty packaging |
+| `reverse` | Against the main stream: reverse logistics (returns, recalls, disposal, empty packaging), and a request, an order or a forecast going upstream to ask for a delivery |
 
-The direction says what the flows of a type mean. It is independent of the `bidirectional` flag of a [flow](#flow), which says whether the item may move both ways between its two ends, and no rule relates them.
+The direction says what the flows of a type mean. A delivery is `forward`, and the information flow that asks the supplier for it, a request, an order or a forecast, is `reverse`, because it goes upstream. It is independent of the `bidirectional` flag of a [flow](#flow), which says whether the item may move both ways between its two ends, and no rule relates them.
 
 An `actor_type` can name a `default_scope`: the [scope](#scope) given to an actor created with that type. It is optional, and an explicit scope overrides it.
 

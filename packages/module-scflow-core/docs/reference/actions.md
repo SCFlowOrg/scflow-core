@@ -147,7 +147,7 @@ Flags: writes `flow_type`.
 Parameters:
 - `name` (text or map language → text, required): Name of the flow type, a string or a map of language to string.
 - `domain` (physical | information | financial | service, required): The flow domain of the flows of this type.
-- `direction` (forward | same-level | reverse): Direction of the flows of this type: forward (default), along the main stream from suppliers to customers; same-level, between peers such as an overflow warehouse or a subcontractor; reverse, reverse logistics such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow.
+- `direction` (forward | same-level | reverse): Direction of the flows of this type: forward (default), along the main stream from suppliers to customers; same-level, between peers such as an overflow warehouse or a subcontractor; reverse, against the main stream, as reverse logistics (returns, recalls, disposal, empty packaging) and as a request, an order or a forecast going upstream to ask for a delivery, while the delivery itself stays forward. Independent of the bidirectional flag of a flow.
 - `description` (text or map language → text): Markdown description of the flow type.
 - `tags` (list of string): Tags of the flow type.
 
