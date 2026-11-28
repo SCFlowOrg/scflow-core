@@ -60,7 +60,16 @@ export type {
   DeleteConversionParams,
   UpdateConversionParams,
 } from "./conversions.js";
-export type { CreateFlowParams, DeleteFlowParams, FlowSummary, SetFlowItemParams, UpdateFlowParams } from "./flows.js";
+export type {
+  CreateFlowParams,
+  CreateFlowTypeParams,
+  DeleteFlowParams,
+  DeleteFlowTypeParams,
+  FlowSummary,
+  FlowTypeSummary,
+  SetFlowItemParams,
+  UpdateFlowParams,
+} from "./flows.js";
 export type { DeleteImpactResult, DeleteTargetSchema, InspectDeleteImpactParams } from "./inspect.js";
 export type {
   CreateItemParams,
@@ -78,15 +87,15 @@ export type {
   AddRouteStopParams,
   CreateRouteFromFlowsParams,
   CreateRouteParams,
-  CreateModeParams,
+  CreateRouteTypeParams,
   DeleteRouteParams,
-  DeleteModeParams,
+  DeleteRouteTypeParams,
   InspectRouteParams,
   InspectRouteResult,
   RouteFlowLeadTime,
   RouteStopSummary,
   RouteSummary,
-  ModeSummary,
+  RouteTypeSummary,
   RemoveRouteStopParams,
   SetFlowRouteParams,
   UpdateRouteParams,

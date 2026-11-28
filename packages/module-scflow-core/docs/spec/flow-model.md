@@ -25,7 +25,7 @@ A **flow domain** is the nature of what a flow network moves. It takes one of fo
 | `financial` | Money, value | Cash, assets, liabilities, working capital |
 | `service` | Service units | Work in progress, backlog |
 
-The domain of an item is the domain of its type, and is exactly one; a flow has no domain. An actor's domains are the domains of its type, one or more: a plant is physical and information, a service provider is service and physical. The domain rules on [items at actors](#item-at-actor) and the [item of a flow](#flow) are stated with each of them.
+The domain of an item is the domain of its type, and is exactly one. A [flow](#flow) declares no domain of its own: its domain is that of the item it carries or of its flow type, which agree, so a flow without an item takes its domain from its type, and a flow with neither has no domain. An actor's domains are the domains of its type, one or more: a plant is physical and information, a service provider is service and physical. The domain rules on [items at actors](#item-at-actor) and [flows](#flow) are stated with each of them.
 
 ## Actor
 
@@ -49,6 +49,9 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 - `source` and `destination` are mandatory; the item moves from source to destination.
 - Its `item` is optional: a flow carries at most one [item](#item). The actions set it once and never change or remove it.
 - A flow between an actor and one of its child actors, in either direction, carries an item: it is a transport inside the actor (`internal_flow_item`).
+- Its [flow type](#typing) is optional and can change. Deleting a flow type keeps its flows, with no type. It says what the flow means, such as a delivery, a return or a disposal, which its item cannot say: one item moves in flows of opposite meaning, a drug delivered and then returned.
+- A carried item belongs to the domain of the flow type (`flow_item_type_domain`).
+- The domain of the flow type is among the domains of the source and of the destination, with or without an item (`flow_type_end_domain`).
 - The item's domain is among the domains of the source and of the destination (`carried_item_domain`).
 - Both ends hold the item through an [item at actor](#item-at-actor): what leaves the source and what reaches the destination is held there (`flow_ends_hold_item`).
 - Its `bidirectional` flag is a boolean, `false` by default. When `true`, the item may move in both directions; when `false`, only from source to destination.
@@ -59,14 +62,15 @@ A **flow** connects a source [actor](#actor) to a destination actor, and moves, 
 
 *Definition.*
 
-A **route** says **how** flows travel, where a [flow](#flow) says **what** moves: a shuttle between two plants, a weekly round trip of a truck, an EDI link, a payment term. A **mode** is the category of transport or exchange: road, sea, air, rail, EDI, payment. A **route** is an instance that serves ordered stops with a schedule and lead times, and it has exactly one mode. In everyday logistics "mode" is the category and "route" the instance, and SCFLOW keeps both words in that sense.
+A **route** says **how** flows travel, where a [flow](#flow) says **what** moves: a shuttle between two plants, a weekly round trip of a truck, an EDI link, a payment term. A **route type** is the category of transport or exchange: road, sea, air, rail, EDI, payment. A **route** is an instance that serves ordered stops with a schedule and lead times, and it has exactly one route type. A route type is named like the other [types](#typing), `route_type` as `actor_type` and `item_type`.
 
-- Its `mode` is mandatory and gives its [domain](#flow-domain), exactly one, as an `item_type` does: a route carries one domain.
+- Its `route_type` is mandatory and gives its [domain](#flow-domain), exactly one, as an `item_type` does: a route carries one domain.
 - It has a name, a description and a `schedule`, a free text in one or more languages such as "every Monday" or "daily at 6:00". The format of a structured schedule is left open.
 - It owns its ordered **stops**. A stop is an [actor](#actor), a `sequence` and the `lead_time` from the previous stop, an ISO 8601 duration such as `P2D`, unknown when empty. A point-to-point route has two stops; a round trip has more, and an actor may appear at several stops, so a round trip that returns to its start repeats it last (A, B, C, A). A stop may be the end of no flow, such as a transit hub, or a truck depot where a round trip starts and ends. Two consecutive stops make a **leg**.
 - Its `bidirectional` flag, `false` by default, says that its stops are served in both orders, such as a shuttle between two plants. Each leg then has a lead time in each direction: the reverse lead time of a stop, from it back to the previous stop, equals its lead time unless given.
 - A flow with a route has its source and destination among the stops of the route (`route_stops_hold_flow_ends`).
-- The domain of the item of a flow with a route is the domain of the mode (`route_item_domain`).
+- The domain of the item of a flow with a route is the domain of the route type (`route_item_domain`).
+- The domain of the flow type of a flow with a route is the domain of the route type (`route_flow_type_domain`), so a flow without an item travels only on routes of the domain of its type.
 - The route **serves** the flow (`route_serves_flow`): a stop of the source comes before a stop of the destination, unless the route is bidirectional. A [bidirectional](#flow) flow is served in both directions: the route is bidirectional, or its stops also hold a stop of the destination before a stop of the source, as a round trip A, B, A does.
 - A flow never gets a route implicitly: creating a flow creates no route. A route is created on its own, or from given flows that share their source and destination.
 
@@ -87,9 +91,19 @@ At [scoping granularity](why-modelling-flows.md#scoping-granularity), an item is
 
 *Concept.*
 
-Every [actor](#actor), [item](#item) and [transformation](#transformation) has a type, instance of `actor_type`, `item_type` or `transformation_type` respectively, and a [route](#route) has a `mode`, instance of `mode`. The type, and the mode of a route, is mandatory and can change.
+Every [actor](#actor), [item](#item) and [transformation](#transformation) has a type, instance of `actor_type`, `item_type` or `transformation_type` respectively, a [route](#route) has a `route_type`, instance of `route_type`, and a [flow](#flow) may have a `type`, instance of `flow_type`. The type of an actor, an item or a transformation, and the route type of a route, is mandatory; the type of a flow is optional. Each can change.
 
-A type, like a mode, is data: an instance with a name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type` and `mode`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A [flow](#flow) has neither a type nor a domain. A transformation has no domain either: the domain of each item it consumes or produces comes from that item.
+A type, like a route type, is data: an instance with a name and a description, each in one or more languages, the description written for human and AI readers, per [Natural Language Capture](why-modelling-flows.md#natural-language-capture), and its [domains](#flow-domain) — exactly one for `item_type`, `route_type` and `flow_type`, one or more for `actor_type`, none for `transformation_type`. Adding a type adds an instance and leaves the model unchanged, which is what [Typed Vocabulary](why-modelling-flows.md#typed-vocabulary) requires. A transformation has no domain: the domain of each item it consumes or produces comes from that item.
+
+A flow type also has a **direction**, which says how its flows run relative to the main stream of the network, so that a tool can tell them apart and lay them out:
+
+| Direction | Meaning |
+| --- | --- |
+| `forward` (default) | Flows along the main stream, from suppliers to customers, such as a delivery |
+| `same-level` | Flows between peers, such as with an overflow warehouse or a subcontractor |
+| `reverse` | Reverse logistics: returns, recalls, disposal, empty packaging |
+
+The direction says what the flows of a type mean. It is independent of the `bidirectional` flag of a [flow](#flow), which says whether the item may move both ways between its two ends, and no rule relates them.
 
 An `actor_type` can name a `default_scope`: the [scope](#scope) given to an actor created with that type. It is optional, and an explicit scope overrides it.
 
@@ -175,6 +189,7 @@ erDiagram
     ACTOR_TYPE ||--o{ ACTOR : "types"
     ITEM_TYPE ||--o{ ITEM : "types"
     TRANSFORMATION_TYPE ||--o{ TRANSFORMATION : "types"
+    FLOW_TYPE |o--o{ FLOW : "types"
     ACTOR ||--o{ FLOW : "source of"
     ACTOR ||--o{ FLOW : "destination of"
     ACTOR ||--o{ ITEM_AT_ACTOR : "owns"
@@ -189,7 +204,7 @@ erDiagram
     SCOPE |o--o{ ACTOR_TYPE : "default scope of"
     LOCATION |o--o{ ACTOR : "locates"
     ACTOR |o--o{ ACTOR : "contains"
-    MODE ||--o{ ROUTE : "categorizes"
+    ROUTE_TYPE ||--o{ ROUTE : "categorizes"
     ROUTE ||--o{ ROUTE_STOP : "owns"
     ACTOR ||--o{ ROUTE_STOP : "stop of"
     ROUTE |o--o{ FLOW : "travels on"
@@ -207,5 +222,7 @@ Example types from the base libraries, by [domain](#flow-domain):
 | `information` | Organisation, Planner, ERP system, Customer portal | Message, Order, Invoice, Forecast |
 | `financial` | Organisation, Bank, Financial institution | Currency, Value |
 | `service` | Service provider, Technician, Resource | Service unit, Intervention |
+
+Example flow types of the `physical` domain are Delivery (`forward`), Subcontracting (`same-level`), and Return and Disposal (`reverse`).
 
 An actor type spanning several domains appears in each of them: a Customer is physical, information and financial; a Service provider is service and physical.

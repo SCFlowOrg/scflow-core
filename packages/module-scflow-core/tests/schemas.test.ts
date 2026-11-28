@@ -10,6 +10,7 @@ describe("SCFLOW schemas", () => {
   it("exports the scalar types and the schemas of the model", () => {
     expect(SCHEMAS.scalar_types.map((t) => t.name)).toEqual([
       "flow_domain",
+      "flow_direction",
       "transformation_role",
       "tag",
       "latitude",
@@ -23,6 +24,7 @@ describe("SCFLOW schemas", () => {
       "note",
       "actor_type",
       "item_type",
+      "flow_type",
       "actor",
       "flow",
       "item",
@@ -31,7 +33,7 @@ describe("SCFLOW schemas", () => {
       "transformation",
       "transformation_line",
       "conversion",
-      "mode",
+      "route_type",
       "route",
       "route_stop",
       "scope",
@@ -103,7 +105,8 @@ describe("SCFLOW schemas", () => {
       location: { type: "string", scope: [] },
       actor_type: { type: "localized_string", scope: [] },
       item_type: { type: "localized_string", scope: [] },
-      mode: { type: "localized_string", scope: [] },
+      flow_type: { type: "localized_string", scope: [] },
+      route_type: { type: "localized_string", scope: [] },
       transformation_type: { type: "localized_string", scope: [] },
       scope: { type: "localized_string", scope: [] },
     };
@@ -222,7 +225,7 @@ describe("SCFLOW schemas", () => {
     return { source: actors.after[0].id, destination: actors.after[1].id };
   }
 
-  it("creates a flow with neither a domain nor a type", async () => {
+  it("creates a flow with no domain, and no type unless given", async () => {
     const { mcl, locator } = await setup();
     const { source, destination } = await createActors(mcl, locator);
     const { after } = await mcl.runCommand(locator, {
@@ -232,7 +235,7 @@ describe("SCFLOW schemas", () => {
     });
     expect(after[0]).toMatchObject({ source, destination });
     expect(after[0]).not.toHaveProperty("domain");
-    expect(after[0]).not.toHaveProperty("type");
+    expect(after[0].type ?? null).toBeNull();
   });
 
   it("declares no domain property on a flow", () => {

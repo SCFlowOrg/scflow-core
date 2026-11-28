@@ -1,13 +1,50 @@
 import { type Instance } from "./refs.js";
-import { cascadeParam, type ScflowActionDefinition, localizedTextParam, refParam, tagsParam, unique } from "./params.js";
+import {
+  cascadeParam,
+  FLOW_DOMAINS,
+  localizedTextParam,
+  nullableRefParam,
+  refParam,
+  type ScflowActionDefinition,
+  tagsParam,
+  unique,
+} from "./params.js";
+import { deleteById } from "./delete-impact.js";
 import { createFlow, setFlowItem } from "../flows.js";
 import { localizedText } from "./text.js";
 import { checkRouteServesFlows } from "./routes.js";
+
+/** The directions of a flow type, in the declaration order of the `flow_direction` scalar type. */
+const FLOW_DIRECTIONS = ["forward", "same-level", "reverse"] as const;
+
+/** Parameters of `scflow/create_flow_type`. */
+export interface CreateFlowTypeParams {
+  name: string | Record<string, string>;
+  domain: string;
+  direction?: string;
+  description?: string | Record<string, string>;
+  tags?: string[];
+}
+
+/** Parameters of `scflow/delete_flow_type`. */
+export interface DeleteFlowTypeParams {
+  id: string;
+  cascade?: boolean;
+}
+
+/** A flow type as `scflow/create_flow_type` returns it. */
+export interface FlowTypeSummary {
+  id: string;
+  name: Record<string, string>;
+  domain: string;
+  direction: string;
+}
 
 /** Parameters of `scflow/create_flow`. */
 export interface CreateFlowParams {
   source: string;
   destination: string;
+  type?: string;
   item?: string;
   bidirectional?: boolean;
   route?: string;
@@ -24,6 +61,7 @@ export interface SetFlowItemParams {
 /** Parameters of `scflow/update_flow`. */
 export interface UpdateFlowParams {
   id: string;
+  type?: string | null;
   bidirectional?: boolean;
   description?: string | Record<string, string>;
   tags?: string[];
@@ -36,17 +74,88 @@ export interface DeleteFlowParams {
 }
 
 /**
- * A flow as `scflow/create_flow` returns it; `item` is absent when it carries none and `route` when it travels on none.
- * A flow has no name: its source, destination, item and route identify it.
+ * A flow as `scflow/create_flow` returns it; `type` is absent when it has none, `item` when it carries none and
+ * `route` when it travels on none. A flow has no name: its source, destination, item and route identify it.
  */
 export interface FlowSummary {
   id: string;
   source: string;
   destination: string;
+  type?: string;
   item?: string;
   bidirectional: boolean;
   route?: string;
 }
+
+/** Creates a flow type; see `scflow/create_flow_type` in the topic `scflow/actions`. */
+export const createFlowTypeAction: ScflowActionDefinition<CreateFlowTypeParams, FlowTypeSummary> = {
+  id: "scflow/create_flow_type",
+  writes: ["flow_type"],
+  title: "Create a flow type",
+  description:
+    "Creates a flow type, what a flow means such as a delivery, a return or a disposal, bound to one flow domain " +
+    "(physical, information, financial or service), with the direction of its flows, and returns it.",
+  parameters: {
+    type: "object",
+    properties: {
+      name: localizedTextParam("Name of the flow type, a string or a map of language to string."),
+      domain: { type: "string", enum: [...FLOW_DOMAINS], description: "The flow domain of the flows of this type." },
+      direction: {
+        type: "string",
+        enum: [...FLOW_DIRECTIONS],
+        default: "forward",
+        description:
+          "Direction of the flows of this type: forward (default), along the main stream from suppliers to customers; " +
+          "same-level, between peers such as an overflow warehouse or a subcontractor; reverse, reverse logistics such as " +
+          "returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow.",
+      },
+      description: localizedTextParam("Markdown description of the flow type."),
+      tags: tagsParam("Tags of the flow type."),
+    },
+    required: ["name", "domain"],
+    additionalProperties: false,
+  },
+  async run(params, context) {
+    const input: Record<string, unknown> = { name: await localizedText(context, params.name), domain: params.domain };
+    if (params.direction !== undefined) input.direction = params.direction;
+    if (params.description !== undefined) input.description = await localizedText(context, params.description);
+    const tags = unique(params.tags);
+    if (tags !== undefined) input.tags = tags;
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.flow_type", input });
+    const flowType = after[0] as unknown as Instance;
+    return {
+      id: flowType.id,
+      name: flowType.name as Record<string, string>,
+      domain: flowType.domain as string,
+      direction: flowType.direction as string,
+    };
+  },
+};
+
+/** Deletes a flow type; see `scflow/delete_flow_type` in the topic `scflow/actions`. */
+export const deleteFlowTypeAction: ScflowActionDefinition<DeleteFlowTypeParams, { id: string }> = {
+  id: "scflow/delete_flow_type",
+  writes: ["flow_type", "flow"],
+  destructive: true,
+  title: "Delete a flow type",
+  description:
+    "Deletes a flow type and returns its id. The flows that have this type are kept and have no type afterwards. " +
+    "The cascade parameter is accepted for consistency with the other delete actions and changes nothing.",
+  parameters: {
+    type: "object",
+    properties: {
+      id: refParam("flow_type", "Id or name of the flow type to delete."),
+      cascade: cascadeParam("Has no effect: deleting a flow type never deletes a flow."),
+    },
+    required: ["id"],
+    additionalProperties: false,
+  },
+  async run(params, context) {
+    // The relation `type` of a flow has no `on_delete`, so the engine clears it on the flows of the type.
+    await deleteById(context, "scflow.flow_type", params.id);
+    return { id: params.id };
+  },
+};
 
 /** Creates a flow between two actors; see `scflow/create_flow` in the topic `scflow/actions`. */
 export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSummary> = {
@@ -60,12 +169,15 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
     "A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, " +
     "must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, " +
     "and the actors that do not hold the item yet hold it afterwards. " +
+    "Give type to say what the flow means: its domain must be among the domains of both actors and is the domain of the item; " +
+    "a flow without an item takes its domain from its type. " +
     "Give route to make the flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a route.",
   parameters: {
     type: "object",
     properties: {
       source: refParam("actor", "Id or name of the actor the flow starts from."),
       destination: refParam("actor", "Id or name of the actor the flow arrives at."),
+      type: refParam("flow_type", "Id or name of the flow type; none when omitted."),
       item: refParam("item", "Id or name of the item the flow carries; required between an actor and its child."),
       bidirectional: {
         type: "boolean",
@@ -86,6 +198,7 @@ export const createFlowAction: ScflowActionDefinition<CreateFlowParams, FlowSumm
     const flow = await createFlow(context, context.locator, {
       source: params.source,
       destination: params.destination,
+      ...(params.type === undefined ? {} : { type: params.type }),
       ...(params.item === undefined ? {} : { item: params.item }),
       ...(bidirectional === undefined ? {} : { bidirectional }),
       ...(params.route === undefined ? {} : { route: params.route }),
@@ -105,8 +218,8 @@ export const setFlowItemAction: ScflowActionDefinition<SetFlowItemParams, FlowSu
   description:
     "Sets the item carried by a flow that carries none, and returns the flow. The item of a flow never changes and is never removed: " +
     "the action fails when the flow carries another item, and changes nothing when it already carries this one. " +
-    "The domain of the item must be among the domains of both the source and the destination, and the actors that do not hold " +
-    "the item yet hold it afterwards.",
+    "The domain of the item must be among the domains of both the source and the destination, and is the domain of the flow type " +
+    "when the flow has one. The actors that do not hold the item yet hold it afterwards.",
   parameters: {
     type: "object",
     properties: {
@@ -127,13 +240,16 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
   writes: ["flow"],
   title: "Update a flow",
   description:
-    "Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change. " +
+    "Changes the type, bidirectional flag, description or tags of a flow and returns it. Only the given properties change; " +
+    "type accepts null to remove it. A type whose domain differs from the item or the route of the flow, or is not among the " +
+    "domains of both its ends, is refused. " +
     "The source and the destination of a flow never change: delete the flow and create it again. " +
     "Making a flow bidirectional is refused when its route does not serve the other direction. Its route changes with scflow/set_flow_route.",
   parameters: {
     type: "object",
     properties: {
       id: refParam("flow", "Id of the flow to update."),
+      type: nullableRefParam("flow_type", "Id or name of the new flow type, or null to remove the type of the flow."),
       bidirectional: {
         type: "boolean",
         description: "Whether the flow carries items in both directions.",
@@ -148,6 +264,9 @@ export const updateFlowAction: ScflowActionDefinition<UpdateFlowParams, FlowSumm
   async run(params, context) {
     const patch: Record<string, unknown> = {};
 
+    if (params.type !== undefined) {
+      patch.type = params.type;
+    }
     const bidirectional = params.bidirectional;
     if (bidirectional !== undefined) {
       patch.bidirectional = bidirectional;
@@ -195,7 +314,7 @@ export const deleteFlowAction: ScflowActionDefinition<DeleteFlowParams, { id: st
 };
 
 /** The actions of the lot flows and connectivity, in catalog order. */
-export const FLOW_ACTIONS = [createFlowAction, updateFlowAction, setFlowItemAction, deleteFlowAction] as const;
+export const FLOW_ACTIONS = [createFlowTypeAction, deleteFlowTypeAction, createFlowAction, updateFlowAction, setFlowItemAction, deleteFlowAction] as const;
 
 /** The summary of a flow that the flow actions return. */
 export function summarizeFlow(flow: Instance): FlowSummary {
@@ -205,6 +324,9 @@ export function summarizeFlow(flow: Instance): FlowSummary {
     destination: flow.destination as string,
     bidirectional: flow.bidirectional as boolean,
   };
+  if (flow.type) {
+    summary.type = flow.type as string;
+  }
   if (flow.item) {
     summary.item = flow.item as string;
   }

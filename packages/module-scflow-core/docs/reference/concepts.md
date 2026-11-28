@@ -30,6 +30,17 @@ Extends `annotable`.
 - `description`: localized_markdown
 - `domain`: physical | information | financial | service
 
+### flow_type
+
+A type of flow, with the one flow domain it belongs to and the direction of its flows.
+
+Extends `annotable`.
+
+- `name`: localized_string
+- `description`: localized_markdown
+- `domain`: physical | information | financial | service
+- `direction`: forward | same-level | reverse
+
 ### actor
 
 A place in the network where items are held, consumed, produced or queued.
@@ -52,6 +63,7 @@ Extends `annotable`.
 - `description`: localized_markdown
 - `source`: → actor (required, inverse `outgoing_flows`)
 - `destination`: → actor (required, inverse `incoming_flows`)
+- `type`: → flow_type (inverse `flows`)
 - `item`: → item (inverse `carried_on`)
 - `bidirectional`: boolean
 - `route`: → route (inverse `flows`)
@@ -116,7 +128,7 @@ Extends `annotable`.
 - `from_item`: → item (required)
 - `to_item`: → item (required)
 
-### mode
+### route_type
 
 A category of transport or exchange, such as road, sea, air, rail, EDI or payment, with the one flow domain it belongs to.
 
@@ -128,13 +140,13 @@ Extends `annotable`.
 
 ### route
 
-How flows travel, an instance of a mode, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times.
+How flows travel, an instance of a route type, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times.
 
 Extends `annotable`.
 
 - `name`: string
 - `description`: localized_markdown
-- `mode`: → mode (required, inverse `routes`)
+- `route_type`: → route_type (required, inverse `routes`)
 - `schedule`: localized_string
 - `bidirectional`: boolean
 

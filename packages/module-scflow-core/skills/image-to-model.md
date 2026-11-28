@@ -35,12 +35,20 @@ Map the diagram to the simplest supported model:
   domain. A held item is an `item_at_actor`, not a new item definition for each box.
   Multiple boxes can represent the same held item. Separate buffer sites should
   be child actors, not duplicate held-item entities.
-- A flow connects actors and carries zero or one item. It has no domain field.
+- A flow connects actors and carries zero or one item. It has no domain field:
+  its domain is that of its item or of its flow type.
+- A flow type (`flow_type`) says what a flow means, such as a delivery, a return
+  or a disposal, with one domain and a direction: `forward` (default),
+  `same-level` for flows between peers (overflow warehouse, subcontractor) or
+  `reverse` for reverse logistics (returns, recalls, disposal, empty packaging).
+  The item does not give the type: one item may be delivered and then returned.
+  Type the flows when the labels, colors or legend of the image tell their
+  meanings apart. The direction is not the `bidirectional` flag of a flow.
   Several flows may connect the same actors; preserve distinct observed arrows.
   Do not create one flow per shared domain or invent a multi-item flow/channel.
 - A route says how flows travel: a truck shuttle, a weekly milk run, an EDI link,
   a payment term. `route` is the instance; its category (road, sea, air, rail,
-  EDI, payment) is a `mode`, with one domain, the domain of the items its
+  EDI, payment) is a `route_type`, with one domain, the domain of the items its
   flows carry. A route has ordered stops at actors, each with the lead time from
   the previous stop; a round trip repeats its start as its last stop (A, B, C,
   A). Create a route only when the image shows how goods or messages travel,
@@ -89,9 +97,10 @@ Typical business actions include:
 
 - `scflow/create_scope`, `scflow/create_actor_type`, `scflow/create_actor`;
 - `scflow/create_item_type`, `scflow/create_item`, `scflow/hold_item`;
-- `scflow/create_flow` with its optional `item` parameter;
+- `scflow/create_flow_type`, then `scflow/create_flow` with its optional `type`
+  and `item` parameters;
 - `scflow/create_conversion`;
-- `scflow/create_mode`, then `scflow/create_route_from_flows` for flows
+- `scflow/create_route_type`, then `scflow/create_route_from_flows` for flows
   that share their source and destination, or `scflow/create_route`,
   `scflow/add_route_stop` and `scflow/set_flow_route` for a round trip;
 - `scflow/create_transformation_type`, `scflow/create_transformation`,
