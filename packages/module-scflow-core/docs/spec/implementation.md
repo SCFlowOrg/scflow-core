@@ -58,6 +58,8 @@ A flow network satisfies these eighteen rules. Each is declared on the schema na
 | `route_flow_type_domain` | The domain of the flow type of a flow with a route is the domain of the route type | `checks` of `flow` | [Route](flow-model.md#route) |
 | `route_stop_sequence_unique` | Two stops of a route never share a sequence | `unique` of `route_stop` | [Route](flow-model.md#route) |
 
+Each of these rules, except the `acyclic` one, declares a `message` that says in words what it requires, e.g. "the domain of the flow type must be among the domains of the types of both actors" for `flow_type_end_domain`. A refusal gives that message and names the instances at fault by their names or by what they link: for a flow, its source, its destination and its flow type, as in `the "scflow.flow" with source "Plant", destination "System", type "Drug" breaks the rule "flow_type_end_domain": ...` (see [Rules](../../../core/docs/spec/meta-model.md#rules)).
+
 The `acyclic` rule is reported under the name of its property, `parent_actor`, as every `acyclic` relation is. The other constraints of the same kind, `set_once` on the `item` of a `flow` and `on_delete: confirm` on the relations whose target cannot be deleted without consent, are stated on their property in [the schemas](schemas.md).
 
 ## Route Rules Checked By Actions

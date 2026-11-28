@@ -694,13 +694,14 @@ A rule states what must be true of the instances of a schema, beyond what a cons
 | A value set once | `set_once`, see [Property Constraints](#property-constraints) |
 | A delete refused or cascaded | [`on_delete`](#on-delete) |
 
-**`checks`.** A schema constraint holding a list of named rules. Each entry has a `name`, an optional `when`, and either `require` or `exists`.
+**`checks`.** A schema constraint holding a list of named rules. Each entry has a `name`, an optional `when`, either `require` or `exists`, and an optional `message`.
 
 ```yaml
 name: flow
 checks:
   - name: carried_item_domain
     when: { item: { exists: true } }
+    message: the domain of the item must be among the domains of the types of both actors
     require:
       and:
         - item.type.domain: { in: "${this.source.type.domains}" }
@@ -716,7 +717,9 @@ checks:
 - `each`, allowed only with `exists`, lists values, each tested in turn under the name `each`.
 - A path in `when` or `require` crosses single-valued relations only. It can end on an array property. A rule has no quantifier over instances, so that every rule stays translatable.
 
-**`unique`.** A schema constraint holding a list of named groups of properties. No two instances of the schema, in one dataset, have the same values for a group.
+**`message`.** A text of a `checks` entry or a `unique` group saying in words what the rule requires. A refusal gives it, so that a person or an assistant knows what to fix.
+
+**`unique`.** A schema constraint holding a list of named groups of properties, each with an optional `message`. No two instances of the schema, in one dataset, have the same values for a group.
 
 ```yaml
 name: item_at_actor
@@ -734,7 +737,7 @@ unique:
 
 A rule holds after every transaction, with no severity levels. It is re-evaluated for an instance when that instance is written, and when a path it reads changes: a rule on `flow` that reads `item.type.domain` is re-evaluated when the type of the item changes. An `exists` rule is also re-evaluated when a matching instance is deleted or changed, and the equalities of `with` give the instances concerned. An `unique` group is checked on the instances of the delta.
 
-A breach refuses the whole transaction with `rule_violation`, which gives the name of the rule, the schema and the key of the instance; the rule of an `acyclic` relation is named after its property. A command run outside a transaction is a transaction of its own. With `extends`, a schema keeps the `checks` and `unique` groups of its parent and adds its own. An upgrade that breaks a rule is refused with the list of the instances at fault (see [Model Upgrade](#model-upgrade)).
+A breach refuses the whole transaction with `rule_violation`, which gives the name of the rule, the schema and the key of the instance; the rule of an `acyclic` relation is named after its property. Its message names the instance at fault and the rule, then gives the `message` of the rule, or what failed when the rule has none. A refusal rolls back what the transaction wrote, so the id of an instance it created designates nothing afterwards: the message names an instance by what survives, its qualified name for a schema with [`name_scope`](#names-and-references), else its `name`, else what its single-valued relations link, each named in the same way, and its id only when it has none of these. `details` keeps the id. A command run outside a transaction is a transaction of its own. With `extends`, a schema keeps the `checks` and `unique` groups of its parent and adds its own. An upgrade that breaks a rule is refused with the list of the instances at fault (see [Model Upgrade](#model-upgrade)).
 
 **Ownership of rules.** A module sets rules only on its own schemas and facets, because a rule on a schema of another module would block the actions of that module. An `exists` names a schema of the same module, of a dependency or of `mcl:core`.
 

@@ -89,7 +89,7 @@ A mapping with a single key `set` or `remove`, where that name is not a valid ke
 | `write_outside_action` | a `create`, `update` or `delete` runs outside an action |
 | `write_not_declared` | an action writes a schema outside its `writes`, or a property of a facet of another module |
 | `invalid_parameters` | the parameters of an action break its JSON Schema, or a `ref` matches no instance or several |
-| `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance; two names of one scope that are equal break the rule `name_scope` |
+| `rule_violation` | the transaction breaks a [rule](meta-model.md#rules): it gives the name of the rule, the schema and the key of the instance, and its message the `message` of the rule; two names of one scope that are equal break the rule `name_scope` |
 | `unresolved_reference` | a [reference](meta-model.md#names-and-references) given to the engine designates no instance |
 | `ambiguous_reference` | a reference designates several instances: `details.candidates` lists their qualified names |
 | `not_upgrade_locator` | a `schema` or `scalar_type` is changed against a locator that is not an upgrade locator |
@@ -321,7 +321,7 @@ There is no other case: no markers, nothing to declare on the enclosing entity t
 
 **Topics.** Schema processing checks the documentation topics of a module (see [Topic](meta-model.md#topic)), and each breach is a `constraint_violation`: a topic id is not the namespace of the module, a slash and a name; the same id and locale is declared twice in the module; a `title` or a `summary` is empty; a `kind` or an `audience` is outside its enum; a `locale` is not a language tag; a `file` is not a relative path to a `.md` file inside the package; a name in `uses` is not the id of an action, declared or generated, of the module or of one of its dependencies used with it. The presence of the file is checked where the package is read, as for a skill.
 
-**Rules.** `checks`, `unique`, `acyclic` and `set_once` are validated here, and each breach is a `constraint_violation`: a rule name is declared twice on a schema; a `checks` entry has both `require` and `exists`, or neither; `each` appears without `exists`; a path crosses an array relation; a `unique` group names something other than a direct scalar or single-valued relation; `acyclic` is set on a relation whose target is neither the schema nor an ancestor of it; `set_once` is set with `constant`, on an array or on a map; a rule is set on a schema of another module.
+**Rules.** `checks`, `unique`, `acyclic` and `set_once` are validated here, and each breach is a `constraint_violation`: a rule name is declared twice on a schema; a `checks` entry has both `require` and `exists`, or neither; `each` appears without `exists`; a `message` is not a non-empty text; a path crosses an array relation; a `unique` group names something other than a direct scalar or single-valued relation; `acyclic` is set on a relation whose target is neither the schema nor an ancestor of it; `set_once` is set with `constant`, on an array or on a map; a rule is set on a schema of another module.
 
 **Out of scope: placeholders.** Schema processing does not resolve `${...}` placeholders in `default_value` — those are left as literal strings on the normalized `property`. Placeholder resolution happens later, at instance construction time, per [Placeholders](meta-model.md#placeholders). Schema processing only has to guarantee the string survives normalization untouched.
 

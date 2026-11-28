@@ -409,7 +409,7 @@ properties:
     type: flow_domain
   - name: direction
     type: flow_direction
-    description: "forward (default): along the main stream, from suppliers to customers. same-level: flows between peers, such as an overflow warehouse or a subcontractor. reverse: reverse logistics, such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow."
+    description: "forward (default): along the main stream, from suppliers to customers. same-level: flows between peers, such as an overflow warehouse or a subcontractor. reverse: against the main stream, as reverse logistics (returns, recalls, disposal, empty packaging) and as a request, an order or a forecast going upstream to ask for a delivery, while the delivery itself stays forward. Independent of the bidirectional flag of a flow."
     default_value: forward
 ```
 
@@ -426,6 +426,7 @@ description: A place in the network where items are held, consumed, produced or 
 is_root:
 checks:
   - name: parent_actor_domains
+    message: the domains of an actor must be among the domains of its parent actor
     when: { parent_actor: { exists: true } }
     require: { type.domains: { subset_of: "${this.parent_actor.type.domains}" } }
 name_scope: [parent_actor, scope]
@@ -472,44 +473,52 @@ description: A connection moving one optional item from a source actor to a dest
 is_root:
 checks:
   - name: internal_flow_item
+    message: a flow between an actor and one of its child actors must carry an item
     when:
       or:
         - source.parent_actor: { eq: "${this.destination}" }
         - destination.parent_actor: { eq: "${this.source}" }
     require: { item: { exists: true } }
   - name: carried_item_domain
+    message: the domain of the item must be among the domains of the types of both the source and the destination
     when: { item: { exists: true } }
     require:
       and:
         - item.type.domain: { in: "${this.source.type.domains}" }
         - item.type.domain: { in: "${this.destination.type.domains}" }
   - name: flow_ends_hold_item
+    message: the source and the destination of the flow must both hold its item
     when: { item: { exists: true } }
     each: ["${this.source}", "${this.destination}"]
     exists: { schema: item_at_actor, with: { actor: "${each}", item: "${this.item}" } }
   - name: route_stops_hold_flow_ends
+    message: the source and the destination of a flow on a route must both be stops of that route
     when: { route: { exists: true } }
     each: ["${this.source}", "${this.destination}"]
     exists: { schema: route_stop, with: { route: "${this.route}", actor: "${each}" } }
   - name: route_item_domain
+    message: the domain of the item must be the domain of the type of the route
     when:
       and:
         - route: { exists: true }
         - item: { exists: true }
     require: { item.type.domain: { eq: "${this.route.route_type.domain}" } }
   - name: flow_item_type_domain
+    message: the domain of the item must be the domain of the flow type
     when:
       and:
         - type: { exists: true }
         - item: { exists: true }
     require: { item.type.domain: { eq: "${this.type.domain}" } }
   - name: flow_type_end_domain
+    message: the domain of the flow type must be among the domains of the types of both actors
     when: { type: { exists: true } }
     require:
       and:
         - type.domain: { in: "${this.source.type.domains}" }
         - type.domain: { in: "${this.destination.type.domains}" }
   - name: route_flow_type_domain
+    message: the domain of the flow type must be the domain of the type of the route
     when:
       and:
         - route: { exists: true }
@@ -517,6 +526,7 @@ checks:
     require: { type.domain: { eq: "${this.route.route_type.domain}" } }
 unique:
   - name: flow_unique
+    message: no two flows may have the same source, destination, item and route
     properties: [source, destination, item, route]
 properties:
   - name: description
@@ -590,9 +600,11 @@ extends: annotable
 description: An item held at an actor
 checks:
   - name: held_item_domain
+    message: the domain of the item must be among the domains of the type of the actor
     require: { item.type.domain: { in: "${this.actor.type.domains}" } }
 unique:
   - name: held_item_unique
+    message: an actor holds a given item once
     properties: [actor, item]
 properties:
   - name: actor
@@ -675,9 +687,11 @@ extends: annotable
 description: One item consumed or produced by a transformation
 checks:
   - name: transformation_line_actor
+    message: the held item of a line must be held at the actor of the transformation
     require: { held_item.actor: { eq: "${this.transformation.actor}" } }
 unique:
   - name: transformation_line_unique
+    message: a transformation has one line for a given held item and role
     properties: [transformation, held_item, role]
 properties:
   - name: transformation
@@ -707,9 +721,11 @@ extends: annotable
 description: A conversion of one item into another item at an actor
 checks:
   - name: conversion_item_domain
+    message: the two items of a conversion must be in the same domain
     require: { from_item.type.domain: { eq: "${this.to_item.type.domain}" } }
 unique:
   - name: conversion_unique
+    message: an actor has one conversion from a given item to a given item
     properties: [actor, from_item, to_item]
 properties:
   - name: description
@@ -797,6 +813,7 @@ extends: annotable
 description: One ordered stop of a route at an actor, with the lead time from the previous stop
 unique:
   - name: route_stop_sequence_unique
+    message: two stops of a route cannot share a sequence
     properties: [route, sequence]
 properties:
   - name: route

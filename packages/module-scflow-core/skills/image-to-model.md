@@ -40,7 +40,9 @@ Map the diagram to the simplest supported model:
 - A flow type (`flow_type`) says what a flow means, such as a delivery, a return
   or a disposal, with one domain and a direction: `forward` (default),
   `same-level` for flows between peers (overflow warehouse, subcontractor) or
-  `reverse` for reverse logistics (returns, recalls, disposal, empty packaging).
+  `reverse` for what goes against the main stream: reverse logistics (returns,
+  recalls, disposal, empty packaging) and a request, an order or a forecast going
+  upstream to ask for a delivery. The delivery itself stays `forward`.
   The item does not give the type: one item may be delivered and then returned.
   Type the flows when the labels, colors or legend of the image tell their
   meanings apart. The direction is not the `bidirectional` flag of a flow.

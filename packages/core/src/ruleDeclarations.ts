@@ -20,16 +20,20 @@ export interface CheckRule {
   exists?: { schema: string; with: TransientObject };
   /** With `exists` only: values tested in turn under the name `each`, a list or one placeholder giving one. */
   each?: TransientValue;
+  /** What the rule requires, in words, given by a refusal. */
+  message?: string;
 }
 
 /** A group of `unique`: no two instances share the values of its properties. */
 export interface UniqueGroup {
   name: string;
   properties: string[];
+  /** What the group requires, in words, given by a refusal. */
+  message?: string;
 }
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const CHECK_KEYS = new Set(["name", "when", "require", "exists", "each"]);
+const CHECK_KEYS = new Set(["name", "when", "require", "exists", "each", "message"]);
 
 function isMapping(value: unknown): value is TransientObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -37,6 +41,12 @@ function isMapping(value: unknown): value is TransientObject {
 
 function fail(schemaName: string, message: string): never {
   throw modelError("constraint_violation", `schema "${schemaName}": ${message}`);
+}
+
+function readMessage(schemaName: string, raw: TransientValue | undefined, where: string): { message?: string } {
+  if (raw === undefined) return {};
+  if (typeof raw !== "string" || raw.trim() === "") fail(schemaName, `the "message" of ${where} is a non-empty text`);
+  return { message: raw };
 }
 
 /** The `checks` of a schema's constraints, as stored. */
@@ -61,7 +71,7 @@ function readCheck(schemaName: string, raw: TransientValue, i: number): CheckRul
   if (raw.each !== undefined && !hasExists) fail(schemaName, `${where} has "each", which goes with "exists" only`);
   if (raw.when !== undefined && !isMapping(raw.when)) fail(schemaName, `the "when" of ${where} must be a filter mapping`);
   if (hasRequire && !isMapping(raw.require)) fail(schemaName, `the "require" of ${where} must be a filter mapping`);
-  const check: CheckRule = { name: raw.name };
+  const check: CheckRule = { name: raw.name, ...readMessage(schemaName, raw.message, where) };
   if (raw.when !== undefined) check.when = raw.when as Filter;
   if (hasRequire) check.require = raw.require as Filter;
   if (hasExists) {
@@ -83,8 +93,8 @@ function readCheck(schemaName: string, raw: TransientValue, i: number): CheckRul
 
 function readUniqueGroup(schemaName: string, raw: TransientValue, i: number, properties: NormalizedProperty[]): UniqueGroup {
   if (!isMapping(raw)) fail(schemaName, `unique[${i}] must be a mapping`);
-  const extra = Object.keys(raw).filter((k) => k !== "name" && k !== "properties");
-  if (extra.length > 0) fail(schemaName, `unique[${i}] takes "name" and "properties" only`);
+  const extra = Object.keys(raw).filter((k) => k !== "name" && k !== "properties" && k !== "message");
+  if (extra.length > 0) fail(schemaName, `unique[${i}] takes "name", "properties" and "message" only`);
   if (typeof raw.name !== "string" || !IDENTIFIER.test(raw.name)) fail(schemaName, `unique[${i}] needs a "name" that is an identifier`);
   const props = raw.properties;
   if (!Array.isArray(props) || props.length === 0 || props.some((p) => typeof p !== "string")) {
@@ -97,7 +107,7 @@ function readUniqueGroup(schemaName: string, raw: TransientValue, i: number, pro
       fail(schemaName, `the unique group "${raw.name}" names "${name}", which is not a scalar nor a single-valued relation`);
     }
   }
-  return { name: raw.name, properties: [...(props as string[])] };
+  return { name: raw.name, properties: [...(props as string[])], ...readMessage(schemaName, raw.message, `the unique group "${raw.name}"`) };
 }
 
 /**
