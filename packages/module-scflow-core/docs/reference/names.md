@@ -15,11 +15,12 @@ Give the name as short as it stays unambiguous, and never an id that you were no
 | --- | --- | --- | --- |
 | `actor_type` | localized | the dataset | `<actor_type>` |
 | `item_type` | localized | the dataset | `<item_type>` |
+| `flow_type` | localized | the dataset | `<flow_type>` |
 | `actor` | plain text | the first of `parent_actor`, `scope` that is set | `<parent_actor> / <actor>` |
 | `item` | plain text | the dataset | `<item>` |
 | `transformation_type` | localized | the dataset | `<transformation_type>` |
 | `transformation` | plain text | the first of `actor` that is set | `<actor> / <transformation>` |
-| `mode` | localized | the dataset | `<mode>` |
+| `route_type` | localized | the dataset | `<route_type>` |
 | `route` | plain text | the dataset | `<route>` |
 | `scope` | localized | the dataset | `<scope>` |
 | `location` | plain text | the dataset | `<location>` |

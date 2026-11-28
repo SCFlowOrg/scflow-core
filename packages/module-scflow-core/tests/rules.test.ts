@@ -118,8 +118,8 @@ describe("the rules on the structure", () => {
     const { run, query } = await world();
     await run("scflow/hold_item", { actor: "Plant", item: "Bolt" });
     await run("scflow/hold_item", { actor: "Depot", item: "Bolt" });
-    await run("scflow/create_mode", { name: "Road", domain: "physical" });
-    await run("scflow/create_route", { name: "Shuttle", mode: "Road" });
+    await run("scflow/create_route_type", { name: "Road", domain: "physical" });
+    await run("scflow/create_route", { name: "Shuttle", route_type: "Road" });
     await run("scflow/add_route_stop", { route: "Shuttle", actor: "Plant" });
     await run("scflow/add_route_stop", { route: "Shuttle", actor: "Depot", lead_time: "P1D" });
     const first = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });

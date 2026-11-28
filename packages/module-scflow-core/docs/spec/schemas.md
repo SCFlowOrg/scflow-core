@@ -41,7 +41,14 @@ erDiagram
         localized_markdown description
         boolean bidirectional
     }
-    MODE {
+    FLOW_TYPE {
+        string id PK
+        localized_string name
+        localized_markdown description
+        flow_domain domain
+        flow_direction direction
+    }
+    ROUTE_TYPE {
         string id PK
         localized_string name
         localized_markdown description
@@ -104,6 +111,7 @@ erDiagram
     ACTOR_TYPE ||--o{ ACTOR : "type"
     ITEM_TYPE ||--o{ ITEM : "type"
     TRANSFORMATION_TYPE ||--o{ TRANSFORMATION : "type"
+    FLOW_TYPE |o--o{ FLOW : "type (flows)"
     ACTOR ||--o{ FLOW : "source"
     ACTOR ||--o{ FLOW : "destination"
     ACTOR ||--o{ ITEM_AT_ACTOR : "owns (held_items)"
@@ -119,7 +127,7 @@ erDiagram
     LOCATION |o--o{ ACTOR : "location (actors)"
     ACTOR |o--o{ ACTOR : "parent_actor (child_actors)"
     SCOPE |o--o{ ACTOR_TYPE : "default_scope"
-    MODE ||--o{ ROUTE : "mode (routes)"
+    ROUTE_TYPE ||--o{ ROUTE : "route_type (routes)"
     ROUTE ||--o{ ROUTE_STOP : "owns (stops)"
     ACTOR ||--o{ ROUTE_STOP : "actor (route_stops)"
     ROUTE |o--o{ FLOW : "route (flows)"
@@ -137,7 +145,19 @@ extends: string
 enum: [physical, information, financial, service]
 ```
 
-The values of a [Flow Domain](flow-model.md#flow-domain), used by `actor_type` and `item_type`.
+The values of a [Flow Domain](flow-model.md#flow-domain), used by `actor_type`, `item_type`, `flow_type` and `route_type`.
+
+## flow_direction
+
+*Schema.*
+
+```yaml
+name: flow_direction
+extends: string
+enum: [forward, same-level, reverse]
+```
+
+The direction of the flows of a [flow type](#flow_type), per [Typing](flow-model.md#typing): `forward` along the main stream, `same-level` between peers, `reverse` for reverse logistics.
 
 ## transformation_role
 
@@ -235,6 +255,7 @@ Each schema names the business action that takes the place of a generated CRUD o
 | `note` | `scflow/add_note` | `scflow/update_note` | `scflow/remove_note` |
 | `actor_type` | `scflow/create_actor_type` | generated | `scflow/delete_actor_type` |
 | `item_type` | `scflow/create_item_type` | generated | `scflow/delete_item_type` |
+| `flow_type` | `scflow/create_flow_type` | generated | `scflow/delete_flow_type` |
 | `actor` | `scflow/create_actor` | `scflow/update_actor` | `scflow/delete_actor` |
 | `flow` | `scflow/create_flow` | `scflow/update_flow` | `scflow/delete_flow` |
 | `item` | `scflow/create_item` | `scflow/update_item` | `scflow/delete_item` |
@@ -243,7 +264,7 @@ Each schema names the business action that takes the place of a generated CRUD o
 | `transformation` | `scflow/create_transformation` | generated | `scflow/delete_transformation` |
 | `transformation_line` | `scflow/connect_transformation_line` | generated | generated |
 | `conversion` | `scflow/create_conversion` | `scflow/update_conversion` | `scflow/delete_conversion` |
-| `mode` | `scflow/create_mode` | generated | `scflow/delete_mode` |
+| `route_type` | `scflow/create_route_type` | generated | `scflow/delete_route_type` |
 | `route` | `scflow/create_route` | `scflow/update_route` | `scflow/delete_route` |
 | `route_stop` | `scflow/add_route_stop` | `scflow/update_route_stop` | `scflow/remove_route_stop` |
 | `scope` | `scflow/create_scope` | generated | `scflow/delete_scope` |
@@ -267,7 +288,7 @@ An instance has a generated id that no interface shows; a person, a script or an
 | `actor` | `string` | `[parent_actor, scope]`: the parent actor, else the scope of the actor, else the dataset |
 | `transformation` | `string` | `[actor]`: the actor that executes it |
 | `item`, `route`, `location` | `string` | `[]`: the dataset |
-| `actor_type`, `item_type`, `mode`, `transformation_type`, `scope` | `localized_string` | `[]`: the dataset |
+| `actor_type`, `item_type`, `flow_type`, `route_type`, `transformation_type`, `scope` | `localized_string` | `[]`: the dataset |
 
 - **A plain `string`** is the name of an instance that is the same for every stakeholder: an actor, an item, a route, a transformation, a location. It is also where a user puts a code, such as a site code or a SKU; what else there is to say goes in the description.
 - **A `localized_string`** is the name of a vocabulary that a reader wants in their language: the types and the scopes. An action takes a plain string, which it stores in the source language of the dataset, or a map of language to text.
@@ -367,6 +388,33 @@ properties:
 
 Per [Typing](flow-model.md#typing). `items` is generated from `item`'s `type` relation.
 
+## flow_type
+
+*Schema.*
+
+```yaml
+name: flow_type
+extends: annotable
+description: A type of flow, with the one flow domain it belongs to and the direction of its flows
+is_root:
+has_description:
+name_scope: []
+properties:
+  - name: name
+    type: localized_string
+    min_length: 1
+  - name: description
+    type: localized_markdown
+  - name: domain
+    type: flow_domain
+  - name: direction
+    type: flow_direction
+    description: "forward (default): along the main stream, from suppliers to customers. same-level: flows between peers, such as an overflow warehouse or a subcontractor. reverse: reverse logistics, such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow."
+    default_value: forward
+```
+
+Per [Typing](flow-model.md#typing). `flows` is generated from `flow`'s `type` relation. `direction` says what the flows of the type mean for the shape of the network; it is independent of `flow.bidirectional`, and no rule relates them.
+
 ## actor
 
 *Schema.*
@@ -448,7 +496,25 @@ checks:
       and:
         - route: { exists: true }
         - item: { exists: true }
-    require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
+    require: { item.type.domain: { eq: "${this.route.route_type.domain}" } }
+  - name: flow_item_type_domain
+    when:
+      and:
+        - type: { exists: true }
+        - item: { exists: true }
+    require: { item.type.domain: { eq: "${this.type.domain}" } }
+  - name: flow_type_end_domain
+    when: { type: { exists: true } }
+    require:
+      and:
+        - type.domain: { in: "${this.source.type.domains}" }
+        - type.domain: { in: "${this.destination.type.domains}" }
+  - name: route_flow_type_domain
+    when:
+      and:
+        - route: { exists: true }
+        - type: { exists: true }
+    require: { type.domain: { eq: "${this.route.route_type.domain}" } }
 unique:
   - name: flow_unique
     properties: [source, destination, item, route]
@@ -466,6 +532,11 @@ properties:
     on_delete: confirm
     mandatory:
     inverse_name: incoming_flows
+    inverse_is_array:
+  - name: type
+    type: flow_type
+    on_delete: confirm
+    inverse_name: flows
     inverse_is_array:
   - name: item
     type: item
@@ -664,12 +735,12 @@ properties:
 
 Per [Conversion](flow-model.md#conversion). A conversion has no name (see [Names](#names)); `conversion_unique` identifies it. `from_item` and `to_item` have no inverse relation. The identical domains of the two items are the rule `conversion_item_domain` of [Network Rules](implementation.md#network-rules).
 
-## mode
+## route_type
 
 *Schema.*
 
 ```yaml
-name: mode
+name: route_type
 extends: annotable
 description: A category of transport or exchange, such as road, sea, air, rail, EDI or payment, with the one flow domain it belongs to
 is_root:
@@ -685,7 +756,7 @@ properties:
     type: flow_domain
 ```
 
-Per [Route](flow-model.md#route) and [Typing](flow-model.md#typing). A mode is the category; a [route](#route) is the instance. `routes` is generated from `route`'s `mode` relation.
+Per [Route](flow-model.md#route) and [Typing](flow-model.md#typing). A route type is the category; a [route](#route) is the instance. `routes` is generated from `route`'s `route_type` relation.
 
 ## route
 
@@ -694,7 +765,7 @@ Per [Route](flow-model.md#route) and [Typing](flow-model.md#typing). A mode is t
 ```yaml
 name: route
 extends: annotable
-description: How flows travel, an instance of a mode, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
+description: How flows travel, an instance of a route type, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
 is_root:
 name_scope: []
 properties:
@@ -703,8 +774,8 @@ properties:
     min_length: 1
   - name: description
     type: localized_markdown
-  - name: mode
-    type: mode
+  - name: route_type
+    type: route_type
     on_delete: confirm
     mandatory:
     inverse_name: routes

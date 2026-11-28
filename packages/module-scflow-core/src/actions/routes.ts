@@ -18,16 +18,16 @@ import { DURATION_PATTERN, leadTimeOnRoute } from "../routes.js";
 import { deleteById } from "./delete-impact.js";
 import { type FlowSummary, summarizeFlow } from "./flows.js";
 
-/** Parameters of `scflow/create_mode`. */
-export interface CreateModeParams {
+/** Parameters of `scflow/create_route_type`. */
+export interface CreateRouteTypeParams {
   name: string | Record<string, string>;
   domain: string;
   description?: string | Record<string, string>;
   tags?: string[];
 }
 
-/** Parameters of `scflow/delete_mode`. */
-export interface DeleteModeParams {
+/** Parameters of `scflow/delete_route_type`. */
+export interface DeleteRouteTypeParams {
   id: string;
   cascade?: boolean;
 }
@@ -35,7 +35,7 @@ export interface DeleteModeParams {
 /** Parameters of `scflow/create_route`. */
 export interface CreateRouteParams {
   name: string;
-  mode: string;
+  route_type: string;
   description?: string | Record<string, string>;
   schedule?: string | Record<string, string>;
   bidirectional?: boolean;
@@ -47,7 +47,7 @@ export interface UpdateRouteParams {
   id: string;
   name?: string;
   description?: string | Record<string, string> | null;
-  mode?: string;
+  route_type?: string;
   schedule?: string | Record<string, string> | null;
   bidirectional?: boolean;
   tags?: string[];
@@ -93,7 +93,7 @@ export interface SetFlowRouteParams {
 /** Parameters of `scflow/create_route_from_flows`. */
 export interface CreateRouteFromFlowsParams {
   flows: string[];
-  mode: string;
+  route_type: string;
   name: string;
   description?: string | Record<string, string>;
   schedule?: string | Record<string, string>;
@@ -108,8 +108,8 @@ export interface InspectRouteParams {
   id: string;
 }
 
-/** A mode as `scflow/create_mode` returns it. */
-export interface ModeSummary {
+/** A route type as `scflow/create_route_type` returns it. */
+export interface RouteTypeSummary {
   id: string;
   name: Record<string, string>;
   domain: string;
@@ -129,7 +129,7 @@ export interface RouteStopSummary {
 export interface RouteSummary {
   id: string;
   name: string;
-  mode: string;
+  route_type: string;
   bidirectional: boolean;
   schedule?: Record<string, string>;
   stops: RouteStopSummary[];
@@ -151,7 +151,7 @@ export interface RouteFlowLeadTime {
 
 /** The result of `scflow/inspect_route`. */
 export interface InspectRouteResult extends RouteSummary {
-  /** The flow domain of the route, the domain of its mode. */
+  /** The flow domain of the route, the domain of its route type. */
   domain: string;
   /** The flows of the route with their lead times. */
   lead_times: RouteFlowLeadTime[];
@@ -172,21 +172,21 @@ function nullableDurationParam(description: string): ParamProperty {
   return { type: ["string", "null"], pattern: DURATION_PATTERN, description } as unknown as ParamProperty;
 }
 
-/** Creates a mode; see `scflow/create_mode` in the topic `scflow/actions`. */
-export const createModeAction: ScflowActionDefinition<CreateModeParams, ModeSummary> = {
-  id: "scflow/create_mode",
-  writes: ["mode"],
-  title: "Create a mode",
+/** Creates a route type; see `scflow/create_route_type` in the topic `scflow/actions`. */
+export const createRouteTypeAction: ScflowActionDefinition<CreateRouteTypeParams, RouteTypeSummary> = {
+  id: "scflow/create_route_type",
+  writes: ["route_type"],
+  title: "Create a route type",
   description:
-    "Creates a mode, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound to one flow domain " +
-    "(physical, information, financial or service), and returns it. A mode is the category; a route is the instance.",
+    "Creates a route type, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound to one flow domain " +
+    "(physical, information, financial or service), and returns it. A route type is the category; a route is the instance.",
   parameters: {
     type: "object",
     properties: {
-      name: localizedTextParam("Name of the mode, a string or a map of language to string."),
-      domain: { type: "string", enum: [...FLOW_DOMAINS], description: "The flow domain of the routes of this mode." },
-      description: localizedTextParam("Markdown description of the mode."),
-      tags: tagsParam("Tags of the mode."),
+      name: localizedTextParam("Name of the route type, a string or a map of language to string."),
+      domain: { type: "string", enum: [...FLOW_DOMAINS], description: "The flow domain of the routes of this route type." },
+      description: localizedTextParam("Markdown description of the route type."),
+      tags: tagsParam("Tags of the route type."),
     },
     required: ["name", "domain"],
     additionalProperties: false,
@@ -196,32 +196,32 @@ export const createModeAction: ScflowActionDefinition<CreateModeParams, ModeSumm
     if (params.description !== undefined) input.description = await localizedText(context, params.description);
     const tags = unique(params.tags);
     if (tags !== undefined) input.tags = tags;
-    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.mode", input });
-    const mode = after[0] as unknown as Instance;
-    return { id: mode.id, name: mode.name as Record<string, string>, domain: mode.domain as string };
+    const { after } = await context.runCommand(context.locator, { kind: "create", schema: "scflow.route_type", input });
+    const routeType = after[0] as unknown as Instance;
+    return { id: routeType.id, name: routeType.name as Record<string, string>, domain: routeType.domain as string };
   },
 };
 
-/** Deletes a mode; see `scflow/delete_mode` in the topic `scflow/actions`. */
-export const deleteModeAction: ScflowActionDefinition<DeleteModeParams, { id: string }> = {
-  id: "scflow/delete_mode",
-  writes: ["mode", "route", "route_stop", "flow"],
+/** Deletes a route type; see `scflow/delete_route_type` in the topic `scflow/actions`. */
+export const deleteRouteTypeAction: ScflowActionDefinition<DeleteRouteTypeParams, { id: string }> = {
+  id: "scflow/delete_route_type",
+  writes: ["route_type", "route", "route_stop", "flow"],
   destructive: true,
-  title: "Delete a mode",
+  title: "Delete a route type",
   description:
-    "Deletes a mode. It is refused while routes have this mode, unless cascade is true, which deletes those routes first, " +
+    "Deletes a route type. It is refused while routes have this route type, unless cascade is true, which deletes those routes first, " +
     "each with the cascade of scflow/delete_route: their stops are deleted and their flows are kept, on no route.",
   parameters: {
     type: "object",
     properties: {
-      id: refParam("mode", "Id or name of the mode to delete."),
-      cascade: cascadeParam("When true, also deletes the routes of this mode with their stops and notes; their flows are kept."),
+      id: refParam("route_type", "Id or name of the route type to delete."),
+      cascade: cascadeParam("When true, also deletes the routes of this route type with their stops and notes; their flows are kept."),
     },
     required: ["id"],
     additionalProperties: false,
   },
   async run(params, context) {
-    await deleteById(context, "scflow.mode", params.id, params.cascade);
+    await deleteById(context, "scflow.route_type", params.id, params.cascade);
     return { id: params.id };
   },
 };
@@ -232,20 +232,20 @@ export const createRouteAction: ScflowActionDefinition<CreateRouteParams, RouteS
   writes: ["route"],
   title: "Create a route",
   description:
-    "Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI link), of a given mode, " +
+    "Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI link), of a given route type, " +
     "with no stop and no flow yet, and returns it. Add its stops with scflow/add_route_stop and assign flows with scflow/set_flow_route. " +
     "Set bidirectional to true when the stops are served in both orders; it is false otherwise. The schedule is a free text.",
   parameters: {
     type: "object",
     properties: {
       name: textParam("Name of the route, unique among the routes."),
-      mode: refParam("mode", "Id or name of the mode."),
+      route_type: refParam("route_type", "Id or name of the route type."),
       description: localizedTextParam("Markdown description of the route."),
       schedule: localizedTextParam("Schedule of the route as a free text, such as every Monday."),
       bidirectional: { type: "boolean", description: "Whether the stops are served in both orders; false when omitted." },
       tags: tagsParam("Tags of the route."),
     },
-    required: ["name", "mode"],
+    required: ["name", "route_type"],
     additionalProperties: false,
   },
   async run(params, context) {
@@ -260,8 +260,8 @@ export const updateRouteAction: ScflowActionDefinition<UpdateRouteParams, RouteS
   writes: ["route"],
   title: "Update a route",
   description:
-    "Changes the name, description, mode, schedule, bidirectional flag or tags of a route and returns it. Only the given properties " +
-    "change; null clears the description or the schedule. A change of mode whose domain differs from the items of the flows of the " +
+    "Changes the name, description, route type, schedule, bidirectional flag or tags of a route and returns it. Only the given properties " +
+    "change; null clears the description or the schedule. A change of route type whose domain differs from the items or the types of the flows of the " +
     "route is refused, and so is making a route one-way while a flow needs it in the other direction.",
   parameters: {
     type: "object",
@@ -269,7 +269,7 @@ export const updateRouteAction: ScflowActionDefinition<UpdateRouteParams, RouteS
       id: refParam("route", "Id or name of the route to update."),
       name: textParam("New name of the route."),
       description: nullableLocalizedTextParam("New Markdown description; each given language replaces the same language, the others are kept. null removes the description."),
-      mode: refParam("mode", "Id or name of the new mode."),
+      route_type: refParam("route_type", "Id or name of the new route type."),
       schedule: nullableLocalizedTextParam("New schedule; each given language replaces the same language, the others are kept. null removes the schedule."),
       bidirectional: { type: "boolean", description: "Whether the stops are served in both orders." },
       tags: tagsParam("New tags; they replace the current ones."),
@@ -284,7 +284,7 @@ export const updateRouteAction: ScflowActionDefinition<UpdateRouteParams, RouteS
     if (params.description !== undefined) {
       patch.description = params.description === null ? null : { set: await localizedText(context, params.description) };
     }
-    if (params.mode !== undefined) patch.mode = params.mode;
+    if (params.route_type !== undefined) patch.route_type = params.route_type;
     if (params.schedule !== undefined) {
       patch.schedule = params.schedule === null ? null : { set: await localizedText(context, params.schedule) };
     }
@@ -440,8 +440,8 @@ export const setFlowRouteAction: ScflowActionDefinition<SetFlowRouteParams, Flow
   description:
     "Makes a flow travel on a route, or on none with null, and returns the flow. A flow travels on at most one route, so this replaces " +
     "its route. The source and the destination of the flow must be stops of the route, a stop of the source before a stop of the " +
-    "destination unless the route is bidirectional; a bidirectional flow also needs the other direction. The item of the flow must " +
-    "be in the domain of the mode.",
+    "destination unless the route is bidirectional; a bidirectional flow also needs the other direction. The item and the type of the flow must " +
+    "be in the domain of the route type.",
   parameters: {
     type: "object",
     properties: {
@@ -469,15 +469,15 @@ export const createRouteFromFlowsAction: ScflowActionDefinition<CreateRouteFromF
   writes: ["route", "route_stop", "flow"],
   title: "Create a route from flows",
   description:
-    "Creates a route of a given mode for flows that share their source and their destination and travel on no route yet, with two " +
-    "stops, the source then the destination, makes the flows travel on it and returns it. The items of the flows must be in the " +
-    "domain of the mode. lead_time is the ISO 8601 duration from the source to the destination. The route is bidirectional " +
+    "Creates a route of a given route type for flows that share their source and their destination and travel on no route yet, with two " +
+    "stops, the source then the destination, makes the flows travel on it and returns it. The items and the types of the flows must be in the " +
+    "domain of the route type. lead_time is the ISO 8601 duration from the source to the destination. The route is bidirectional " +
     "when bidirectional is true, or when it is omitted and one of the flows is bidirectional.",
   parameters: {
     type: "object",
     properties: {
       flows: { type: "array", minItems: 1, items: { type: "string", ref: "flow" }, description: "Ids of the flows, at least one." } as unknown as ParamProperty,
-      mode: refParam("mode", "Id or name of the mode."),
+      route_type: refParam("route_type", "Id or name of the route type."),
       name: textParam("Name of the route, unique among the routes."),
       description: localizedTextParam("Markdown description of the route."),
       schedule: localizedTextParam("Schedule of the route as a free text, such as every Monday."),
@@ -486,7 +486,7 @@ export const createRouteFromFlowsAction: ScflowActionDefinition<CreateRouteFromF
       reverse_lead_time: durationParam("ISO 8601 duration from the destination back to the source; lead_time when omitted."),
       tags: tagsParam("Tags of the route."),
     },
-    required: ["flows", "mode", "name"],
+    required: ["flows", "route_type", "name"],
     additionalProperties: false,
   },
   async run(params, context) {
@@ -525,7 +525,7 @@ export const inspectRouteAction: ScflowActionDefinition<InspectRouteParams, Insp
   kind: "read",
   title: "Inspect a route",
   description:
-    "Describes a route: its mode and domain, its stops in order with their lead times, and each of its flows with its lead time, the " +
+    "Describes a route: its route type and domain, its stops in order with their lead times, and each of its flows with its lead time, the " +
     "sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the " +
     "lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of " +
     "no flow of the route, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.",
@@ -539,7 +539,7 @@ export const inspectRouteAction: ScflowActionDefinition<InspectRouteParams, Insp
   },
   async run(params, context) {
     const route = await loadInstance(context, "scflow.route", params.id);
-    const mode = await loadInstance(context, "scflow.mode", route.mode);
+    const routeType = await loadInstance(context, "scflow.route_type", route.route_type);
     const summary = await summarizeRoute(context, route);
     const stops = await stopsOf(context, route.id);
     const flows = await query(context, "scflow.flow", { route: route.id });
@@ -561,14 +561,14 @@ export const inspectRouteAction: ScflowActionDefinition<InspectRouteParams, Insp
     });
     const ends = new Set(flows.flatMap((flow) => [flow.source as string, flow.destination as string]));
     const stops_without_flow = stops.filter((stop) => !ends.has(stop.actor as string)).map((stop) => stop.id);
-    return { ...summary, domain: mode.domain as string, lead_times, stops_without_flow };
+    return { ...summary, domain: routeType.domain as string, lead_times, stops_without_flow };
   },
 };
 
 /** The actions of the lot routes, in catalog order. */
 export const ROUTE_ACTIONS = [
-  createModeAction,
-  deleteModeAction,
+  createRouteTypeAction,
+  deleteRouteTypeAction,
   createRouteAction,
   updateRouteAction,
   deleteRouteAction,
@@ -618,7 +618,7 @@ export async function stopsOf(context: ActionAccess, routeId: string): Promise<I
 async function createRoute(context: ActionAccess, params: CreateRouteParams): Promise<Instance> {
   const input: Record<string, unknown> = {
     name: params.name,
-    mode: params.mode,
+    route_type: params.route_type,
     bidirectional: params.bidirectional ?? false,
   };
   if (params.description !== undefined) input.description = await localizedText(context, params.description);
@@ -687,7 +687,7 @@ async function summarizeRoute(context: ActionAccess, route: Instance): Promise<R
   return {
     id: current.id,
     name: current.name as string,
-    mode: current.mode as string,
+    route_type: current.route_type as string,
     bidirectional: current.bidirectional === true,
     ...(schedule && Object.keys(schedule).length > 0 ? { schedule } : {}),
     stops: (await stopsOf(context, route.id)).map(summarizeStop),

@@ -138,15 +138,53 @@ scflow/create_scope {"name":"text"}
 scflow/create_scope {"name":"text","description":"text","group":"text","group_index":1,"tags":["text"]}
 ```
 
+### `scflow/create_flow_type`
+
+Create a flow type. Creates a flow type, what a flow means such as a delivery, a return or a disposal, bound to one flow domain (physical, information, financial or service), with the direction of its flows, and returns it.
+
+Flags: writes `flow_type`.
+
+Parameters:
+- `name` (text or map language → text, required): Name of the flow type, a string or a map of language to string.
+- `domain` (physical | information | financial | service, required): The flow domain of the flows of this type.
+- `direction` (forward | same-level | reverse): Direction of the flows of this type: forward (default), along the main stream from suppliers to customers; same-level, between peers such as an overflow warehouse or a subcontractor; reverse, reverse logistics such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow.
+- `description` (text or map language → text): Markdown description of the flow type.
+- `tags` (list of string): Tags of the flow type.
+
+Examples:
+
+```
+scflow/create_flow_type {"name":"text","domain":"physical"}
+scflow/create_flow_type {"name":"text","domain":"physical","direction":"forward","description":"text","tags":["text"]}
+```
+
+### `scflow/delete_flow_type`
+
+Delete a flow type. Deletes a flow type. It is refused while flows have this type, unless cascade is true, which deletes those flows first, each as scflow/delete_flow does: the items held by their ends are kept.
+
+Flags: destructive; writes `flow_type`, `flow`.
+
+Parameters:
+- `id` (reference (name or id) of flow_type, required): Id or name of the flow type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `cascade` (boolean): When true, also deletes the flows of this type with their notes.
+
+Examples:
+
+```
+scflow/delete_flow_type {"id":"<flow_type>"}
+scflow/delete_flow_type {"id":"<flow_type>","cascade":true}
+```
+
 ### `scflow/create_flow`
 
-Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. A flow has no name: its source, destination, item and route identify it, and the description holds what else there is to say. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards. Give route to make the flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a route.
+Create a flow. Creates a flow from a source actor to a destination actor and returns it. Set bidirectional to true so that the flow carries items in both directions; it is one-way otherwise. A flow has no name: its source, destination, item and route identify it, and the description holds what else there is to say. A flow carries at most one item, given by item. A flow between an actor and one of its child actors, in either direction, must carry an item, otherwise the action fails. The domain of the item must be among the domains of both actors, and the actors that do not hold the item yet hold it afterwards. Give type to say what the flow means: its domain must be among the domains of both actors and is the domain of the item; a flow without an item takes its domain from its type. Give route to make the flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a route.
 
 Flags: writes `flow`, `item_at_actor`.
 
 Parameters:
 - `source` (reference (name or id) of actor, required): Id or name of the actor the flow starts from. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `destination` (reference (name or id) of actor, required): Id or name of the actor the flow arrives at. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
+- `type` (reference (name or id) of flow_type): Id or name of the flow type; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `item` (reference (name or id) of item): Id or name of the item the flow carries; required between an actor and its child. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `bidirectional` (boolean): Whether the flow carries items in both directions; false when omitted.
 - `route` (reference (name or id) of route): Id or name of the route the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
@@ -157,17 +195,18 @@ Examples:
 
 ```
 scflow/create_flow {"source":"<actor>","destination":"<actor>"}
-scflow/create_flow {"source":"<actor>","destination":"<actor>","item":"<item>","bidirectional":true,"route":"<route>","description":"text","tags":["text"]}
+scflow/create_flow {"source":"<actor>","destination":"<actor>","type":"<flow_type>","item":"<item>","bidirectional":true,"route":"<route>","description":"text","tags":["text"]}
 ```
 
 ### `scflow/update_flow`
 
-Update a flow. Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the given properties change. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused when its route does not serve the other direction. Its route changes with scflow/set_flow_route.
+Update a flow. Changes the type, bidirectional flag, description or tags of a flow and returns it. Only the given properties change; type accepts null to remove it. A type whose domain differs from the item or the route of the flow, or is not among the domains of both its ends, is refused. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused when its route does not serve the other direction. Its route changes with scflow/set_flow_route.
 
 Flags: writes `flow`.
 
 Parameters:
 - `id` (id of flow, required): Id of the flow to update.
+- `type` (reference (name or id) of flow_type): Id or name of the new flow type, or null to remove the type of the flow. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `bidirectional` (boolean): Whether the flow carries items in both directions.
 - `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept.
 - `tags` (list of string): New tags; they replace the current ones.
@@ -176,12 +215,12 @@ Examples:
 
 ```
 scflow/update_flow {"id":"<flow>"}
-scflow/update_flow {"id":"<flow>","bidirectional":true,"description":"text","tags":["text"]}
+scflow/update_flow {"id":"<flow>","type":"<flow_type>","bidirectional":true,"description":"text","tags":["text"]}
 ```
 
 ### `scflow/set_flow_item`
 
-Set the item of a flow. Sets the item carried by a flow that carries none, and returns the flow. The item of a flow never changes and is never removed: the action fails when the flow carries another item, and changes nothing when it already carries this one. The domain of the item must be among the domains of both the source and the destination, and the actors that do not hold the item yet hold it afterwards.
+Set the item of a flow. Sets the item carried by a flow that carries none, and returns the flow. The item of a flow never changes and is never removed: the action fails when the flow carries another item, and changes nothing when it already carries this one. The domain of the item must be among the domains of both the source and the destination, and is the domain of the flow type when the flow has one. The actors that do not hold the item yet hold it afterwards.
 
 Flags: writes `flow`, `item_at_actor`.
 
@@ -212,51 +251,51 @@ scflow/delete_flow {"id":"<flow>"}
 scflow/delete_flow {"id":"<flow>","cascade":true}
 ```
 
-### `scflow/create_mode`
+### `scflow/create_route_type`
 
-Create a mode. Creates a mode, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound to one flow domain (physical, information, financial or service), and returns it. A mode is the category; a route is the instance.
+Create a route type. Creates a route type, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound to one flow domain (physical, information, financial or service), and returns it. A route type is the category; a route is the instance.
 
-Flags: writes `mode`.
+Flags: writes `route_type`.
 
 Parameters:
-- `name` (text or map language → text, required): Name of the mode, a string or a map of language to string.
-- `domain` (physical | information | financial | service, required): The flow domain of the routes of this mode.
-- `description` (text or map language → text): Markdown description of the mode.
-- `tags` (list of string): Tags of the mode.
+- `name` (text or map language → text, required): Name of the route type, a string or a map of language to string.
+- `domain` (physical | information | financial | service, required): The flow domain of the routes of this route type.
+- `description` (text or map language → text): Markdown description of the route type.
+- `tags` (list of string): Tags of the route type.
 
 Examples:
 
 ```
-scflow/create_mode {"name":"text","domain":"physical"}
-scflow/create_mode {"name":"text","domain":"physical","description":"text","tags":["text"]}
+scflow/create_route_type {"name":"text","domain":"physical"}
+scflow/create_route_type {"name":"text","domain":"physical","description":"text","tags":["text"]}
 ```
 
-### `scflow/delete_mode`
+### `scflow/delete_route_type`
 
-Delete a mode. Deletes a mode. It is refused while routes have this mode, unless cascade is true, which deletes those routes first, each with the cascade of scflow/delete_route: their stops are deleted and their flows are kept, on no route.
+Delete a route type. Deletes a route type. It is refused while routes have this route type, unless cascade is true, which deletes those routes first, each with the cascade of scflow/delete_route: their stops are deleted and their flows are kept, on no route.
 
-Flags: destructive; writes `mode`, `route`, `route_stop`, `flow`.
+Flags: destructive; writes `route_type`, `route`, `route_stop`, `flow`.
 
 Parameters:
-- `id` (reference (name or id) of mode, required): Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
-- `cascade` (boolean): When true, also deletes the routes of this mode with their stops and notes; their flows are kept.
+- `id` (reference (name or id) of route_type, required): Id or name of the route type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `cascade` (boolean): When true, also deletes the routes of this route type with their stops and notes; their flows are kept.
 
 Examples:
 
 ```
-scflow/delete_mode {"id":"<mode>"}
-scflow/delete_mode {"id":"<mode>","cascade":true}
+scflow/delete_route_type {"id":"<route_type>"}
+scflow/delete_route_type {"id":"<route_type>","cascade":true}
 ```
 
 ### `scflow/create_route`
 
-Create a route. Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI link), of a given mode, with no stop and no flow yet, and returns it. Add its stops with scflow/add_route_stop and assign flows with scflow/set_flow_route. Set bidirectional to true when the stops are served in both orders; it is false otherwise. The schedule is a free text.
+Create a route. Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI link), of a given route type, with no stop and no flow yet, and returns it. Add its stops with scflow/add_route_stop and assign flows with scflow/set_flow_route. Set bidirectional to true when the stops are served in both orders; it is false otherwise. The schedule is a free text.
 
 Flags: writes `route`.
 
 Parameters:
 - `name` (string, required): Name of the route, unique among the routes.
-- `mode` (reference (name or id) of mode, required): Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `route_type` (reference (name or id) of route_type, required): Id or name of the route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `description` (text or map language → text): Markdown description of the route.
 - `schedule` (text or map language → text): Schedule of the route as a free text, such as every Monday.
 - `bidirectional` (boolean): Whether the stops are served in both orders; false when omitted.
@@ -265,13 +304,13 @@ Parameters:
 Examples:
 
 ```
-scflow/create_route {"name":"text","mode":"<mode>"}
-scflow/create_route {"name":"text","mode":"<mode>","description":"text","schedule":"text","bidirectional":true,"tags":["text"]}
+scflow/create_route {"name":"text","route_type":"<route_type>"}
+scflow/create_route {"name":"text","route_type":"<route_type>","description":"text","schedule":"text","bidirectional":true,"tags":["text"]}
 ```
 
 ### `scflow/update_route`
 
-Update a route. Changes the name, description, mode, schedule, bidirectional flag or tags of a route and returns it. Only the given properties change; null clears the description or the schedule. A change of mode whose domain differs from the items of the flows of the route is refused, and so is making a route one-way while a flow needs it in the other direction.
+Update a route. Changes the name, description, route type, schedule, bidirectional flag or tags of a route and returns it. Only the given properties change; null clears the description or the schedule. A change of route type whose domain differs from the items or the types of the flows of the route is refused, and so is making a route one-way while a flow needs it in the other direction.
 
 Flags: writes `route`.
 
@@ -279,7 +318,7 @@ Parameters:
 - `id` (reference (name or id) of route, required): Id or name of the route to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.
 - `name` (string): New name of the route.
 - `description` (text or map language → text): New Markdown description; each given language replaces the same language, the others are kept. null removes the description.
-- `mode` (reference (name or id) of mode): Id or name of the new mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `route_type` (reference (name or id) of route_type): Id or name of the new route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `schedule` (text or map language → text): New schedule; each given language replaces the same language, the others are kept. null removes the schedule.
 - `bidirectional` (boolean): Whether the stops are served in both orders.
 - `tags` (list of string): New tags; they replace the current ones.
@@ -288,7 +327,7 @@ Examples:
 
 ```
 scflow/update_route {"id":"<route>"}
-scflow/update_route {"id":"<route>","name":"text","description":"text","mode":"<mode>","schedule":"text","bidirectional":true,"tags":["text"]}
+scflow/update_route {"id":"<route>","name":"text","description":"text","route_type":"<route_type>","schedule":"text","bidirectional":true,"tags":["text"]}
 ```
 
 ### `scflow/delete_route`
@@ -368,7 +407,7 @@ scflow/remove_route_stop {"id":"<route_stop>","cascade":true}
 
 ### `scflow/set_flow_route`
 
-Set the route of a flow. Makes a flow travel on a route, or on none with null, and returns the flow. A flow travels on at most one route, so this replaces its route. The source and the destination of the flow must be stops of the route, a stop of the source before a stop of the destination unless the route is bidirectional; a bidirectional flow also needs the other direction. The item of the flow must be in the domain of the mode.
+Set the route of a flow. Makes a flow travel on a route, or on none with null, and returns the flow. A flow travels on at most one route, so this replaces its route. The source and the destination of the flow must be stops of the route, a stop of the source before a stop of the destination unless the route is bidirectional; a bidirectional flow also needs the other direction. The item and the type of the flow must be in the domain of the route type.
 
 Flags: writes `flow`.
 
@@ -384,13 +423,13 @@ scflow/set_flow_route {"id":"<flow>","route":"<route>"}
 
 ### `scflow/create_route_from_flows`
 
-Create a route from flows. Creates a route of a given mode for flows that share their source and their destination and travel on no route yet, with two stops, the source then the destination, makes the flows travel on it and returns it. The items of the flows must be in the domain of the mode. lead_time is the ISO 8601 duration from the source to the destination. The route is bidirectional when bidirectional is true, or when it is omitted and one of the flows is bidirectional.
+Create a route from flows. Creates a route of a given route type for flows that share their source and their destination and travel on no route yet, with two stops, the source then the destination, makes the flows travel on it and returns it. The items and the types of the flows must be in the domain of the route type. lead_time is the ISO 8601 duration from the source to the destination. The route is bidirectional when bidirectional is true, or when it is omitted and one of the flows is bidirectional.
 
 Flags: writes `route`, `route_stop`, `flow`.
 
 Parameters:
 - `flows` (list of id of flow, required): Ids of the flows, at least one.
-- `mode` (reference (name or id) of mode, required): Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
+- `route_type` (reference (name or id) of route_type, required): Id or name of the route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.
 - `name` (string, required): Name of the route, unique among the routes.
 - `description` (text or map language → text): Markdown description of the route.
 - `schedule` (text or map language → text): Schedule of the route as a free text, such as every Monday.
@@ -402,13 +441,13 @@ Parameters:
 Examples:
 
 ```
-scflow/create_route_from_flows {"flows":["<flow>"],"mode":"<mode>","name":"text"}
-scflow/create_route_from_flows {"flows":["<flow>"],"mode":"<mode>","name":"text","description":"text","schedule":"text","bidirectional":true,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
+scflow/create_route_from_flows {"flows":["<flow>"],"route_type":"<route_type>","name":"text"}
+scflow/create_route_from_flows {"flows":["<flow>"],"route_type":"<route_type>","name":"text","description":"text","schedule":"text","bidirectional":true,"lead_time":"text","reverse_lead_time":"text","tags":["text"]}
 ```
 
 ### `scflow/inspect_route`
 
-Inspect a route. Describes a route: its mode and domain, its stops in order with their lead times, and each of its flows with its lead time, the sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow of the route, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.
+Inspect a route. Describes a route: its route type and domain, its stops in order with their lead times, and each of its flows with its lead time, the sum of the lead times of the legs from a stop of its source to a stop of its destination; a bidirectional flow also has the lead time back. A lead time is null when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow of the route, such as a transit hub or a truck depot where a round trip starts and ends. It changes nothing.
 
 Flags: read-only.
 

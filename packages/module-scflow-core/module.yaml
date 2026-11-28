@@ -16,6 +16,10 @@ scalar_types:
     extends: string
     enum: [physical, information, financial, service]
 
+  - name: flow_direction
+    extends: string
+    enum: [forward, same-level, reverse]
+
   - name: transformation_role
     extends: string
     enum: [consumed, produced]
@@ -112,6 +116,28 @@ schemas:
       - name: domain
         type: flow_domain
 
+  - name: flow_type
+    description: A type of flow, with the one flow domain it belongs to and the direction of its flows
+    crud:
+      create: scflow/create_flow_type
+      delete: scflow/delete_flow_type
+    extends: annotable
+    is_root: true
+    has_description: true
+    name_scope: []
+    properties:
+      - name: name
+        type: localized_string
+        min_length: 1
+      - name: description
+        type: localized_markdown
+      - name: domain
+        type: flow_domain
+      - name: direction
+        type: flow_direction
+        description: 'forward (default): along the main stream, from suppliers to customers. same-level: flows between peers, such as an overflow warehouse or a subcontractor. reverse: reverse logistics, such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow.'
+        default_value: forward
+
   - name: actor
     description: A place in the network where items are held, consumed, produced or queued
     crud:
@@ -188,7 +214,25 @@ schemas:
           and:
             - route: { exists: true }
             - item: { exists: true }
-        require: { item.type.domain: { eq: "${this.route.mode.domain}" } }
+        require: { item.type.domain: { eq: "${this.route.route_type.domain}" } }
+      - name: flow_item_type_domain
+        when:
+          and:
+            - type: { exists: true }
+            - item: { exists: true }
+        require: { item.type.domain: { eq: "${this.type.domain}" } }
+      - name: flow_type_end_domain
+        when: { type: { exists: true } }
+        require:
+          and:
+            - type.domain: { in: "${this.source.type.domains}" }
+            - type.domain: { in: "${this.destination.type.domains}" }
+      - name: route_flow_type_domain
+        when:
+          and:
+            - route: { exists: true }
+            - type: { exists: true }
+        require: { type.domain: { eq: "${this.route.route_type.domain}" } }
     unique:
       - name: flow_unique
         properties: [source, destination, item, route]
@@ -206,6 +250,11 @@ schemas:
         on_delete: confirm
         mandatory: true
         inverse_name: incoming_flows
+        inverse_is_array: true
+      - name: type
+        type: flow_type
+        on_delete: confirm
+        inverse_name: flows
         inverse_is_array: true
       - name: item
         type: item
@@ -373,11 +422,11 @@ schemas:
         mandatory: true
         constant: true
 
-  - name: mode
+  - name: route_type
     description: A category of transport or exchange, such as road, sea, air, rail, EDI or payment, with the one flow domain it belongs to
     crud:
-      create: scflow/create_mode
-      delete: scflow/delete_mode
+      create: scflow/create_route_type
+      delete: scflow/delete_route_type
     extends: annotable
     is_root: true
     has_description: true
@@ -392,7 +441,7 @@ schemas:
         type: flow_domain
 
   - name: route
-    description: How flows travel, an instance of a mode, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
+    description: How flows travel, an instance of a route type, such as a shuttle or a weekly round trip, serving ordered stops with a schedule and lead times
     crud:
       create: scflow/create_route
       update: scflow/update_route
@@ -406,8 +455,8 @@ schemas:
         min_length: 1
       - name: description
         type: localized_markdown
-      - name: mode
-        type: mode
+      - name: route_type
+        type: route_type
         on_delete: confirm
         mandatory: true
         inverse_name: routes
@@ -661,6 +710,46 @@ actions:
       required:
         - name
       additionalProperties: false
+  - id: scflow/create_flow_type
+    title: Create a flow type
+    description: >-
+      Creates a flow type, what a flow means such as a delivery, a return or a disposal, bound to
+      one flow domain (physical, information, financial or service), with the direction of its
+      flows, and returns it.
+    kind: action
+    writes:
+      - flow_type
+    parameters:
+      type: object
+      properties:
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the flow type, a string or a map of language to string.'}
+        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the flows of this type.}
+        direction: {type: string, enum: [forward, same-level, reverse], default: forward, description: 'Direction of the flows of this type: forward (default), along the main stream from suppliers to customers; same-level, between peers such as an overflow warehouse or a subcontractor; reverse, reverse logistics such as returns, recalls, disposal and empty packaging. Independent of the bidirectional flag of a flow.'}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the flow type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the flow type.}
+      required:
+        - name
+        - domain
+      additionalProperties: false
+  - id: scflow/delete_flow_type
+    title: Delete a flow type
+    description: >-
+      Deletes a flow type. It is refused while flows have this type, unless cascade is true, which
+      deletes those flows first, each as scflow/delete_flow does: the items held by their ends are
+      kept.
+    kind: action
+    destructive: true
+    writes:
+      - flow_type
+      - flow
+    parameters:
+      type: object
+      properties:
+        id: {type: string, ref: flow_type, description: 'Id or name of the flow type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the flows of this type with their notes.'}
+      required:
+        - id
+      additionalProperties: false
   - id: scflow/create_flow
     title: Create a flow
     description: >-
@@ -670,7 +759,9 @@ actions:
       else there is to say. A flow carries at most one item, given
       by item. A flow between an actor and one of its child actors, in either direction, must carry an
       item, otherwise the action fails. The domain of the item must be among the domains of both
-      actors, and the actors that do not hold the item yet hold it afterwards. Give route to make the
+      actors, and the actors that do not hold the item yet hold it afterwards. Give type to say what
+      the flow means: its domain must be among the domains of both actors and is the domain of the
+      item; a flow without an item takes its domain from its type. Give route to make the
       flow travel on an existing route, as scflow/set_flow_route does; creating a flow never creates a
       route.
     kind: action
@@ -682,6 +773,7 @@ actions:
       properties:
         source: {type: string, ref: actor, description: 'Id or name of the actor the flow starts from. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         destination: {type: string, ref: actor, description: 'Id or name of the actor the flow arrives at. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
+        type: {type: string, ref: flow_type, description: 'Id or name of the flow type; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         item: {type: string, ref: item, description: 'Id or name of the item the flow carries; required between an actor and its child. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions; false when omitted.}
         route: {type: string, ref: route, description: 'Id or name of the route the flow travels on; none when omitted. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
@@ -694,9 +786,12 @@ actions:
   - id: scflow/update_flow
     title: Update a flow
     description: >-
-      Changes the bidirectional flag, the description or the tags of a flow and returns it. Only the
-      given properties change. The source and the destination of a flow never change: delete the flow and create it again. Making a flow bidirectional is refused
-      when its route does not serve the other direction. Its route changes with scflow/set_flow_route.
+      Changes the type, bidirectional flag, description or tags of a flow and returns it. Only the
+      given properties change; type accepts null to remove it. A type whose domain differs from the
+      item or the route of the flow, or is not among the domains of both its ends, is refused. The
+      source and the destination of a flow never change: delete the flow and create it again.
+      Making a flow bidirectional is refused when its route does not serve the other direction.
+      Its route changes with scflow/set_flow_route.
     kind: action
     writes:
       - flow
@@ -704,6 +799,7 @@ actions:
       type: object
       properties:
         id: {type: string, ref: flow, description: 'Id of the flow to update.'}
+        type: {type: [string, 'null'], ref: flow_type, description: 'Id or name of the new flow type, or null to remove the type of the flow. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         bidirectional: {type: boolean, description: Whether the flow carries items in both directions.}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'New Markdown description; each given language replaces the same language, the others are kept.'}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
@@ -717,8 +813,8 @@ actions:
       Sets the item carried by a flow that carries none, and returns the flow. The item of a flow
       never changes and is never removed: the action fails when the flow carries another item, and
       changes nothing when it already carries this one. The domain of the item must be among the
-      domains of both the source and the destination, and the actors that do not hold the item yet
-      hold it afterwards.
+      domains of both the source and the destination, and is the domain of the flow type when the
+      flow has one. The actors that do not hold the item yet hold it afterwards.
     kind: action
     writes:
       - flow
@@ -749,44 +845,44 @@ actions:
       required:
         - id
       additionalProperties: false
-  - id: scflow/create_mode
-    title: Create a mode
+  - id: scflow/create_route_type
+    title: Create a route type
     description: >-
-      Creates a mode, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound
-      to one flow domain (physical, information, financial or service), and returns it. A mode is
+      Creates a route type, the category of transport or exchange such as road, sea, air, rail, EDI or payment, bound
+      to one flow domain (physical, information, financial or service), and returns it. A route type is
       the category; a route is the instance.
     kind: action
     writes:
-      - mode
+      - route_type
     parameters:
       type: object
       properties:
-        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the mode, a string or a map of language to string.'}
-        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the routes of this mode.}
-        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the mode.}
-        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the mode.}
+        name: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Name of the route type, a string or a map of language to string.'}
+        domain: {type: string, enum: [physical, information, financial, service], description: The flow domain of the routes of this route type.}
+        description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the route type.}
+        tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the route type.}
       required:
         - name
         - domain
       additionalProperties: false
-  - id: scflow/delete_mode
-    title: Delete a mode
+  - id: scflow/delete_route_type
+    title: Delete a route type
     description: >-
-      Deletes a mode. It is refused while routes have this mode, unless cascade is true, which
+      Deletes a route type. It is refused while routes have this route type, unless cascade is true, which
       deletes those routes first, each with the cascade of scflow/delete_route: their stops are deleted
       and their flows are kept, on no route.
     kind: action
     destructive: true
     writes:
-      - mode
+      - route_type
       - route
       - route_stop
       - flow
     parameters:
       type: object
       properties:
-        id: {type: string, ref: mode, description: 'Id or name of the mode to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
-        cascade: {type: boolean, default: false, description: 'When true, also deletes the routes of this mode with their stops and notes; their flows are kept.'}
+        id: {type: string, ref: route_type, description: 'Id or name of the route type to delete. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        cascade: {type: boolean, default: false, description: 'When true, also deletes the routes of this route type with their stops and notes; their flows are kept.'}
       required:
         - id
       additionalProperties: false
@@ -794,7 +890,7 @@ actions:
     title: Create a route
     description: >-
       Creates a route, the instance that says how flows travel (a shuttle, a weekly round trip, an EDI
-      link), of a given mode, with no stop and no flow yet, and returns it. Add its stops with
+      link), of a given route type, with no stop and no flow yet, and returns it. Add its stops with
       scflow/add_route_stop and assign flows with scflow/set_flow_route. Set bidirectional to true when
       the stops are served in both orders; it is false otherwise. The schedule is a free text.
     kind: action
@@ -804,21 +900,21 @@ actions:
       type: object
       properties:
         name: {type: string, pattern: \S, description: 'Name of the route, unique among the routes.'}
-        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        route_type: {type: string, ref: route_type, description: 'Id or name of the route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the route.}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the route as a free text, such as every Monday.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders; false when omitted.}
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the route.}
       required:
         - name
-        - mode
+        - route_type
       additionalProperties: false
   - id: scflow/update_route
     title: Update a route
     description: >-
-      Changes the name, description, mode, schedule, bidirectional flag or tags of a route and returns
+      Changes the name, description, route type, schedule, bidirectional flag or tags of a route and returns
       it. Only the given properties change; null clears the description or the schedule. A change of
-      mode whose domain differs from the items of the flows of the route is refused, and so is making a
+      route type whose domain differs from the items or the types of the flows of the route is refused, and so is making a
       route one-way while a flow needs it in the other direction.
     kind: action
     writes:
@@ -829,7 +925,7 @@ actions:
         id: {type: string, ref: route, description: 'Id or name of the route to update. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from.'}
         name: {type: string, pattern: \S, description: 'New name of the route.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New Markdown description; each given language replaces the same language, the others are kept. null removes the description.'}
-        mode: {type: string, ref: mode, description: 'Id or name of the new mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        route_type: {type: string, ref: route_type, description: 'Id or name of the new route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}, {type: 'null'}], description: 'New schedule; each given language replaces the same language, the others are kept. null removes the schedule.'}
         bidirectional: {type: boolean, description: Whether the stops are served in both orders.}
         tags: {type: array, items: {type: string, minLength: 1}, description: New tags; they replace the current ones.}
@@ -928,8 +1024,8 @@ actions:
       Makes a flow travel on a route, or on none with null, and returns the flow. A flow travels on at
       most one route, so this replaces its route. The source and the destination of the flow must be
       stops of the route, a stop of the source before a stop of the destination unless the route is
-      bidirectional; a bidirectional flow also needs the other direction. The item of the flow must be
-      in the domain of the mode.
+      bidirectional; a bidirectional flow also needs the other direction. The item and the type of
+      the flow must be in the domain of the route type.
     kind: action
     writes:
       - flow
@@ -945,9 +1041,9 @@ actions:
   - id: scflow/create_route_from_flows
     title: Create a route from flows
     description: >-
-      Creates a route of a given mode for flows that share their source and their destination and
+      Creates a route of a given route type for flows that share their source and their destination and
       travel on no route yet, with two stops, the source then the destination, makes the flows travel
-      on it and returns it. The items of the flows must be in the domain of the mode. lead_time
+      on it and returns it. The items and the types of the flows must be in the domain of the route type. lead_time
       is the ISO 8601 duration from the source to the destination. The route is bidirectional when
       bidirectional is true, or when it is omitted and one of the flows is bidirectional.
     kind: action
@@ -959,7 +1055,7 @@ actions:
       type: object
       properties:
         flows: {type: array, minItems: 1, items: {type: string, ref: flow}, description: 'Ids of the flows, at least one.'}
-        mode: {type: string, ref: mode, description: 'Id or name of the mode. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
+        route_type: {type: string, ref: route_type, description: 'Id or name of the route type. Give a name as short as it stays unambiguous, for example `Line 1`, or `Lyon / Line 1` when two plants have a line of that name; never give an id you were not given. An ambiguity error lists the candidates to choose from. A localized name may be given in any language, but it is written in the source language of the project.'}
         name: {type: string, pattern: \S, description: 'Name of the route, unique among the routes.'}
         description: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: Markdown description of the route.}
         schedule: {anyOf: [{type: string, pattern: \S}, {type: object, minProperties: 1, additionalProperties: {type: string, pattern: \S}}], description: 'Schedule of the route as a free text, such as every Monday.'}
@@ -969,13 +1065,13 @@ actions:
         tags: {type: array, items: {type: string, minLength: 1}, description: Tags of the route.}
       required:
         - flows
-        - mode
+        - route_type
         - name
       additionalProperties: false
   - id: scflow/inspect_route
     title: Inspect a route
     description: >-
-      Describes a route: its mode and domain, its stops in order with their lead times, and each of its
+      Describes a route: its route type and domain, its stops in order with their lead times, and each of its
       flows with its lead time, the sum of the lead times of the legs from a stop of its source to a
       stop of its destination; a bidirectional flow also has the lead time back. A lead time is null
       when a leg of the path has none. stops_without_flow lists the stops that are the end of no flow
@@ -1428,7 +1524,7 @@ actions:
     parameters:
       type: object
       properties:
-        targets: {type: array, minItems: 1, description: The entities to delete., items: {type: object, properties: {schema: {type: string, enum: [actor, actor_type, scope, item, item_type, flow, transformation, transformation_type, conversion, item_at_actor], description: The kind of the entity.}, ref: {type: string, minLength: 1, description: Id or name of the entity; the id only for a flow and an item_at_actor.}}, required: [schema, ref], additionalProperties: false}}
+        targets: {type: array, minItems: 1, description: The entities to delete., items: {type: object, properties: {schema: {type: string, enum: [actor, actor_type, scope, item, item_type, flow_type, flow, transformation, transformation_type, conversion, item_at_actor], description: The kind of the entity.}, ref: {type: string, minLength: 1, description: Id or name of the entity; the id only for a flow and an item_at_actor.}}, required: [schema, ref], additionalProperties: false}}
       required:
         - targets
       additionalProperties: false
@@ -1447,6 +1543,7 @@ skills:
       - scflow/create_item_type
       - scflow/create_item
       - scflow/hold_item
+      - scflow/create_flow_type
       - scflow/create_flow
       - scflow/set_flow_item
       - scflow/create_conversion
@@ -1454,7 +1551,7 @@ skills:
       - scflow/create_transformation
       - scflow/connect_transformation_line
       - scflow/define_process
-      - scflow/create_mode
+      - scflow/create_route_type
       - scflow/create_route
       - scflow/add_route_stop
       - scflow/set_flow_route
@@ -1508,12 +1605,14 @@ docs:
       - scflow/delete_scope
       - scflow/create_actor_type
       - scflow/create_scope
+      - scflow/create_flow_type
+      - scflow/delete_flow_type
       - scflow/create_flow
       - scflow/update_flow
       - scflow/set_flow_item
       - scflow/delete_flow
-      - scflow/create_mode
-      - scflow/delete_mode
+      - scflow/create_route_type
+      - scflow/delete_route_type
       - scflow/create_route
       - scflow/update_route
       - scflow/delete_route

@@ -8,7 +8,7 @@ import { setupActions } from "./actions-helpers.js";
  * nothing is written that the actions of the module would refuse.
  */
 
-const SCHEMAS = ["scope", "actor_type", "item_type", "location", "actor", "item", "mode", "route", "route_stop", "flow", "item_at_actor", "transformation_type", "transformation", "transformation_line", "conversion", "note"];
+const SCHEMAS = ["scope", "actor_type", "item_type", "flow_type", "location", "actor", "item", "route_type", "route", "route_stop", "flow", "item_at_actor", "transformation_type", "transformation", "transformation_line", "conversion", "note"];
 
 /** A network with every kind of entity, in two languages, with two plants that each have a `Line 1`. */
 async function network() {
@@ -18,6 +18,7 @@ async function network() {
   await run("scflow/create_actor_type", { name: { fr: "Site", en: "Site" }, domains: ["physical", "information"], default_scope: "Plants" });
   await run("scflow/create_actor_type", { name: "Machine", domains: ["physical"] });
   await run("scflow/create_item_type", { name: { fr: "Pièce", en: "Part" }, domain: "physical" });
+  await run("scflow/create_flow_type", { name: { fr: "Retour", en: "Return" }, domain: "physical", direction: "reverse" });
   await run("scflow/create_location", { name: "Lyon site", city: "Lyon", country_code: "FR" });
   await run("scflow/create_actor", { name: "Lyon", type: "Site", location: "Lyon site", description: { fr: "Usine de Lyon", en: "Lyon plant" }, tags: ["main"] });
   await run("scflow/create_actor", { name: "Paris", type: "Site" });
@@ -28,13 +29,13 @@ async function network() {
   await run("scflow/hold_item", { actor: "Lyon", item: "Bolt" });
   await run("scflow/hold_item", { actor: "Paris", item: "Bolt" });
   const frame = await run("scflow/hold_item", { actor: "Lyon", item: "Frame" });
-  await run("scflow/create_mode", { name: { fr: "Route", en: "Road" }, domain: "physical" });
-  await run("scflow/create_route", { name: "Shuttle", mode: "Road", schedule: { fr: "Chaque lundi", en: "Every Monday" } });
+  await run("scflow/create_route_type", { name: { fr: "Route", en: "Road" }, domain: "physical" });
+  await run("scflow/create_route", { name: "Shuttle", route_type: "Road", schedule: { fr: "Chaque lundi", en: "Every Monday" } });
   await run("scflow/add_route_stop", { route: "Shuttle", actor: "Lyon" });
   await run("scflow/add_route_stop", { route: "Shuttle", actor: "Paris", lead_time: "P1D" });
   const flow = await run("scflow/create_flow", { source: "Lyon", destination: "Paris", item: "Bolt" });
   await run("scflow/set_flow_route", { id: flow.id, route: "Shuttle" });
-  await run("scflow/create_flow", { source: "Paris", destination: "Lyon" });
+  await run("scflow/create_flow", { source: "Paris", destination: "Lyon", type: "Return" });
   await run("scflow/create_transformation_type", { name: "Assembly" });
   await run("scflow/create_transformation", { actor: "Lyon", type: "Assembly", name: "Assemble" });
   const held = (await ctx.query("item_at_actor")).find((h) => h.item === frame.item)!;

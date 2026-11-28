@@ -18,6 +18,7 @@ export const DELETE_TARGET_SCHEMAS = [
   "scope",
   "item",
   "item_type",
+  "flow_type",
   "flow",
   "transformation",
   "transformation_type",
@@ -157,6 +158,9 @@ function addTarget(
       break;
     case "item_type":
       idsWhere(snapshot.items, "type", instance.id).forEach((id) => set.items.add(id));
+      break;
+    case "flow_type":
+      idsWhere(snapshot.flows, "type", instance.id).forEach((id) => set.flows.add(id));
       break;
     case "flow":
       direct.flows.add(instance.id);

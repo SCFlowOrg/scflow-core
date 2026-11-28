@@ -13,6 +13,8 @@ export interface FlowEndsInput {
 
 /** The input of {@link createFlow}. */
 export interface CreateFlowInput extends FlowEndsInput {
+  /** Id of the flow type; none when absent. A carried item belongs to its domain. */
+  type?: string;
   /**
    * Id of the item the flow carries. Required when the flow joins an actor and
    * one of its child actors, in either direction.
@@ -72,8 +74,8 @@ export async function getCommonFlowDomains(
  *
  * When `input.item` is given, an `item_at_actor` is created for each end that
  * lacks one, as the rule `flow_ends_hold_item` requires. The engine refuses a
- * breach of the rules of a flow, such as `internal_flow_item` and
- * `carried_item_domain`.
+ * breach of the rules of a flow, such as `internal_flow_item`,
+ * `carried_item_domain` and `flow_item_type_domain`.
  *
  * @returns The created flow.
  * @throws When an actor or the item does not exist, or when a rule is broken.
@@ -83,7 +85,7 @@ export async function createFlow(
   locator: string,
   input: CreateFlowInput,
 ): Promise<Record<string, unknown>> {
-  const { source, destination, item, bidirectional = false, route, description, tags } = input;
+  const { source, destination, type, item, bidirectional = false, route, description, tags } = input;
 
   if (item !== undefined) {
     await holdItem(onDataset(mcl, locator), source, item);
@@ -97,6 +99,7 @@ export async function createFlow(
       source,
       destination,
       bidirectional,
+      ...(type === undefined ? {} : { type }),
       ...(item === undefined ? {} : { item }),
       ...(route === undefined ? {} : { route }),
       ...(description === undefined ? {} : { description: { ...description } }),

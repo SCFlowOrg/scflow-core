@@ -399,7 +399,7 @@ describe("a network of scflow:core through CSV files", { timeout: 60000 }, () =>
     expect(exported.code).toBe(0);
     expect(exported.first.skipped).toEqual([]);
     expect(exported.first.files).toEqual(expect.arrayContaining(["actor.csv", "flow.csv", "item.csv"]));
-    expect(Object.fromEntries(filesOf(first))["flow.csv"]).toContain("Lyon,Paris,Bolt");
+    expect(Object.fromEntries(filesOf(first))["flow.csv"]).toContain("Lyon,Paris,,Bolt");
 
     const target = await create(dirs, "copy", where);
     const imported = await scflow([target, "import", first, "--modules", scflowCore]);

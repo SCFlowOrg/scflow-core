@@ -40,9 +40,9 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
 - `getCommonFlowDomains(mcl, locator, { source, destination })`: read-only; returns the flow
   domains common to the two actors. An interface uses it to accept or refuse a drag and
   drop: an empty list refuses it. It throws when an actor does not exist.
-- `createFlow(mcl, locator, { source, destination, item?, bidirectional?, route?, description?, tags? })`:
-  creates one flow from `source` to `destination` and returns it. A flow has no domain, so
-  it does not check the domains of the actors. With an `item`, the call creates the `item_at_actor`
+- `createFlow(mcl, locator, { source, destination, type?, item?, bidirectional?, route?, description?, tags? })`:
+  creates one flow from `source` to `destination` and returns it. It does
+  not check the domains itself: the rules of the network do. With an `item`, the call creates the `item_at_actor`
   that the source and the destination lack. It throws when an actor or the item does not exist, or
   when a rule of the network is broken.
 - `setFlowItem(mcl, locator, { flow, item })`: sets the item of a flow, with the same holdings as
@@ -55,15 +55,29 @@ its skill, and that the skill is offered by `use_skill` only with those actions.
   `run(params, context)`, for UIs, AI assistants and macros. An environment runs them through
   the module. The package exports
   `create_actor`, `update_actor`, `delete_actor`, `create_actor_type`, `create_scope`,
-  `create_flow`, `update_flow`, `set_flow_item`, `delete_flow`, `create_mode`, `create_route`, `update_route`,
+  `create_flow_type`, `create_flow`, `update_flow`, `set_flow_item`, `delete_flow`, `create_route_type`, `create_route`, `update_route`,
   `add_route_stop`, `update_route_stop`, `remove_route_stop`, `set_flow_route`, `create_route_from_flows`, `create_item_type`, `create_item`, `update_item`, `hold_item`,
   `release_held_item`, `create_transformation_type`,
   `create_transformation`, `connect_transformation_line`, `define_process`, `create_conversion`, `update_conversion`, `add_tags`, `remove_tags`, `add_note`, `update_note`, `remove_note`,
   `find_notes`, `inspect_route` and `inspect_delete_impact` (these three are `kind: "read"` actions), and the cascading deletes `delete_actor_type`,
-  `delete_scope`, `delete_route`, `delete_mode`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
+  `delete_scope`, `delete_route`, `delete_route_type`, `delete_flow_type`, `delete_item`, `delete_item_type`, `delete_transformation`, `delete_transformation_type` and `delete_conversion`; the
   catalogue and the parameters are generated topics, `scflow/actions`, `scflow/concepts` and `scflow/names`
   (`docs/reference/`, written by `scripts/build-docs.mjs` from `module.yaml` and committed), and the conventions
   (references by name, localized text) are in [`docs/action-conventions.md`](docs/action-conventions.md).
+
+## Flow types
+
+A `flow_type` says what a flow means, such as a delivery, a return or a disposal, so that a tool
+can give flows a shared look and tell reverse logistics apart. It has one flow domain, tags and a
+`direction`: `forward` (default), `same-level`, for flows between peers such as an overflow
+warehouse or a subcontractor, or `reverse`, for reverse logistics such as returns, recalls,
+disposal and empty packaging. The direction is independent of the `bidirectional` flag of a flow.
+The `type` of a flow is optional. A carried item belongs to the domain of the type
+(`flow_item_type_domain`), and a flow without an item takes its domain from its type: that domain
+is among the domains of both ends (`flow_type_end_domain`) and is that of the route type of its
+route (`route_flow_type_domain`). `scflow/delete_flow_type` is refused while flows have the type,
+unless `cascade` is true, which deletes those flows. A flow type is updated with the generated
+action `scflow/update_flow_type`.
 
 ## Locations
 
@@ -79,7 +93,7 @@ given by its name or its id; the package ships no action that creates or changes
 ## Routes
 
 A `route` says how flows travel: a shuttle, a weekly round trip, an EDI link, a payment term.
-`route` is the instance and `mode` its category, such as road, sea, EDI or payment, with
+`route` is the instance and `route_type` its category, such as road, sea, EDI or payment, with
 one flow domain, the domain of the items its flows carry. A route owns ordered `route_stop`s at
 actors, each with the `lead_time` from the previous stop, an ISO 8601 duration or empty when
 unknown; an actor may have several stops, as a round trip A, B, C, A does. A flow travels on at

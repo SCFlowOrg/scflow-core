@@ -39,7 +39,7 @@ describe("the reference topics of scflow:core", () => {
     expect(names?.topic).toMatchObject({ audience: "user", file: "docs/reference/names.md" });
     const referred = manifest.schemas.filter((schema) => Array.isArray(schema.name_scope)).map((schema) => String(schema.name));
     expect(referred.sort()).toEqual(
-      ["actor", "actor_type", "item", "item_type", "location", "mode", "route", "scope", "transformation", "transformation_type"],
+      ["actor", "actor_type", "flow_type", "item", "item_type", "location", "route", "route_type", "scope", "transformation", "transformation_type"],
     );
     for (const name of referred) expect(names?.body).toContain(`| \`${name}\` |`);
     expect(names?.body).toContain("| `actor` | plain text | the first of `parent_actor`, `scope` that is set | `<parent_actor> / <actor>` |");

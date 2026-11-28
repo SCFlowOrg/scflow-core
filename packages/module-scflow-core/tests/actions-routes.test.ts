@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { setupActions } from "./actions-helpers.js";
 
 /**
- * Routes of flows: the schemas `mode`, `route` and `route_stop`, the route of a flow, their rules
+ * Routes of flows: the schemas `route_type`, `route` and `route_stop`, the route of a flow, their rules
  * and their actions (`docs/spec/flow-model.md`, Route).
  */
 
 const refusedBy = (rule: string) => ({ code: "rule_violation", details: { rule } });
 
-/** Four physical sites, a physical and an information item, a road and an EDI mode. */
+/** Four physical sites, a physical and an information item, a road and an EDI route type. */
 async function world() {
   const setup = await setupActions();
   const { run } = setup;
@@ -22,8 +22,8 @@ async function world() {
   await run("scflow/create_item", { name: "Bolt", type: "Part" });
   await run("scflow/create_item", { name: "Nut", type: "Part" });
   await run("scflow/create_item", { name: "Order", type: "Message" });
-  await run("scflow/create_mode", { name: "Road", domain: "physical" });
-  await run("scflow/create_mode", { name: "EDI", domain: "information" });
+  await run("scflow/create_route_type", { name: "Road", domain: "physical" });
+  await run("scflow/create_route_type", { name: "EDI", domain: "information" });
   return { ...setup, plant, depot, shop, hub };
 }
 
@@ -31,7 +31,7 @@ async function world() {
 async function roundTrip() {
   const ctx = await world();
   const { run } = ctx;
-  const route = await run("scflow/create_route", { name: "Milk run", mode: "Road", schedule: "every Monday" });
+  const route = await run("scflow/create_route", { name: "Milk run", route_type: "Road", schedule: "every Monday" });
   await run("scflow/add_route_stop", { route: "Milk run", actor: "Plant" });
   await run("scflow/add_route_stop", { route: "Milk run", actor: "Depot", lead_time: "P1D" });
   await run("scflow/add_route_stop", { route: "Milk run", actor: "Shop", lead_time: "PT6H" });
@@ -39,17 +39,17 @@ async function roundTrip() {
   return { ...ctx, route };
 }
 
-describe("modes and routes", () => {
-  it("creates a mode with one domain, and a one-way route of that mode with no stop", async () => {
+describe("route types and routes", () => {
+  it("creates a route type with one domain, and a one-way route of that route type with no stop", async () => {
     const { run, query } = await world();
-    const mode = (await query("mode", { "name.en": "Road" }))[0];
-    expect(mode).toMatchObject({ domain: "physical" });
+    const routeType = (await query("route_type", { "name.en": "Road" }))[0];
+    expect(routeType).toMatchObject({ domain: "physical" });
 
-    const route = await run("scflow/create_route", { name: "Shuttle", mode: "Road", schedule: "daily" });
+    const route = await run("scflow/create_route", { name: "Shuttle", route_type: "Road", schedule: "daily" });
     expect(route).toEqual({
       id: expect.any(String),
       name: "Shuttle",
-      mode: mode.id,
+      route_type: routeType.id,
       bidirectional: false,
       schedule: { en: "daily" },
       stops: [],
@@ -57,9 +57,9 @@ describe("modes and routes", () => {
     });
   });
 
-  it("refuses a route without a mode", async () => {
+  it("refuses a route without a route type", async () => {
     const { run } = await world();
-    await expect(run("scflow/create_route", { name: "Shuttle" })).rejects.toThrow(/mode/);
+    await expect(run("scflow/create_route", { name: "Shuttle" })).rejects.toThrow(/route_type/);
   });
 
   it("orders the stops, lets an actor have several, and inserts a stop at a position", async () => {
@@ -137,7 +137,7 @@ describe("the route of a flow", () => {
     await expect(run("scflow/update_route", { id: "Milk run", bidirectional: false })).rejects.toThrow(/route_serves_flow/);
   });
 
-  it("carries items of the domain of the mode only", async () => {
+  it("carries items of the domain of the route type only", async () => {
     const { run } = await roundTrip();
     await expect(run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Order", route: "Milk run" })).rejects.toMatchObject(
       refusedBy("route_item_domain"),
@@ -145,7 +145,7 @@ describe("the route of a flow", () => {
     const empty = await run("scflow/create_flow", { source: "Plant", destination: "Depot", route: "Milk run" });
     await expect(run("scflow/set_flow_item", { id: empty.id, item: "Order" })).rejects.toMatchObject(refusedBy("route_item_domain"));
     await run("scflow/set_flow_item", { id: empty.id, item: "Bolt" });
-    await expect(run("scflow/update_route", { id: "Milk run", mode: "EDI" })).rejects.toMatchObject(refusedBy("route_item_domain"));
+    await expect(run("scflow/update_route", { id: "Milk run", route_type: "EDI" })).rejects.toMatchObject(refusedBy("route_item_domain"));
   });
 });
 
@@ -196,7 +196,7 @@ describe("scflow/inspect_route", () => {
 
   it("uses the reverse lead times on a bidirectional route, and gives null when a leg has no lead time", async () => {
     const { run } = await world();
-    await run("scflow/create_route", { name: "Shuttle", mode: "Road", bidirectional: true });
+    await run("scflow/create_route", { name: "Shuttle", route_type: "Road", bidirectional: true });
     await run("scflow/add_route_stop", { route: "Shuttle", actor: "Plant" });
     await run("scflow/add_route_stop", { route: "Shuttle", actor: "Depot", lead_time: "PT4H", reverse_lead_time: "PT5H" });
     await run("scflow/add_route_stop", { route: "Shuttle", actor: "Shop" });
@@ -214,7 +214,7 @@ describe("scflow/create_route_from_flows", () => {
     const bolts = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
     const nuts = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Nut", bidirectional: true });
 
-    const route = await run("scflow/create_route_from_flows", { flows: [bolts.id, nuts.id], mode: "Road", name: "Truck", lead_time: "P2D" });
+    const route = await run("scflow/create_route_from_flows", { flows: [bolts.id, nuts.id], route_type: "Road", name: "Truck", lead_time: "P2D" });
     expect(route).toMatchObject({ name: "Truck", bidirectional: true, flows: [bolts.id, nuts.id] });
     expect(route.stops).toMatchObject([
       { actor: plant.id, sequence: 1 },
@@ -222,22 +222,22 @@ describe("scflow/create_route_from_flows", () => {
     ]);
   });
 
-  it("refuses flows with other ends, a flow already on a route, and items outside the domain of the mode", async () => {
+  it("refuses flows with other ends, a flow already on a route, and items outside the domain of the route type", async () => {
     const { run, query } = await world();
     const a = await run("scflow/create_flow", { source: "Plant", destination: "Depot", item: "Bolt" });
     const b = await run("scflow/create_flow", { source: "Depot", destination: "Plant", item: "Bolt" });
-    await expect(run("scflow/create_route_from_flows", { flows: [a.id, b.id], mode: "Road", name: "Truck" })).rejects.toThrow(/share/);
-    await expect(run("scflow/create_route_from_flows", { flows: [a.id], mode: "EDI", name: "Wire" })).rejects.toMatchObject(
+    await expect(run("scflow/create_route_from_flows", { flows: [a.id, b.id], route_type: "Road", name: "Truck" })).rejects.toThrow(/share/);
+    await expect(run("scflow/create_route_from_flows", { flows: [a.id], route_type: "EDI", name: "Wire" })).rejects.toMatchObject(
       refusedBy("route_item_domain"),
     );
     expect(await query("route")).toHaveLength(0);
 
-    await run("scflow/create_route_from_flows", { flows: [a.id], mode: "Road", name: "Truck" });
-    await expect(run("scflow/create_route_from_flows", { flows: [a.id], mode: "Road", name: "Van" })).rejects.toThrow(/already/);
+    await run("scflow/create_route_from_flows", { flows: [a.id], route_type: "Road", name: "Truck" });
+    await expect(run("scflow/create_route_from_flows", { flows: [a.id], route_type: "Road", name: "Van" })).rejects.toThrow(/already/);
   });
 });
 
-describe("deleting routes, modes and actors", () => {
+describe("deleting routes, route types and actors", () => {
   it("refuses to delete a route with flows unless cascade, which keeps the flows on no route", async () => {
     const { run, query } = await roundTrip();
     const flow = await run("scflow/create_flow", { source: "Plant", destination: "Depot", route: "Milk run" });
@@ -249,10 +249,10 @@ describe("deleting routes, modes and actors", () => {
     expect((await query("flow", { id: flow.id }))[0].route).toBeFalsy();
   });
 
-  it("deletes the routes of a mode with cascade", async () => {
+  it("deletes the routes of a route type with cascade", async () => {
     const { run, query } = await roundTrip();
-    await expect(run("scflow/delete_mode", { id: "Road" })).rejects.toMatchObject({ code: "constraint_violation" });
-    await run("scflow/delete_mode", { id: "Road", cascade: true });
+    await expect(run("scflow/delete_route_type", { id: "Road" })).rejects.toMatchObject({ code: "constraint_violation" });
+    await run("scflow/delete_route_type", { id: "Road", cascade: true });
     expect(await query("route")).toHaveLength(0);
   });
 

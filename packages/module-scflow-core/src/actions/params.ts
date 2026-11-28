@@ -90,8 +90,9 @@ const NAMED_SCHEMAS: Readonly<Record<string, boolean>> = {
   location: false,
   actor_type: true,
   item_type: true,
+  flow_type: true,
   transformation_type: true,
-  mode: true,
+  route_type: true,
   scope: true,
 };
 
